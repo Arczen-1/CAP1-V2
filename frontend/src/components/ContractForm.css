@@ -1,0 +1,653 @@
+.contract-form {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  max-width: 1000px;
+  margin: 0 auto;
+  font-family: "Aileron", sans-serif;
+}
+
+.form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.form-header h3 {
+  color: #410d1d;
+  font-family: "Aileron Black", sans-serif;
+  margin: 0;
+}
+
+.number {
+  color: #410d1d;
+  font-weight: bold;
+}
+
+.page h4 {
+  margin: 18px 0 10px;
+  color: #410d1d;
+  font-family: "Aileron Black", sans-serif;
+}
+
+.page h5 {
+  margin: 15px 0 8px;
+  color: #410d1d;
+  font-family: "Aileron", sans-serif;
+  font-weight: bold;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 4px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.form-group label { color: #410d1d; font-weight: 600; }
+.form-group input,
+.form-group textarea,
+.form-group select {
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-family: "Aileron", sans-serif;
+}
+.form-group textarea { min-height: 64px; }
+
+/* Validation styles */
+.invalid-input {
+  border-color: #dc3545 !important;
+  box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.25) !important;
+}
+
+.validation-error {
+  color: #dc3545;
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.form-row { display: grid; gap: 16px; margin-bottom: 12px; }
+.form-row.two { grid-template-columns: 1fr 1fr; }
+.form-row.three { grid-template-columns: 1fr 1fr 1fr; }
+.form-row.four { grid-template-columns: repeat(4, 1fr); }
+.form-row.five { grid-template-columns: repeat(5, 1fr); }
+
+.checkbox-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 16px; }
+.checkbox-item { color: #410d1d; }
+
+/* Cocktail and Upgrade Grids */
+.cocktail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.cocktail-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: white;
+  border: 1px solid #d4c4b0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+  color: #4a4a4a;
+}
+
+.cocktail-item:hover {
+  background-color: #f9f5f0;
+  border-color: #b8860b;
+}
+
+.cocktail-item input[type="checkbox"] {
+  margin: 0;
+  accent-color: #b8860b;
+  width: 16px;
+  height: 16px;
+}
+
+.cocktail-item input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cocktail-item input[type="checkbox"]:checked + span {
+  font-weight: 600;
+  color: #b8860b;
+}
+
+.upgrade-section {
+  margin-bottom: 16px;
+}
+
+.upgrade-section h5 {
+  color: #410d1d;
+  font-family: "Aileron Black", sans-serif;
+  margin-bottom: 16px;
+  font-size: 1.1rem;
+  text-align: center;
+  border-bottom: 2px solid #b39b89;
+  padding-bottom: 8px;
+}
+
+.upgrade-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.upgrade-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: white;
+  border: 1px solid #d4c4b0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+  color: #4a4a4a;
+}
+
+.upgrade-item:hover {
+  background-color: #f9f5f0;
+  border-color: #b8860b;
+}
+
+.upgrade-item input[type="checkbox"] {
+  margin: 0;
+  accent-color: #b8860b;
+  width: 16px;
+  height: 16px;
+}
+
+.upgrade-item input[type="checkbox"]:checked + span {
+  font-weight: 600;
+  color: #b8860b;
+}
+
+.form-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; }
+.pager { display: flex; align-items: center; gap: 12px; }
+.pager-btn { background: transparent; color: #410d1d; border: 2px solid #410d1d; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+.pager-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-primary { background-color: #410d1d; color: white; border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; }
+.btn-secondary { background: transparent; color: #410d1d; border: 2px solid #410d1d; padding: 10px 18px; border-radius: 8px; cursor: pointer; }
+.btn-danger { background-color: #dc3545; color: white; border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; }
+
+.required-asterisk {
+  color: red;
+  margin-left: 2px;
+  font-weight: bold;
+  vertical-align: super;
+}
+
+/* Buffet Package Styles - Add to ContractForm.css */
+
+/* Ensure smooth transitions for package selection */
+.page input[type="radio"] {
+  transition: all 0.2s ease;
+}
+
+/* Responsive adjustments for buffet packages */
+@media (max-width: 768px) {
+  .page > div > div {
+    gap: 16px !important;
+  }
+  
+  .page h2 {
+    font-size: 1.5rem !important;
+  }
+  
+  .page h3 {
+    font-size: 1rem !important;
+  }
+}
+
+/* Print styles for buffet packages */
+@media print {
+  .page > div {
+    background-color: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}
+/* Buffet Package Styles */
+
+.buffet-page {
+  padding: 0 !important;
+}
+
+.buffet-container {
+  margin: -24px;
+  padding: 32px 24px;
+  border-radius: 12px;
+}
+
+/* Package Cards Wrapper */
+.buffet-packages-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 32px;
+}
+
+/* Individual Package Card */
+.buffet-package-card {
+  background-color: white;
+  overflow: hidden;
+  border-radius: 6px;
+  border: 1px solid #d4c4b0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.buffet-package-card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.buffet-package-card.selected {
+  border: 4px solid #b8860b;
+  box-shadow: 0 6px 12px rgba(184, 134, 11, 0.2);
+}
+
+/* Package Header */
+.buffet-package-header {
+  background-color: #b39b89;
+  padding: 20px;
+  text-align: center;
+  border-bottom: 2px solid #a68a78;
+}
+
+.buffet-option-title {
+  font-size: 2rem;
+  font-family: Georgia, serif;
+  font-style: italic;
+  color: #3a3a3a;
+  margin: 0;
+  font-weight: normal;
+  letter-spacing: 1px;
+}
+
+/* Package Content */
+.buffet-package-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 40px;
+  padding: 32px 28px;
+  background-color: #fdf8f3;
+}
+
+.buffet-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.buffet-section-title {
+  font-size: 1.15rem;
+  font-family: Georgia, serif;
+  font-style: italic;
+  color: #3a3a3a;
+  margin-top: 0;
+  margin-bottom: 16px;
+  font-weight: normal;
+  border-bottom: 1px solid #e7ddd1;
+  padding-bottom: 8px;
+}
+
+.buffet-pricing-list,
+.buffet-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.buffet-price-item,
+.buffet-menu-item {
+  color: #4a4a4a;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  font-family: "Aileron", sans-serif;
+}
+
+.buffet-menu-choice {
+  margin-left: 20px;
+}
+
+.buffet-menu-items {
+  margin-top: 4px;
+  padding-left: 60px;
+}
+
+.buffet-menu-items li {
+  font-style: italic;
+  padding-left: 1px;
+}
+
+/* Package Footer */
+.buffet-package-footer {
+  background-color: #fdf8f3;
+  padding: 20px 28px;
+  text-align: center;
+  border-top: 2px solid #e7ddd1;
+}
+
+.buffet-vat-notice {
+  color: #4a4a4a;
+  font-size: 0.875rem;
+  margin-top: 0;
+  margin-bottom: 16px;
+  line-height: 1.6;
+  font-family: "Aileron", sans-serif;
+  font-style: italic;
+}
+
+.buffet-select-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  padding: 8px 20px;
+  background-color: #e7ddd1;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+  color: #4a4a4a;
+}
+
+.buffet-package-card.selected .buffet-select-label {
+  background-color: #b8860b;
+  color: white;
+}
+
+.buffet-select-label:hover {
+  background-color: #d4c4b0;
+}
+
+.buffet-package-card.selected .buffet-select-label:hover {
+  background-color: #9a7109;
+}
+
+.buffet-radio {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  accent-color: #b8860b;
+}
+
+.buffet-select-text {
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: "Aileron", sans-serif;
+}
+
+/* Amenities Section */
+.buffet-amenities-card {
+  background-color: white;
+  overflow: hidden;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+  border: 1px solid #d4c4b0;
+}
+
+.buffet-amenities-header {
+  background-color: #b39b89;
+  padding: 20px;
+  text-align: center;
+  border-bottom: 2px solid #a68a78;
+}
+
+.buffet-amenities-content {
+  padding: 32px 28px;
+  background-color: #fdf8f3;
+}
+
+.buffet-amenities-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px 40px;
+}
+
+.buffet-amenity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: #4a4a4a;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  font-family: "Aileron", sans-serif;
+}
+
+.buffet-bullet {
+  color: #b8860b;
+  font-weight: bold;
+  font-size: 1.3rem;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.buffet-amenity-text {
+  margin: 0;
+  flex: 1;
+}
+
+/* Validation Error */
+.buffet-validation-error {
+  margin-top: 16px;
+  text-align: center;
+  padding: 12px;
+  background-color: #fff5f5;
+  border-radius: 6px;
+  border: 1px solid #dc3545;
+  color: #dc3545;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* Menu Selections Styles for Page 4 */
+.menu-section {
+  margin-bottom: 32px;
+  padding: 20px;
+  background-color: #fdf8f3;
+  border-radius: 8px;
+  border: 1px solid #e7ddd1;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.menu-section h5 {
+  color: #410d1d;
+  font-family: "Aileron Black", sans-serif;
+  margin-bottom: 16px;
+  font-size: 1.1rem;
+  text-align: center;
+  border-bottom: 2px solid #b39b89;
+  padding-bottom: 8px;
+}
+
+.menu-category {
+  margin-bottom: 24px;
+}
+
+.menu-category h6 {
+  color: #b8860b;
+  font-family: "Aileron", sans-serif;
+  font-weight: bold;
+  margin-bottom: 12px;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: white;
+  border: 1px solid #d4c4b0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+  color: #4a4a4a;
+}
+
+.menu-item:hover {
+  background-color: #f9f5f0;
+  border-color: #b8860b;
+}
+
+.menu-item input[type="checkbox"] {
+  margin: 0;
+  accent-color: #b8860b;
+  width: 16px;
+  height: 16px;
+}
+
+.menu-item input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.menu-item input[type="checkbox"]:checked + span {
+  font-weight: 600;
+  color: #b8860b;
+}
+
+/* Styles for upgrade options that use div wrapper instead of label */
+.menu-grid > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: white;
+  border: 1px solid #d4c4b0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+  color: #4a4a4a;
+}
+
+.menu-grid > div:hover {
+  background-color: #f9f5f0;
+  border-color: #b8860b;
+}
+
+.menu-grid > div input[type="checkbox"] {
+  margin: 0;
+  accent-color: #b8860b;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.menu-grid > div input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.menu-grid > div input[type="checkbox"]:checked ~ label {
+  font-weight: 600;
+  color: #b8860b;
+}
+
+.menu-grid > div label {
+  cursor: pointer;
+  margin: 0;
+  flex: 1;
+}
+
+/* Responsive for menu grids */
+@media (max-width: 768px) {
+  .menu-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .menu-section {
+    padding: 16px;
+  }
+
+  .menu-item {
+    padding: 10px;
+    font-size: 0.95rem;
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .buffet-container {
+    padding: 20px 16px;
+    margin: -24px;
+  }
+
+  .buffet-option-title {
+    font-size: 1.5rem;
+  }
+
+  .buffet-package-content {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 24px 20px;
+  }
+
+  .buffet-amenities-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .buffet-section-title {
+    font-size: 1rem;
+  }
+}
+
+/* Highlighted price item */
+.buffet-price-item.highlighted {
+  background-color: #b8860b;
+  color: white;
+  font-weight: bold;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+/* Print Styles */
+@media print {
+  .buffet-container {
+    background-color: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .buffet-package-card {
+    page-break-inside: avoid;
+    margin-bottom: 20px;
+  }
+
+  .buffet-select-label {
+    display: none;
+  }
+}

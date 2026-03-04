@@ -1,0 +1,598 @@
+.admin-dashboard {
+  min-height: 100vh;
+  background-color: #410d1d;
+  font-family: "Aileron", sans-serif;
+}
+
+.dashboard-header {
+  background-color: white;
+  padding: 20px 40px;
+  display: block;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-header-inner {
+  /* Stretch header content full width so title is truly leftmost */
+  width: 100%;
+  margin: 0; /* remove centering to use full width */
+  display: grid; /* Three zones: left title, center tabs, right logout */
+  grid-template-columns: auto 1fr auto; /* title | center spacer/nav | logout */
+  align-items: center;
+  gap: 16px;
+}
+
+/* Center the nav group within the header */
+.header-nav {
+  justify-self: center;
+  display: flex;
+  gap: 10px;
+}
+
+/* Right align the logout button */
+.header-logout {
+  justify-self: end;
+}
+
+.dashboard-header h1 {
+  color: #410d1d;
+  font-size: 32px;
+  font-family: "Aileron Black", sans-serif;
+  margin: 0;
+}
+
+.logout-btn {
+  background-color: #410d1d;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  font-size: 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  font-family: "Aileron", sans-serif;
+}
+
+.logout-btn:hover {
+  background-color: #5a1a2d;
+}
+
+.dashboard-content {
+  padding: 40px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.main-navigation {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 30px;
+}
+
+.nav-btn {
+  background-color: white; /* default white background */
+  color: #410d1d; /* maroon text */
+  border: 2px solid #410d1d; /* maroon border */
+  padding: 12px 24px;
+  font-size: 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-family: "Aileron", sans-serif;
+}
+
+.nav-btn:hover {
+  background-color: #faf6f7; /* subtle hover */
+}
+
+.nav-btn.active {
+  background-color: #410d1d; /* maroon */
+  color: white; /* white text when active */
+  border-color: #410d1d;
+}
+
+.main-dashboard h2 {
+  color: white;
+  font-size: 28px;
+  margin-bottom: 30px;
+  font-family: "Aileron Black", sans-serif;
+}
+
+.contracts-table-container {
+  background-color: white;
+  border-radius: 12px;
+  padding: 25px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.table-header h3 {
+  color: #410d1d;
+  font-size: 20px;
+  margin: 0;
+  font-family: "Aileron Black", sans-serif;
+}
+
+.filter-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.filter-section label {
+  color: #410d1d;
+  font-weight: bold;
+  font-family: "Aileron", sans-serif;
+}
+
+.filter-select {
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-family: "Aileron", sans-serif;
+  background-color: white;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: #410d1d;
+  box-shadow: 0 0 0 2px rgba(65, 13, 29, 0.2);
+}
+
+.contracts-table {
+  overflow-x: auto;
+}
+
+.contracts-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: "Aileron", sans-serif;
+}
+
+.contracts-table th {
+  background-color: #410d1d;
+  color: white;
+  padding: 15px 12px;
+  text-align: left;
+  font-weight: bold;
+  font-family: "Aileron Black", sans-serif;
+}
+
+.contracts-table td {
+  padding: 15px 12px;
+  border-bottom: 1px solid #eee;
+  color: #333;
+}
+
+.contracts-table tr:hover {
+  background-color: #f8f9fa;
+}
+
+.contracts-table tr.no-contracts td {
+  text-align: center;
+  color: #666;
+  font-style: italic;
+  padding: 30px;
+}
+
+.action-btn {
+  padding: 12px 24px;
+  font-size: 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-family: "Aileron", sans-serif;
+  border: none;
+}
+
+.action-btn.primary {
+  background-color: #410d1d;
+  color: white;
+}
+
+.action-btn.primary:hover {
+  background-color: #5a1a2d;
+}
+
+.action-btn.secondary {
+  background-color: transparent;
+  color: white;
+  border: 2px solid white;
+}
+
+.action-btn.secondary:hover {
+  background-color: white;
+  color: #410d1d;
+}
+
+.user-management {
+  margin-top: 20px;
+}
+
+.management-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 30px;
+}
+
+.users-table-container {
+  background-color: white;
+  border-radius: 12px;
+  padding: 25px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.users-table {
+  overflow-x: auto;
+}
+
+.users-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: "Aileron", sans-serif;
+}
+
+.users-table th {
+  background-color: #410d1d;
+  color: white;
+  padding: 15px 12px;
+  text-align: left;
+  font-weight: bold;
+  font-family: "Aileron Black", sans-serif;
+}
+
+.users-table td {
+  padding: 15px 12px;
+  border-bottom: 1px solid #eee;
+  color: #333;
+}
+
+.users-table tr:hover {
+  background-color: #f8f9fa;
+}
+
+.users-table tr.no-users td {
+  text-align: center;
+  color: #666;
+  font-style: italic;
+  padding: 30px;
+}
+
+.user-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.edit-btn,
+.delete-btn,
+.approve-btn,
+.reject-btn {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-family: "Aileron", sans-serif;
+  border: none;
+}
+
+.edit-btn {
+  background-color: #410d1d;
+  color: white;
+}
+
+.edit-btn:hover {
+  background-color: #5a1a2d;
+}
+
+.delete-btn {
+  background-color: #dc3545;
+  color: white;
+}
+
+.delete-btn:hover {
+  background-color: #c82333;
+}
+
+.approve-btn {
+  background-color: #28a745;
+  color: white;
+}
+
+.approve-btn:hover {
+  background-color: #218838;
+}
+
+.reject-btn {
+  background-color: #dc3545;
+  color: white;
+}
+
+.reject-btn:hover {
+  background-color: #c82333;
+}
+
+.tab {
+  background-color: transparent;
+  color: white;
+  border: 2px solid white;
+  padding: 12px 24px;
+  font-size: 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-family: "Aileron", sans-serif;
+}
+
+.tab:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.tab.active {
+  background-color: white;
+  color: #410d1d;
+}
+
+.users-section h3 {
+  color: white;
+  font-size: 24px;
+  margin-bottom: 20px;
+  font-family: "Aileron Black", sans-serif;
+}
+
+.users-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 20px;
+}
+
+.user-card {
+  background-color: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+}
+
+.user-card:hover {
+  transform: translateY(-2px);
+}
+
+.user-info h3 {
+  color: #410d1d;
+  font-size: 18px;
+  margin-bottom: 10px;
+  font-family: "Aileron Black", sans-serif;
+}
+
+.user-info p {
+  margin: 8px 0;
+  color: #555;
+  font-family: "Aileron", sans-serif;
+}
+
+.status {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  margin-left: 8px;
+}
+
+.status.pending {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.status.approved {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.status.rejected {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.role-assignment {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #eee;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.role-select {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-family: "Aileron", sans-serif;
+}
+
+.assign-btn {
+  background-color: #410d1d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  font-family: "Aileron", sans-serif;
+}
+
+.assign-btn:hover:not(:disabled) {
+  background-color: #5a1a2d;
+}
+
+.assign-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.message {
+  background-color: white;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  text-align: center;
+  font-family: "Aileron", sans-serif;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid #410d1d;
+}
+
+.message.success {
+  border-left-color: #28a745;
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.message.error {
+  border-left-color: #dc3545;
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.no-users {
+  color: white;
+  text-align: center;
+  font-size: 1.1rem;
+  font-family: "Aileron", sans-serif;
+  margin-top: 40px;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal {
+  background-color: white;
+  border-radius: 12px;
+  padding: 30px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+.modal h3 {
+  color: #410d1d;
+  font-size: 20px;
+  margin-bottom: 20px;
+  font-family: "Aileron Black", sans-serif;
+}
+
+.user-details {
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+}
+
+.user-details p {
+  margin: 8px 0;
+  color: #333;
+  font-family: "Aileron", sans-serif;
+}
+
+.role-selection {
+  margin-bottom: 25px;
+}
+
+.role-selection label {
+  display: block;
+  margin-bottom: 8px;
+  color: #410d1d;
+  font-weight: bold;
+  font-family: "Aileron", sans-serif;
+}
+
+.role-select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-family: "Aileron", sans-serif;
+}
+
+.role-select:focus {
+  outline: none;
+  border-color: #410d1d;
+  box-shadow: 0 0 0 2px rgba(65, 13, 29, 0.2);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+}
+
+.save-btn,
+.cancel-btn {
+  padding: 10px 20px;
+  font-size: 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-family: "Aileron", sans-serif;
+  border: none;
+}
+
+.save-btn {
+  background-color: #410d1d;
+  color: white;
+}
+
+.save-btn:hover:not(:disabled) {
+  background-color: #5a1a2d;
+}
+
+.save-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.approve-btn-modal {
+  background-color: #28a745;
+  color: white;
+}
+
+.approve-btn-modal:hover:not(:disabled) {
+  background-color: #218838;
+}
+
+.approve-btn-modal:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.cancel-btn {
+  background-color: transparent;
+  color: #410d1d;
+  border: 2px solid #410d1d;
+}
+
+.cancel-btn:hover {
+  background-color: #410d1d;
+  color: white;
+}

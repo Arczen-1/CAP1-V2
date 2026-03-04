@@ -1,0 +1,505 @@
+body {
+  margin: 0;
+  font-family: "Aileron";
+}
+
+.App {
+  height: 100vh;
+  width: 100%;
+  background-color: #410d1d;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.login-box {
+  width: 560px;
+  height: 757px;
+  background-color: white;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+  font-family: "Aileron", sans-serif;
+}
+
+.login-box h1 {
+  margin-bottom: 10px;
+  color: #410d1d;
+  font-size: 40px;           
+  font-family: "Aileron Black", sans-serif; 
+}
+
+.subtitle {
+  margin-bottom: 40px;
+  color: #555;
+  font-size: 1.1rem;
+  font-family: "Aileron", sans-serif; 
+}
+
+.input-field {
+  width: 70%;
+  padding: 12px;
+  margin: 15px 0;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.login-btn {
+  background-color: #410d1d;
+  color: white;
+  border: none;
+  padding: 14px 30px;
+  margin-top: 30px;
+  font-size: 1rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  font-family: "Aileron", sans-serif;
+}
+
+.login-btn:hover {
+  background-color: #5a1a2d;
+}
+
+.register-link-btn {
+  background-color: transparent;
+  color: #410d1d;
+  border: 2px solid #410d1d;
+  padding: 10px 20px;
+  margin-top: 20px;
+  font-size: 0.9rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-family: "Aileron", sans-serif;
+}
+
+.register-link-btn:hover {
+  background-color: #410d1d;
+  color: white;
+}
+
+.message {
+  margin-top: 20px;
+  padding: 10px;
+  border-radius: 8px;
+  text-align: center;
+  font-family: "Aileron", sans-serif;
+  max-width: 80%;
+}
+
+/* ---------------- Dashboard Tables ---------------- */
+.department-dashboard, 
+.contracts-table-container {
+  width: 100%; /* or 100% for full width */
+  margin: 20px auto;
+  color: #333;
+  background-color: #410d1d; /* matches App background */
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.dashboard-header h1 {
+  font-family: "Aileron Black", sans-serif;
+  color: #410d1d;
+  font-size: 28px;
+}
+
+
+.header-nav {
+  display: flex;
+  gap: 10px;
+}
+
+.nav-btn {
+  padding: 8px 15px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background-color: #eee;
+  transition: 0.3s;
+  font-family: "Aileron", sans-serif;
+}
+
+.nav-btn.active,
+.nav-btn:hover {
+  background-color: #410d1d;
+  color: white;
+}
+
+.logout-btn {
+  background-color: #410d1d;
+  color: white;
+  padding: 8px 15px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: none;
+  font-family: "Aileron", sans-serif;
+}
+
+.dashboard-content {
+  width: 100%;
+}
+
+/* Table Container */
+.contracts-table-container {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 12px;
+  padding: 15px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  margin-bottom: 30px;
+}
+
+.contracts-table-container h3 {
+  margin-bottom: 15px;
+  color: #410d1d;
+  font-family: "Aileron Black", sans-serif;
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: "Aileron", sans-serif;
+}
+
+th, td {
+  text-align: left;
+  padding: 12px 15px;
+}
+
+th {
+  background-color: #410d1d;
+  color: white;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+tr:nth-child(even) {
+  background-color: #f8f8f8;
+}
+
+tr:hover {
+  background-color: #f1e6e6;
+}
+
+/* Pager */
+.pager {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 10px;
+  gap: 10px;
+}
+
+.pager-btn {
+  padding: 5px 12px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  background-color: #eee;
+  transition: 0.3s;
+}
+
+.pager-btn:hover:not(:disabled) {
+  background-color: #410d1d;
+}
+
+.pager-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-indicator {
+  font-size: 0.9rem;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+}
+
+.modal-content {
+  padding: 25px;
+  border-radius: 12px;
+  width: 400px;
+  max-width: 90%;
+  text-align: center;
+  font-family: "Aileron", sans-serif;
+}
+
+.modal-content h3 {
+  color: #410d1d;
+  margin-bottom: 15px;
+}
+
+.modal-content button {
+  margin-top: 20px;
+  padding: 10px 20px;
+  background-color: #410d1d;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.modal-content button:hover {
+  background-color: #5a1a2d;
+}
+
+/* Specific Table Styles for Inventory/Monitoring */
+.inventory-table th, .monitoring-table th {
+  background-color: #5a1a2d;
+}
+
+.inventory-table tr:nth-child(even), .monitoring-table tr:nth-child(even) {
+  background-color: #f4f0f0;
+}
+
+.inventory-table tr:hover, .monitoring-table tr:hover {
+  background-color: #f7eaea;
+}
+
+/* Table containers */
+.contracts-table-container {
+  width: 90%;
+  background-color: #fff;
+  padding: 16px;
+  margin-bottom: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+/* Table header with Add button aligned right */
+.table-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.table-header {
+  margin-bottom: 10px;
+}
+
+.table-header h3 {
+  margin: 0 0 10px 0;
+  font-size: 1.5rem;
+  color: #410d1d;
+}
+
+/* Table styling */
+.inventory-table, .monitoring-table, table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table th, table td {
+  border: 1px solid #ddd;
+  padding: 10px;
+  text-align: left;
+}
+
+table th {
+  background-color: #410d1d;
+  color: white;
+}
+
+table tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+table tr:hover {
+  background-color: #f1f1f1;
+}
+
+/* Buttons */
+.btn-add {
+  background-color: #28a745;
+  color: white;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background-color 0.3s;
+}
+
+.btn-add:hover {
+  background-color: #218838;
+}
+
+.btn-edit {
+  background-color: #ffc107;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+  margin-right: 5px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background-color 0.3s;
+}
+
+.btn-edit:hover {
+  background-color: #e0a800;
+}
+
+.btn-delete {
+  background-color: #dc3545;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background-color 0.3s;
+}
+
+.btn-delete:hover {
+  background-color: #c82333;
+}
+
+/* Modal styling */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0,0,0,0.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 12px;
+  width: 400px;
+  max-width: 90%;
+}
+
+.modal-input-group {
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-input-group label {
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.modal-input-group input {
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.btn-save {
+  background-color: #28a745;
+  color: white;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-cancel {
+  background-color: #6c757d;
+  color: white;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+
+/* === Main layout === */
+.dashboard-main {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 16px;
+}
+
+/* Left calendar panel */
+.calendar-side {
+  flex: 0 0 28%;
+  background: #f9fafc;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+  height: 100%;
+  max-height: 600px; /* Prevents overflow */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Make calendar more compact */
+.calendar-container h3 {
+  font-size: 1rem;
+  margin-bottom: 6px;
+}
+
+.calendar-container .fc {
+  font-size: 0.8rem; /* Smaller text */
+}
+
+.calendar-container .fc-toolbar-title {
+  font-size: 1rem !important;
+}
+
+.calendar-container .fc-daygrid-day {
+  padding: 4px 2px !important;
+}
+
+.calendar-container .fc-scrollgrid {
+  border-radius: 8px;
+}
+
+/* Make the calendar not exceed container */
+.calendar-container .fc-view-harness {
+  max-height: 450px !important;
+}
+
+/* Right contracts panel */
+.contracts-side {
+  flex: 1;
+  background: #fff;
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+  min-width: 0; /* fixes overflow */
+}
+

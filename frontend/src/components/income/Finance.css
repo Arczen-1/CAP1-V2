@@ -1,0 +1,115 @@
+/* finance.css */
+
+.finance-overview {
+  padding: 20px;
+}
+
+.finance-overview h2,
+.finance-clients h2 {
+  color: #7b1e1e;
+  margin-bottom: 20px;
+}
+
+.finance-cards {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.finance-card {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  flex: 1;
+  min-width: 220px;
+}
+
+.finance-card h3 {
+  margin-bottom: 8px;
+  color: #444;
+}
+
+.finance-card.total p {
+  font-size: 24px;
+  color: #7b1e1e;
+  font-weight: bold;
+}
+
+.finance-card.paid p {
+  color: #008000;
+  font-weight: 600;
+  font-size: 20px;
+}
+
+.finance-card.unpaid p {
+  color: #c0392b;
+  font-weight: 600;
+  font-size: 20px;
+}
+
+.clients-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.clients-table th {
+  background: #7b1e1e;
+  color: white;
+  padding: 12px;
+  text-align: left;
+}
+
+.clients-table td {
+  padding: 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.status-badge {
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.status-badge.paid {
+  background: #e8f8e8;
+  color: #2e7d32;
+}
+
+.status-badge.unpaid {
+  background: #fde8e8;
+  color: #c0392b;
+}
+
+.btn-paid,
+.btn-unpaid {
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: 0.2s;
+}
+
+.btn-paid {
+  background: #2e7d32;
+  color: white;
+}
+
+.btn-unpaid {
+  background: #c0392b;
+  color: white;
+}
+
+.btn-paid:hover {
+  background: #1b5e20;
+}
+
+.btn-unpaid:hover {
+  background: #992d22;
+}

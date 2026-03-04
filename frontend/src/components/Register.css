@@ -1,0 +1,97 @@
+.register-container {
+  height: 100vh;
+  width: 100%;
+  background-color: #410d1d;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.register-box {
+  width: 560px;
+  min-height: 600px;
+  background-color: white;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+  font-family: "Aileron", sans-serif;
+  padding: 40px;
+}
+
+.register-box h1 {
+  margin-bottom: 10px;
+  color: #410d1d;
+  font-size: 40px;           
+  font-family: "Aileron Black", sans-serif; 
+}
+
+.subtitle {
+  margin-bottom: 30px;
+  color: #555;
+  font-size: 1.1rem;
+  font-family: "Aileron", sans-serif; 
+}
+
+.register-box form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.input-field {
+  width: 70%;
+  padding: 12px;
+  margin: 15px 0;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: "Aileron", sans-serif;
+}
+
+.register-btn {
+  background-color: #410d1d;
+  color: white;
+  border: none;
+  padding: 14px 30px;
+  margin-top: 20px;
+  font-size: 1rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  font-family: "Aileron", sans-serif;
+}
+
+.register-btn:hover {
+  background-color: #5a1a2d;
+}
+
+.back-btn {
+  background-color: transparent;
+  color: #410d1d;
+  border: 2px solid #410d1d;
+  padding: 10px 20px;
+  margin-top: 20px;
+  font-size: 0.9rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-family: "Aileron", sans-serif;
+}
+
+.back-btn:hover {
+  background-color: #410d1d;
+  color: white;
+}
+
+.message {
+  margin-top: 20px;
+  padding: 10px;
+  border-radius: 8px;
+  text-align: center;
+  font-family: "Aileron", sans-serif;
+  max-width: 80%;
+}
