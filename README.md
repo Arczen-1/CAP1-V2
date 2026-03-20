@@ -61,7 +61,7 @@ npm install
 
 ### Step 5: Seed the Database
 
-This creates demo users and sample data:
+This creates the initial system users and sample data:
 
 ```bash
 npm run seed
@@ -71,8 +71,8 @@ You should see:
 ```
 ✅ Connected to MongoDB
 ✅ Cleared existing data
-✅ Created user: sales@juancarlos.com
-✅ Created user: accounting@juancarlos.com
+✅ Created initial user accounts
+✅ Loaded sample records
 ...
 ✅ Database seeded successfully!
 ```
@@ -87,19 +87,9 @@ Then open: **http://localhost:5173**
 
 ---
 
-## 🔑 Demo Login Credentials
+## 🔑 Account Access
 
-| Role | Email | Password |
-|------|-------|----------|
-| Sales | sales@juancarlos.com | password123 |
-| Accounting | accounting@juancarlos.com | password123 |
-| Logistics | logistics@juancarlos.com | password123 |
-| Banquet | banquet@juancarlos.com | password123 |
-| Kitchen | kitchen@juancarlos.com | password123 |
-| Purchasing | purchasing@juancarlos.com | password123 |
-| Creative | creative@juancarlos.com | password123 |
-| Linen | linen@juancarlos.com | password123 |
-| Admin | admin@juancarlos.com | admin123 |
+Use the work accounts assigned by your project administrator. Keep login credentials outside the repository and share them privately with the team.
 
 ---
 
@@ -144,7 +134,7 @@ juancarlos-event-management/
 | `npm run dev` | Start both frontend and backend |
 | `npm run server` | Backend only |
 | `npm run server:dev` | Backend with auto-restart (nodemon) |
-| `npm run seed` | Seed database with demo data |
+| `npm run seed` | Seed database with initial data |
 | `npm run build` | Build for production |
 | `npm run preview` | Preview production build |
 

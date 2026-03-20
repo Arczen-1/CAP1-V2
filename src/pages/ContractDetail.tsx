@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '@/components/Layout';
@@ -9,9 +9,21 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Select,
@@ -36,7 +48,8 @@ import {
   Palette,
   Shirt,
   Box,
-  Truck
+  Truck,
+  Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -45,6 +58,7 @@ const SECTION_PRINT_LABELS: Record<string, string> = {
   menu: 'Menu Summary',
   inventory: 'Inventory Checklist',
   payments: 'Payment Summary',
+  banquet: 'Banquet Staffing',
   logistics: 'Logistics Booking',
   preferences: 'Event Preferences',
   timeline: 'Timeline',
@@ -168,6 +182,8 @@ interface Contract {
     imageUrl?: string;
     quantity: number;
     status?: string;
+    postEventStatus?: string;
+    postEventNotes?: string;
     notes?: string;
     cost?: number;
     pricePerItem?: number;
@@ -185,6 +201,8 @@ interface Contract {
     unitPrice?: number;
     notes?: string;
     status?: string;
+    postEventStatus?: string;
+    postEventNotes?: string;
   }>;
   preferredColor: string;
   napkinType: string;
@@ -218,6 +236,8 @@ interface Contract {
     unitPrice?: number;
     notes?: string;
     status: string;
+    postEventStatus?: string;
+    postEventNotes?: string;
   }>;
   departmentProgress: Record<string, number>;
   slaWarning: boolean;
@@ -244,6 +264,30 @@ interface Contract {
     notes?: string;
       checkedAt?: string;
   };
+  assignedSupervisor?: {
+    _id: string;
+    name: string;
+    email?: string;
+  } | null;
+  banquetAssignment?: {
+    serviceGuestCount?: number;
+    staffingPlan?: Partial<Record<BanquetAssignmentRole, number>>;
+    assignments?: Array<{
+      staff?: {
+        _id: string;
+        employeeId?: string;
+        fullName: string;
+        role: string;
+        status?: string;
+      } | null;
+      assignmentRole: BanquetAssignmentRole;
+    }>;
+    updatedAt?: string;
+    updatedBy?: {
+      _id: string;
+      name: string;
+    } | null;
+  };
   sectionConfirmations?: Partial<Record<ConfirmableSectionKey, {
     confirmed?: boolean;
     confirmedAt?: string;
@@ -255,6 +299,28 @@ interface Contract {
 }
 
 interface OperationsSummary {
+  banquet: {
+    planningGuestCount: number;
+    suggestedPlan: Record<BanquetAssignmentRole, number>;
+    savedPlan: Record<BanquetAssignmentRole, number>;
+    activePlan: Record<BanquetAssignmentRole, number>;
+    selectedSupervisorId: string;
+    supervisorOptions: Array<{
+      _id: string;
+      name: string;
+      email?: string;
+    }>;
+    availableByRole: Record<BanquetAssignmentRole, BanquetStaffSummary[]>;
+    suggestedAssignments: BanquetAssignmentSummary[];
+    selectedAssignments: BanquetAssignmentSummary[];
+    blockers: string[];
+    coverage: {
+      assigned: number;
+      planned: number;
+      percent: number;
+    };
+    updatedAt?: string | null;
+  };
   logistics: {
     eventDate: string;
     estimatedVolumeCubicMeters: number;
@@ -307,6 +373,7 @@ interface OperationsSummary {
 }
 
 interface InventorySummaryItem {
+  sectionKey?: InventorySectionKey;
   itemId?: string | null;
   itemName: string;
   itemCode?: string;
@@ -316,11 +383,48 @@ interface InventorySummaryItem {
   reservedOnDate: number;
   inventoryStatus: string;
   itemStatus: string;
+  postEventStatus: string;
+  postEventNotes?: string;
   enoughStock: boolean;
+  shortageQuantity: number;
+  sameDayConflict: boolean;
+  requestAction?: string;
   readyForDispatch: boolean;
   imageUrl?: string;
   notes?: string;
   blockers: string[];
+}
+
+interface BanquetStaffSummary {
+  _id: string;
+  employeeId?: string;
+  fullName: string;
+  role: string;
+  status: string;
+  employmentType?: string;
+  rating?: number;
+  totalEventsWorked?: number;
+  isAssigned?: boolean;
+  isRecommended?: boolean;
+}
+
+interface BanquetAssignmentSummary {
+  staffId: string;
+  assignmentRole: BanquetAssignmentRole;
+  staff: BanquetStaffSummary;
+}
+
+interface IncidentReportTarget {
+  section: InventorySectionKey;
+  index: number;
+  itemName: string;
+  departmentLabel: string;
+  requestedQuantity: number;
+}
+
+interface ProcurementRequestTarget {
+  section: InventorySectionKey;
+  item: InventorySummaryItem;
 }
 
 interface SignatureParty {
@@ -332,8 +436,11 @@ interface SignatureParty {
 
 type ReadinessStatus = 'not_started' | 'blocked' | 'in_progress' | 'ready';
 type ConfirmableSectionKey = 'details' | 'menu' | 'preferences' | 'payments' | 'creative' | 'linen' | 'stockroom' | 'logistics';
-type ContractTabKey = 'details' | 'menu' | 'inventory' | 'payments' | 'logistics' | 'preferences' | 'timeline';
+const BANQUET_ASSIGNMENT_ROLE_KEYS = ['head_captain', 'service_staff', 'food_runner', 'busser', 'bartender', 'setup_crew'] as const;
+type BanquetAssignmentRole = typeof BANQUET_ASSIGNMENT_ROLE_KEYS[number];
+type ContractTabKey = 'details' | 'menu' | 'inventory' | 'payments' | 'banquet' | 'logistics' | 'preferences' | 'timeline';
 type SignaturePartyKey = 'client' | 'staff';
+type InventorySectionKey = 'creativeAssets' | 'linenRequirements' | 'equipmentChecklist';
 
 interface DepartmentReadiness {
   key: string;
@@ -365,15 +472,58 @@ const READINESS_STATUS_META: Record<ReadinessStatus, { label: string; badgeClass
   },
 };
 
-const ALL_CONTRACT_TABS: ContractTabKey[] = ['details', 'menu', 'inventory', 'payments', 'logistics', 'preferences', 'timeline'];
+const ALL_CONTRACT_TABS: ContractTabKey[] = ['details', 'menu', 'inventory', 'payments', 'banquet', 'logistics', 'preferences', 'timeline'];
+const INCIDENT_TYPE_OPTIONS = [
+  { value: 'burnt_cloth', label: 'Burnt Cloth' },
+  { value: 'damaged_equipment', label: 'Damaged Equipment' },
+  { value: 'missing_item', label: 'Missing Item' },
+  { value: 'food_spoilage', label: 'Food Spoilage' },
+  { value: 'vehicle_breakdown', label: 'Vehicle Breakdown' },
+  { value: 'staff_issue', label: 'Staff Issue' },
+  { value: 'client_complaint', label: 'Client Complaint' },
+  { value: 'other', label: 'Other' },
+] as const;
+const POST_EVENT_STATUS_OPTIONS = ['pending_check', 'checked_ok'] as const;
+const INVENTORY_SECTION_LABELS: Record<InventorySectionKey, string> = {
+  creativeAssets: 'Creative',
+  linenRequirements: 'Linen',
+  equipmentChecklist: 'Stockroom',
+};
+const INVENTORY_SECTION_TO_CONFIRMABLE_SECTION: Record<InventorySectionKey, ConfirmableSectionKey> = {
+  creativeAssets: 'creative',
+  linenRequirements: 'linen',
+  equipmentChecklist: 'stockroom',
+};
+const INVENTORY_SECTION_TO_PROCUREMENT_DEPARTMENT: Record<InventorySectionKey, 'creative' | 'linen' | 'stockroom'> = {
+  creativeAssets: 'creative',
+  linenRequirements: 'linen',
+  equipmentChecklist: 'stockroom',
+};
 const TAB_LABELS: Record<ContractTabKey, string> = {
   details: 'Details',
   menu: 'Menu',
   inventory: 'Inventory',
   payments: 'Payments',
+  banquet: 'Banquet',
   logistics: 'Logistics',
   preferences: 'Preferences',
   timeline: 'Timeline',
+};
+const BANQUET_ROLE_LABELS: Record<BanquetAssignmentRole, string> = {
+  head_captain: 'Head Captain',
+  service_staff: 'Service Staff',
+  food_runner: 'Food Runner',
+  busser: 'Busser',
+  bartender: 'Bartender',
+  setup_crew: 'Setup Crew',
+};
+const BANQUET_ROLE_NOTES: Record<BanquetAssignmentRole, string> = {
+  head_captain: 'Lead the floor and coordinate service pacing.',
+  service_staff: 'Handles guest tables, plated service, and refills.',
+  food_runner: 'Moves food from kitchen pass to the floor team.',
+  busser: 'Clears used settings and keeps service stations ready.',
+  bartender: 'Covers beverage station or bar service.',
+  setup_crew: 'Prepares venue layout, stations, and service base.',
 };
 
 const pluralize = (count: number, singular: string, plural = `${singular}s`) => (
@@ -382,6 +532,72 @@ const pluralize = (count: number, singular: string, plural = `${singular}s`) => 
 
 const formatEnumLabel = (value?: string) => (value || 'pending').replace(/_/g, ' ');
 const formatStatusLabel = (value?: string) => (value || '').replace(/_/g, ' ');
+const createEmptyBanquetPlan = (): Record<BanquetAssignmentRole, number> => ({
+  head_captain: 0,
+  service_staff: 0,
+  food_runner: 0,
+  busser: 0,
+  bartender: 0,
+  setup_crew: 0,
+});
+const getBanquetPlanTotal = (plan: Partial<Record<BanquetAssignmentRole, number>> | undefined) => (
+  BANQUET_ASSIGNMENT_ROLE_KEYS.reduce((sum, role) => sum + (Number(plan?.[role]) || 0), 0)
+);
+const buildEmptyBanquetAssignments = (): Record<BanquetAssignmentRole, string[]> => ({
+  head_captain: [],
+  service_staff: [],
+  food_runner: [],
+  busser: [],
+  bartender: [],
+  setup_crew: [],
+});
+const buildEmptyBanquetPickers = (): Record<BanquetAssignmentRole, string> => ({
+  head_captain: '',
+  service_staff: '',
+  food_runner: '',
+  busser: '',
+  bartender: '',
+  setup_crew: '',
+});
+const formatBanquetStaffRole = (value?: string) => formatStatusLabel(value).replace(/\b\w/g, char => char.toUpperCase());
+const resolvePostEventStatus = (value?: string, legacyStatus?: string) => {
+  if (value === 'checked_ok' || value === 'incident_reported' || value === 'pending_check') {
+    return value;
+  }
+
+  if (legacyStatus === 'returned') {
+    return 'checked_ok';
+  }
+
+  return 'pending_check';
+};
+const isPostEventClosed = (value?: string, legacyStatus?: string) => (
+  ['checked_ok', 'incident_reported'].includes(resolvePostEventStatus(value, legacyStatus))
+);
+const getPostEventStatusLabel = (value?: string, legacyStatus?: string) => {
+  const status = resolvePostEventStatus(value, legacyStatus);
+
+  switch (status) {
+    case 'checked_ok':
+      return 'Checked And Returned';
+    case 'incident_reported':
+      return 'Reported To Incidents';
+    default:
+      return 'Pending Post-Event Check';
+  }
+};
+const getPostEventStatusClassName = (value?: string, legacyStatus?: string) => {
+  const status = resolvePostEventStatus(value, legacyStatus);
+
+  switch (status) {
+    case 'checked_ok':
+      return 'bg-green-100 text-green-800';
+    case 'incident_reported':
+      return 'bg-red-100 text-red-800';
+    default:
+      return 'bg-slate-100 text-slate-700';
+  }
+};
 const LOGISTICS_STATUS_OPTIONS = [
   { value: 'pending', label: 'Not Booked Yet' },
   { value: 'scheduled', label: 'Transport Booked' },
@@ -456,7 +672,7 @@ export default function ContractDetail() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
-  const { isSales, isAccounting, isLogistics, isBanquet, isKitchen, isPurchasing, isCreative, isLinen, isAdmin, role } = useRole();
+  const { isSales, isAccounting, isLogistics, isBanquet, isKitchen, isPurchasing, isStockroom, isCreative, isLinen, isAdmin, role } = useRole();
   const [contract, setContract] = useState<Contract | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -465,6 +681,8 @@ export default function ContractDetail() {
   const [isSendingForSignature, setIsSendingForSignature] = useState(false);
   const [isSavingEsignatures, setIsSavingEsignatures] = useState(false);
   const [isClosingContract, setIsClosingContract] = useState(false);
+  const [isDeletingContract, setIsDeletingContract] = useState(false);
+  const [incidentDialogOpen, setIncidentDialogOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [paymentReference, setPaymentReference] = useState('');
@@ -477,13 +695,42 @@ export default function ContractDetail() {
   });
   const [operationsSummary, setOperationsSummary] = useState<OperationsSummary | null>(null);
   const [isOperationsLoading, setIsOperationsLoading] = useState(false);
+  const [operationsErrorMessage, setOperationsErrorMessage] = useState('');
   const [logisticsAssignment, setLogisticsAssignment] = useState({
     driverId: '',
     truckId: '',
     assignmentStatus: 'pending',
     notes: ''
   });
+  const [logisticsAutoSaveState, setLogisticsAutoSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [logisticsAutoSaveErrorMessage, setLogisticsAutoSaveErrorMessage] = useState('');
+  const logisticsLastSavedSnapshotRef = useRef('');
+  const [banquetAssignmentDraft, setBanquetAssignmentDraft] = useState({
+    serviceGuestCount: 0,
+    supervisorId: '',
+    staffingPlan: createEmptyBanquetPlan(),
+    assignments: buildEmptyBanquetAssignments(),
+  });
+  const [banquetPickers, setBanquetPickers] = useState<Record<BanquetAssignmentRole, string>>(buildEmptyBanquetPickers());
+  const [isSavingBanquetAssignment, setIsSavingBanquetAssignment] = useState(false);
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
+  const [incidentTarget, setIncidentTarget] = useState<IncidentReportTarget | null>(null);
+  const [procurementRequestDialogOpen, setProcurementRequestDialogOpen] = useState(false);
+  const [procurementRequestTarget, setProcurementRequestTarget] = useState<ProcurementRequestTarget | null>(null);
+  const [incidentForm, setIncidentForm] = useState({
+    incidentType: 'other',
+    severity: 'medium',
+    affectedQuantity: '',
+    description: '',
+    attachmentUrl: '',
+  });
+  const [procurementRequestForm, setProcurementRequestForm] = useState({
+    requestType: 'purchase',
+    requestedQuantity: '',
+    neededBy: '',
+    reason: '',
+    notes: '',
+  });
   const requestedTab = searchParams.get('tab');
   const rawActiveTab: ContractTabKey = ALL_CONTRACT_TABS.includes((requestedTab || '') as ContractTabKey)
     ? (requestedTab as ContractTabKey)
@@ -504,11 +751,70 @@ export default function ContractDetail() {
     }),
   });
 
+  const getBanquetDraftState = (summary: OperationsSummary | null) => {
+    const savedAssignments = buildEmptyBanquetAssignments();
+    const source = summary?.banquet;
+
+    source?.selectedAssignments.forEach((assignment) => {
+      savedAssignments[assignment.assignmentRole] = [
+        ...savedAssignments[assignment.assignmentRole],
+        assignment.staffId
+      ];
+    });
+
+    const savedPlanTotal = getBanquetPlanTotal(source?.savedPlan);
+    const staffingPlan = savedPlanTotal > 0
+      ? BANQUET_ASSIGNMENT_ROLE_KEYS.reduce((plan, role) => {
+          plan[role] = Number(source?.savedPlan?.[role]) || 0;
+          return plan;
+        }, createEmptyBanquetPlan())
+      : BANQUET_ASSIGNMENT_ROLE_KEYS.reduce((plan, role) => {
+          plan[role] = Number(source?.suggestedPlan?.[role]) || 0;
+          return plan;
+        }, createEmptyBanquetPlan());
+
+    return {
+      serviceGuestCount: Number(source?.planningGuestCount) || 0,
+      supervisorId: source?.selectedSupervisorId || (role === 'banquet_supervisor' ? user?.id || '' : ''),
+      staffingPlan,
+      assignments: savedAssignments
+    };
+  };
+
+  const getDateInputValue = (value?: string | null) => (
+    value ? new Date(value).toISOString().slice(0, 10) : ''
+  );
+
+  const buildLogisticsAssignmentSnapshot = (assignment: typeof logisticsAssignment) => JSON.stringify({
+    driverId: assignment.driverId || '',
+    truckId: assignment.truckId || '',
+    assignmentStatus: resolveLogisticsAssignmentStatus(assignment),
+    notes: assignment.notes || '',
+  });
+
+  const applySavedLogisticsAssignment = (
+    contractData: Contract,
+    operationsData: OperationsSummary | null = null,
+  ) => {
+    const nextAssignment = {
+      driverId: operationsData?.logistics.assignedDriverId || contractData.logisticsAssignment?.driver?._id || '',
+      truckId: operationsData?.logistics.assignedTruckId || contractData.logisticsAssignment?.truck?._id || '',
+      assignmentStatus: operationsData?.logistics.assignmentStatus || contractData.logisticsAssignment?.assignmentStatus || 'pending',
+      notes: operationsData?.logistics.notes || contractData.logisticsAssignment?.notes || '',
+    };
+
+    logisticsLastSavedSnapshotRef.current = buildLogisticsAssignmentSnapshot(nextAssignment);
+    setLogisticsAssignment(nextAssignment);
+    setLogisticsAutoSaveState(nextAssignment.truckId ? 'saved' : 'idle');
+    setLogisticsAutoSaveErrorMessage('');
+  };
+
   const fetchContractData = async () => {
     setIsLoading(true);
 
     try {
       setIsOperationsLoading(true);
+      setOperationsErrorMessage('');
       const contractData = await api.getContract(id!);
 
       setContract(contractData);
@@ -518,26 +824,23 @@ export default function ContractDetail() {
           ? 'full'
           : 'split'
       );
-      setLogisticsAssignment({
-        driverId: contractData.logisticsAssignment?.driver?._id || '',
-        truckId: contractData.logisticsAssignment?.truck?._id || '',
-        assignmentStatus: contractData.logisticsAssignment?.assignmentStatus || 'pending',
-        notes: contractData.logisticsAssignment?.notes || ''
-      });
+      applySavedLogisticsAssignment(contractData);
       setSignatureForm(getSignatureFormState(contractData));
 
       try {
         const operationsData = await api.getContractOperationsSummary(id!);
         setOperationsSummary(operationsData);
-        setLogisticsAssignment({
-          driverId: operationsData.logistics.assignedDriverId || contractData.logisticsAssignment?.driver?._id || '',
-          truckId: operationsData.logistics.assignedTruckId || contractData.logisticsAssignment?.truck?._id || '',
-          assignmentStatus: operationsData.logistics.assignmentStatus || contractData.logisticsAssignment?.assignmentStatus || 'pending',
-          notes: operationsData.logistics.notes || contractData.logisticsAssignment?.notes || ''
-        });
-      } catch (operationsError) {
+        setOperationsErrorMessage('');
+        applySavedLogisticsAssignment(contractData, operationsData);
+        setBanquetAssignmentDraft(getBanquetDraftState(operationsData));
+        setBanquetPickers(buildEmptyBanquetPickers());
+      } catch (operationsError: any) {
         console.error('Failed to load operations summary:', operationsError);
         setOperationsSummary(null);
+        setOperationsErrorMessage(operationsError?.detail || operationsError?.message || 'Automated operations checks could not be loaded.');
+        applySavedLogisticsAssignment(contractData, null);
+        setBanquetAssignmentDraft(getBanquetDraftState(null));
+        setBanquetPickers(buildEmptyBanquetPickers());
       }
     } catch (error) {
       setContract(null);
@@ -733,6 +1036,26 @@ export default function ContractDetail() {
       fetchContractData();
     } catch (error: any) {
       toast.error(error.message || 'Failed to approve contract');
+      if (Array.isArray(error?.issues) && error.issues.length > 1) {
+        toast.info(`There ${error.issues.length - 1 === 1 ? 'is' : 'are'} ${error.issues.length - 1} more approval blocker(s) to resolve.`);
+      }
+    }
+  };
+
+  const handleDeleteContract = async () => {
+    if (!contract) {
+      return;
+    }
+
+    try {
+      setIsDeletingContract(true);
+      await api.deleteContract(contract._id);
+      toast.success('Contract deleted.');
+      navigate('/contracts');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete contract');
+    } finally {
+      setIsDeletingContract(false);
     }
   };
 
@@ -804,6 +1127,11 @@ export default function ContractDetail() {
       return;
     }
 
+    if (paymentTermConfirmationLocked) {
+      toast.error(paymentTermLockMessage || 'Confirm the inventory sections first before confirming the payment arrangement.');
+      return;
+    }
+
     const nextDownPaymentPercent = plan === 'full' ? 100 : 60;
     const nextFinalPaymentPercent = plan === 'full' ? 0 : 40;
     const planChanged = (
@@ -831,6 +1159,27 @@ export default function ContractDetail() {
     }
   };
 
+  const handleUpdateSectionConfirmation = async (
+    section: ConfirmableSectionKey,
+    confirmed: boolean,
+    successMessage: string,
+  ) => {
+    if (!contract) {
+      return;
+    }
+
+    try {
+      await api.updateContractSectionConfirmation(id!, {
+        section,
+        confirmed,
+      });
+      toast.success(successMessage);
+      fetchContractData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update section confirmation');
+    }
+  };
+
   const handleReceiptImageChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
@@ -845,28 +1194,181 @@ export default function ContractDetail() {
     reader.readAsDataURL(file);
   };
 
-  const handleUpdateLogisticsAssignment = async () => {
+  const handleUpdateLogisticsAssignment = async (
+    nextAssignment = logisticsAssignment,
+    options?: { silent?: boolean },
+  ) => {
     if (!contract || contract.status !== 'approved') {
-      toast.error('Only approved contracts can update logistics booking');
-      return;
+      if (!options?.silent) {
+        toast.error('Only approved contracts can update logistics booking');
+      }
+      return false;
     }
 
     const payload = {
-      ...logisticsAssignment,
-      assignmentStatus: resolveLogisticsAssignmentStatus(logisticsAssignment)
+      ...nextAssignment,
+      assignmentStatus: resolveLogisticsAssignmentStatus(nextAssignment)
     };
 
-    if (!payload.truckId) {
-      toast.error('Select a truck to book this event');
+    try {
+      setLogisticsAutoSaveErrorMessage('');
+      if (options?.silent) {
+        setLogisticsAutoSaveState('saving');
+      }
+
+      const updatedContract = await api.updateLogisticsAssignment(id!, payload);
+      setContract(updatedContract);
+
+      try {
+        const operationsData = await api.getContractOperationsSummary(id!);
+        setOperationsSummary(operationsData);
+        setOperationsErrorMessage('');
+        applySavedLogisticsAssignment(updatedContract, operationsData);
+      } catch (operationsError: any) {
+        console.error('Failed to refresh operations summary after logistics save:', operationsError);
+        setOperationsSummary(null);
+        setOperationsErrorMessage(operationsError?.detail || operationsError?.message || 'Automated operations checks could not be loaded.');
+        applySavedLogisticsAssignment(updatedContract, null);
+      }
+
+      if (!options?.silent) {
+        toast.success('Logistics booking saved');
+      }
+
+      return true;
+    } catch (error: any) {
+      const failureMessage = error.message || 'Failed to save logistics booking';
+
+      if (contract) {
+        try {
+          const operationsData = await api.getContractOperationsSummary(id!);
+          setOperationsSummary(operationsData);
+          setOperationsErrorMessage('');
+          applySavedLogisticsAssignment(contract, operationsData);
+        } catch (operationsError: any) {
+          console.error('Failed to refresh operations summary after logistics save failure:', operationsError);
+          applySavedLogisticsAssignment(contract, operationsSummary);
+        }
+      }
+
+      if (options?.silent) {
+        setLogisticsAutoSaveState('error');
+      }
+      setLogisticsAutoSaveErrorMessage(failureMessage);
+      toast.error(failureMessage);
+      return false;
+    }
+  };
+
+  const handleUseSuggestedBanquetTeam = () => {
+    if (!operationsSummary?.banquet) {
       return;
     }
 
+    const nextAssignments = buildEmptyBanquetAssignments();
+    operationsSummary.banquet.suggestedAssignments.forEach((assignment) => {
+      nextAssignments[assignment.assignmentRole] = [
+        ...nextAssignments[assignment.assignmentRole],
+        assignment.staffId
+      ];
+    });
+
+    setBanquetAssignmentDraft({
+      serviceGuestCount: operationsSummary.banquet.planningGuestCount || 0,
+      supervisorId: banquetAssignmentDraft.supervisorId || operationsSummary.banquet.selectedSupervisorId || (role === 'banquet_supervisor' ? user?.id || '' : ''),
+      staffingPlan: { ...operationsSummary.banquet.suggestedPlan },
+      assignments: nextAssignments
+    });
+    setBanquetPickers(buildEmptyBanquetPickers());
+    toast.success('Suggested banquet team loaded. Review it, then save when ready.');
+  };
+
+  const handleBanquetPlanCountChange = (roleKey: BanquetAssignmentRole, value: string) => {
+    const normalizedValue = Math.max(0, Math.floor(Number(value) || 0));
+    setBanquetAssignmentDraft((current) => ({
+      ...current,
+      staffingPlan: {
+        ...current.staffingPlan,
+        [roleKey]: normalizedValue
+      }
+    }));
+  };
+
+  const handleAddBanquetStaff = (roleKey: BanquetAssignmentRole) => {
+    const nextStaffId = banquetPickers[roleKey];
+
+    if (!nextStaffId) {
+      toast.error(`Select a ${BANQUET_ROLE_LABELS[roleKey].toLowerCase()} team member first.`);
+      return;
+    }
+
+    const alreadyAssigned = BANQUET_ASSIGNMENT_ROLE_KEYS.some((key) => banquetAssignmentDraft.assignments[key].includes(nextStaffId));
+    if (alreadyAssigned) {
+      toast.error('That staff member is already assigned to this event.');
+      return;
+    }
+
+    setBanquetAssignmentDraft((current) => ({
+      ...current,
+      assignments: {
+        ...current.assignments,
+        [roleKey]: [...current.assignments[roleKey], nextStaffId]
+      }
+    }));
+    setBanquetPickers((current) => ({
+      ...current,
+      [roleKey]: ''
+    }));
+  };
+
+  const handleRemoveBanquetStaff = (roleKey: BanquetAssignmentRole, staffId: string) => {
+    setBanquetAssignmentDraft((current) => ({
+      ...current,
+      assignments: {
+        ...current.assignments,
+        [roleKey]: current.assignments[roleKey].filter((value) => value !== staffId)
+      }
+    }));
+  };
+
+  const handleSaveBanquetAssignment = async () => {
+    if (!contract || !['approved', 'completed'].includes(contract.status)) {
+      toast.error('Banquet staffing can be updated after the contract is approved.');
+      return;
+    }
+
+    if (!banquetAssignmentDraft.supervisorId) {
+      toast.error('Assign a banquet supervisor before saving the event team.');
+      return;
+    }
+
+    if (banquetAssignmentDraft.serviceGuestCount <= 0) {
+      toast.error('Enter the service guest count first.');
+      return;
+    }
+
+    const assignments = BANQUET_ASSIGNMENT_ROLE_KEYS.flatMap((roleKey) => (
+      banquetAssignmentDraft.assignments[roleKey].map((staffId) => ({
+        staffId,
+        assignmentRole: roleKey
+      }))
+    ));
+
+    setIsSavingBanquetAssignment(true);
+
     try {
-      await api.updateLogisticsAssignment(id!, payload);
-      toast.success('Logistics booking saved');
+      await api.updateBanquetAssignment(id!, {
+        serviceGuestCount: banquetAssignmentDraft.serviceGuestCount,
+        supervisorId: banquetAssignmentDraft.supervisorId,
+        staffingPlan: banquetAssignmentDraft.staffingPlan,
+        assignments
+      });
+      toast.success('Banquet staffing saved');
       fetchContractData();
     } catch (error: any) {
-      toast.error(error.message || 'Failed to save logistics booking');
+      toast.error(error.message || 'Failed to save banquet staffing');
+    } finally {
+      setIsSavingBanquetAssignment(false);
     }
   };
 
@@ -874,6 +1376,16 @@ export default function ContractDetail() {
     if (!contract || contract.status !== 'approved') {
       toast.error('Only approved contracts can update logistics booking');
       return;
+    }
+
+    if (nextStatus === 'completed') {
+      const eventEnd = new Date(contract.eventDate);
+      eventEnd.setHours(23, 59, 59, 999);
+
+      if (new Date() <= eventEnd) {
+        toast.error('Logistics can only be marked completed during post-event closeout.');
+        return;
+      }
     }
 
     if (!logisticsAssignment.truckId) {
@@ -900,10 +1412,27 @@ export default function ContractDetail() {
     }
   };
 
-  const handleUpdateInventoryItemStatus = async (section: 'creativeAssets' | 'linenRequirements' | 'equipmentChecklist', index: number, status: string) => {
+  const handleUpdateInventoryItemStatus = async (section: InventorySectionKey, index: number, status: string) => {
     if (!contract || contract.status !== 'approved') {
       toast.error('Only approved contracts can update checklist statuses');
       return;
+    }
+
+    if (status === 'prepared') {
+      const sectionItems: Record<InventorySectionKey, InventorySummaryItem[]> = {
+        creativeAssets: creativeItems,
+        linenRequirements: linenItems,
+        equipmentChecklist: stockroomItems,
+      };
+      const targetItem = sectionItems[section]?.[index];
+
+      if (targetItem?.shortageQuantity > 0) {
+        toast.error(
+          targetItem.requestAction
+          || `Request purchasing/rental for ${targetItem.shortageQuantity} more ${targetItem.itemName} before marking this item prepared.`
+        );
+        return;
+      }
     }
 
     try {
@@ -912,6 +1441,179 @@ export default function ContractDetail() {
       fetchContractData();
     } catch (error: any) {
       toast.error(error.message || 'Failed to update checklist status');
+    }
+  };
+
+  const handleUpdateInventoryPostEventStatus = async (
+    section: InventorySectionKey,
+    index: number,
+    status: string,
+  ) => {
+    if (!contract) {
+      return;
+    }
+
+    if (!eventHasPassed) {
+      toast.error('Post-event checks are available only after the event date has passed.');
+      return;
+    }
+
+    try {
+      await api.updateInventoryPostEventStatus(id!, { section, index, status });
+      toast.success('Post-event check updated');
+      fetchContractData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update post-event check');
+    }
+  };
+
+  const openProcurementRequestDialog = (section: InventorySectionKey, item: InventorySummaryItem) => {
+    if (!contract) {
+      return;
+    }
+
+    setProcurementRequestTarget({ section, item });
+    setProcurementRequestForm({
+      requestType: item.sameDayConflict ? 'rental' : 'purchase',
+      requestedQuantity: String(item.shortageQuantity || item.requestedQuantity || 1),
+      neededBy: getDateInputValue(contract.eventDate),
+      reason: item.requestAction
+        || (item.shortageQuantity > 0
+          ? `Need ${item.shortageQuantity || item.requestedQuantity} more ${item.itemName} for ${contract.contractNumber}.`
+          : `Request ${item.itemName} for ${contract.contractNumber} to keep event inventory ready.`),
+      notes: item.sameDayConflict
+        ? `Same-day inventory is already committed to another event on ${new Date(contract.eventDate).toLocaleDateString()}.`
+        : `Request linked to ${contract.contractNumber}.`,
+    });
+    setProcurementRequestDialogOpen(true);
+  };
+
+  const handleSubmitProcurementRequest = async () => {
+    if (!contract || !procurementRequestTarget) {
+      return;
+    }
+
+    const requestedQuantity = Number(procurementRequestForm.requestedQuantity);
+
+    if (!Number.isInteger(requestedQuantity) || requestedQuantity <= 0) {
+      toast.error('Requested quantity must be a whole number greater than 0');
+      return;
+    }
+
+    if (!procurementRequestForm.neededBy) {
+      toast.error('Needed-by date is required');
+      return;
+    }
+
+    if (!procurementRequestForm.reason.trim()) {
+      toast.error('Reason is required');
+      return;
+    }
+
+    try {
+      await api.createProcurementRequest({
+        department: INVENTORY_SECTION_TO_PROCUREMENT_DEPARTMENT[procurementRequestTarget.section],
+        requestType: procurementRequestForm.requestType,
+        contractId: contract._id,
+        ...(procurementRequestTarget.item.itemId ? { inventoryItemId: procurementRequestTarget.item.itemId } : {}),
+        itemName: procurementRequestTarget.item.itemName,
+        itemCode: procurementRequestTarget.item.itemCode,
+        itemCategory: procurementRequestTarget.item.category,
+        requestedQuantity,
+        shortageQuantity: procurementRequestTarget.item.shortageQuantity || 0,
+        neededBy: procurementRequestForm.neededBy,
+        requestReason: procurementRequestForm.reason.trim(),
+        requestNotes: procurementRequestForm.notes.trim(),
+        source: procurementRequestTarget.item.shortageQuantity > 0 ? 'contract_shortage' : 'manual',
+        sourceSection: procurementRequestTarget.section,
+      });
+      toast.success('Procurement request sent to purchasing');
+      setProcurementRequestDialogOpen(false);
+      setProcurementRequestTarget(null);
+      fetchContractData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to send procurement request');
+    }
+  };
+
+  const openIncidentReportDialog = (
+    section: InventorySectionKey,
+    index: number,
+    itemName: string,
+    requestedQuantity: number,
+  ) => {
+    setIncidentTarget({
+      section,
+      index,
+      itemName,
+      departmentLabel: INVENTORY_SECTION_LABELS[section],
+      requestedQuantity,
+    });
+    setIncidentForm({
+      incidentType: 'other',
+      severity: 'medium',
+      affectedQuantity: '',
+      description: '',
+      attachmentUrl: '',
+    });
+    setIncidentDialogOpen(true);
+  };
+
+  const handleIncidentAttachmentChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setIncidentForm((current) => ({ ...current, attachmentUrl: '' }));
+      return;
+    }
+
+    if (file.size > 3 * 1024 * 1024) {
+      toast.error('Please upload a damage reference image smaller than 3 MB.');
+      event.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setIncidentForm((current) => ({
+        ...current,
+        attachmentUrl: typeof reader.result === 'string' ? reader.result : '',
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmitInventoryIncident = async () => {
+    if (!contract || !incidentTarget) {
+      return;
+    }
+
+    if (!incidentForm.description.trim()) {
+      toast.error('Please describe the incident before submitting the report.');
+      return;
+    }
+
+    const trimmedAffectedQuantity = incidentForm.affectedQuantity.trim();
+    if (trimmedAffectedQuantity && (!/^\d+$/.test(trimmedAffectedQuantity) || Number(trimmedAffectedQuantity) <= 0)) {
+      toast.error('Affected quantity must be a whole number greater than 0.');
+      return;
+    }
+
+    try {
+      await api.reportInventoryIncident(id!, {
+        section: incidentTarget.section,
+        index: incidentTarget.index,
+        incidentType: incidentForm.incidentType,
+        severity: incidentForm.severity,
+        ...(trimmedAffectedQuantity ? { affectedQuantity: Number(trimmedAffectedQuantity) } : {}),
+        description: incidentForm.description.trim(),
+        ...(incidentForm.attachmentUrl ? { attachments: [incidentForm.attachmentUrl] } : {}),
+      });
+      toast.success(`Incident report sent to ${incidentTarget.departmentLabel} incidents.`);
+      setIncidentDialogOpen(false);
+      setIncidentTarget(null);
+      fetchContractData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to submit incident report');
     }
   };
 
@@ -1508,10 +2210,155 @@ export default function ContractDetail() {
     }, 250);
   };
 
+  const handlePrintBanquetStaffPlan = () => {
+    if (!contract) {
+      return;
+    }
+
+    const roleSectionsHtml = BANQUET_ASSIGNMENT_ROLE_KEYS.map((roleKey) => {
+      const assignedStaff = getBanquetDraftStaffForRole(roleKey);
+      const plannedCount = banquetAssignmentDraft.staffingPlan[roleKey] || 0;
+      const totalRows = Math.max(plannedCount, assignedStaff.length);
+
+      if (totalRows === 0) {
+        return '';
+      }
+
+      const rows = Array.from({ length: totalRows }, (_, index) => {
+        const staff = assignedStaff[index] || null;
+        const isOpenSlot = !staff;
+
+        return `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${isOpenSlot ? '<span class="muted">Open slot</span>' : escapeHtml(staff.fullName)}</td>
+            <td>${isOpenSlot ? '-' : escapeHtml(staff.employeeId || '-')}</td>
+            <td class="check-cell">&#9633;</td>
+            <td>____________</td>
+            <td>____________</td>
+            <td>________________________________</td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <section class="document-section">
+          <h3 class="section-heading">${escapeHtml(BANQUET_ROLE_LABELS[roleKey])}</h3>
+          <div class="summary-strip">
+            ${getSummaryLinesHtml([
+              { label: 'Planned', value: String(plannedCount) },
+              { label: 'Assigned', value: String(assignedStaff.length) },
+              { label: 'Open Slots', value: String(Math.max(0, plannedCount - assignedStaff.length)) },
+              { label: 'Available Today', value: String(getBanquetAvailableStaffForRole(roleKey).length) },
+            ])}
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Staff Member</th>
+                <th>Employee ID</th>
+                <th>Present</th>
+                <th>Arrival</th>
+                <th>Station</th>
+                <th>Signature / Notes</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </section>
+      `;
+    }).join('');
+
+    if (!roleSectionsHtml) {
+      toast.error('Add or plan banquet staff first before printing the check-in sheet.');
+      return;
+    }
+
+    const printWindow = window.open('', '_blank', 'width=1080,height=1180');
+    if (!printWindow) {
+      toast.error('Please allow pop-ups to print the banquet staff plan');
+      return;
+    }
+
+    const assignedSupervisorName = banquetSummary?.supervisorOptions.find(
+      (option) => option._id === banquetAssignmentDraft.supervisorId,
+    )?.name || contract.assignedSupervisor?.name || 'Not assigned';
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${escapeHtml(contract.contractNumber)} - Banquet Staff Check-In</title>
+          <style>
+            ${PRINT_DOCUMENT_STYLES}
+            .check-cell { text-align: center; width: 72px; }
+          </style>
+        </head>
+        <body>
+          ${getPrintHeaderHtml(
+            'Banquet Staff Check-In Sheet',
+            'Supervisor attendance sheet for confirming the assigned service team on event day.',
+            [
+              { label: 'Contract Number', value: contract.contractNumber },
+              { label: 'Event Date', value: new Date(contract.eventDate).toLocaleDateString() },
+              { label: 'Printed', value: new Date().toLocaleString() },
+            ],
+          )}
+          <div class="summary-strip">
+            ${getSummaryLinesHtml([
+              { label: 'Client', value: contract.clientName },
+              { label: 'Venue', value: contract.venue?.name || '-' },
+              { label: 'Service Guests', value: String(banquetAssignmentDraft.serviceGuestCount || banquetSummary?.planningGuestCount || 0) },
+              { label: 'Supervisor', value: assignedSupervisorName },
+              { label: 'Planned Crew', value: String(banquetPlannedTotal) },
+              { label: 'Assigned Crew', value: String(banquetAssignedTotal) },
+            ])}
+          </div>
+          <section class="document-section">
+            <h3 class="section-heading">Supervisor Notes</h3>
+            <div class="detail-value">
+              Use the Present column to check attendance, note each team member's arrival time, and capture any last-minute changes in the notes column.
+            </div>
+          </section>
+          ${roleSectionsHtml}
+          <section class="document-section">
+            <h3 class="section-heading">Closeout Sign-Off</h3>
+            <div class="info-grid">
+              <div>
+                ${getDetailListHtml([
+                  { label: 'Supervisor', value: assignedSupervisorName },
+                  { label: 'Prepared By', value: user?.name || COMPANY_NAME },
+                ])}
+              </div>
+              <div>
+                ${getDetailListHtml([
+                  { label: 'Arrival Call Time', value: '____________________' },
+                  { label: 'Final Notes', value: '____________________________________________________' },
+                ])}
+              </div>
+            </div>
+          </section>
+          <div class="document-note">
+            Printed from the banquet staffing section for ${COMPANY_NAME}.
+          </div>
+        </div>
+      </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
+
   const inventoryStatusOptions = {
-    creativeAssets: ['pending', 'prepared', 'returned'],
-    linenRequirements: ['pending', 'prepared', 'returned'],
-    equipmentChecklist: ['pending', 'prepared', 'returned'],
+    creativeAssets: ['pending', 'prepared'],
+    linenRequirements: ['pending', 'prepared'],
+    equipmentChecklist: ['pending', 'prepared'],
   } as const;
 
   const getStatusColor = (status: string) => {
@@ -1539,12 +2386,32 @@ export default function ContractDetail() {
   const canManageLogistics = canUpdatePreparation && (isLogistics() || isAdmin());
   const canManageCreative = canUpdatePreparation && (isCreative() || isAdmin());
   const canManageLinen = canUpdatePreparation && (isLinen() || isAdmin());
-  const canEditDraftContract = contract ? contract.status === 'draft' && (isSales() || isAdmin()) : false;
+  const canManageStockroom = canUpdatePreparation && (isPurchasing() || isStockroom() || isAdmin());
+  const isInventoryDepartmentViewer = isCreative() || isLinen() || isPurchasing() || isStockroom();
+  const useInventoryFocusedContractView = isInventoryDepartmentViewer && !isAdmin() && !isSales();
+  const useBanquetFocusedContractView = isBanquet() && !isAdmin() && !isSales();
+  const useRestrictedDepartmentContractView = useInventoryFocusedContractView || useBanquetFocusedContractView;
+  const canEditDraftSalesContract = contract ? contract.status === 'draft' && (isSales() || isAdmin()) : false;
+  const canEditDraftCreativeInventory = contract ? contract.status === 'draft' && (isCreative() || isAdmin()) : false;
+  const canEditDraftLinenInventory = contract ? contract.status === 'draft' && (isLinen() || isAdmin()) : false;
+  const canEditDraftStockroomInventory = contract ? contract.status === 'draft' && (isPurchasing() || isStockroom() || isAdmin()) : false;
+  const canEditDraftAnyInventorySection = (
+    canEditDraftCreativeInventory
+    || canEditDraftLinenInventory
+    || canEditDraftStockroomInventory
+  );
+  const canConfirmCreativeSection = canConfirmFinalizationSections && (isCreative() || isAdmin());
+  const canConfirmLinenSection = canConfirmFinalizationSections && (isLinen() || isAdmin());
+  const canConfirmStockroomSection = canConfirmFinalizationSections && (isPurchasing() || isStockroom() || isAdmin());
   const openContractEditor = (editorTab: 'client' | 'event' | 'package' | 'addons' | 'summary') => {
     navigate(`/contracts/edit/${id}?tab=${editorTab}`);
   };
-  const renderTabEditButton = (editorTab: 'client' | 'event' | 'package' | 'addons' | 'summary', label = 'Edit This Section') => (
-    canEditDraftContract ? (
+  const renderTabEditButton = (
+    editorTab: 'client' | 'event' | 'package' | 'addons' | 'summary',
+    label = 'Edit This Section',
+    canEdit = canEditDraftSalesContract
+  ) => (
+    canEdit ? (
       <Button
         type="button"
         size="sm"
@@ -1569,10 +2436,32 @@ export default function ContractDetail() {
   const renderInventorySection = (
     title: string,
     icon: ReactNode,
-    sectionKey: 'creativeAssets' | 'linenRequirements' | 'equipmentChecklist',
+    sectionKey: InventorySectionKey,
     items: InventorySummaryItem[],
     canEdit: boolean
   ) => {
+    const canManagePostEvent = canEdit && eventHasPassed && !isContractClosed;
+    const canCreateProcurementRequest = (
+      sectionKey === 'creativeAssets'
+        ? canCreateCreativeProcurementRequest
+        : sectionKey === 'linenRequirements'
+          ? canCreateLinenProcurementRequest
+          : canCreateStockroomProcurementRequest
+    );
+    const confirmationSectionKey = INVENTORY_SECTION_TO_CONFIRMABLE_SECTION[sectionKey];
+    const isInventorySectionConfirmed = isSectionConfirmed(confirmationSectionKey);
+    const canConfirmInventorySection = confirmationSectionKey === 'creative'
+      ? canConfirmCreativeSection
+      : confirmationSectionKey === 'linen'
+        ? canConfirmLinenSection
+        : canConfirmStockroomSection;
+    const canEditInventoryDraftSection = sectionKey === 'creativeAssets'
+      ? canEditDraftCreativeInventory
+      : sectionKey === 'linenRequirements'
+        ? canEditDraftLinenInventory
+        : canEditDraftStockroomInventory;
+    const showPreSignatureInventoryValidation = canConfirmFinalizationSections && items.length > 0;
+
     if (!items.length) {
       return (
         <Card>
@@ -1583,7 +2472,7 @@ export default function ContractDetail() {
             </CardTitle>
             <div className="flex flex-wrap items-center gap-2">
               {canConfirmFinalizationSections ? renderReferenceBadge('Reference View') : null}
-              {canEditDraftContract ? renderTabEditButton('addons') : null}
+              {canEditInventoryDraftSection ? renderTabEditButton('addons', 'Edit Inventory Items', canEditInventoryDraftSection) : null}
             </div>
           </CardHeader>
           <CardContent>
@@ -1601,110 +2490,254 @@ export default function ContractDetail() {
             {title}
           </CardTitle>
           <div className="flex flex-wrap items-center gap-2">
+            {showPreSignatureInventoryValidation ? (
+              <Badge
+                variant="outline"
+                className={isInventorySectionConfirmed
+                  ? READINESS_STATUS_META.ready.badgeClassName
+                  : READINESS_STATUS_META.not_started.badgeClassName}
+              >
+                {isInventorySectionConfirmed ? 'Confirmed' : 'Pending Confirmation'}
+              </Badge>
+            ) : null}
             {canConfirmFinalizationSections ? renderReferenceBadge('Reference View') : null}
-            {canEditDraftContract ? renderTabEditButton('addons') : null}
+            {canEditInventoryDraftSection ? renderTabEditButton('addons', 'Edit Inventory Items', canEditInventoryDraftSection) : null}
+            {showPreSignatureInventoryValidation && canConfirmInventorySection ? (
+              <Button
+                type="button"
+                size="sm"
+                variant={isInventorySectionConfirmed ? 'outline' : 'default'}
+                onClick={() => handleUpdateSectionConfirmation(
+                  confirmationSectionKey,
+                  true,
+                  `${title} confirmed for pre-signature review.`
+                )}
+                disabled={isInventorySectionConfirmed}
+              >
+                {isInventorySectionConfirmed ? `${title} Confirmed` : `Confirm ${title}`}
+              </Button>
+            ) : null}
           </div>
         </CardHeader>
         <CardContent>
+          {showPreSignatureInventoryValidation ? (
+            <div className="mb-4 rounded-lg border bg-muted/20 px-4 py-3 text-sm">
+              {isInventorySectionConfirmed
+                ? `${title} has already been reviewed for this draft contract. Any new item change will reset the confirmation automatically.`
+                : `${title} still needs department confirmation before sales can send this contract for signature.`}
+            </div>
+          ) : null}
           <div className="grid gap-4 md:grid-cols-2">
-            {items.map((item, index) => (
-              <div key={`${sectionKey}-${item.itemName}-${index}`} className="flex gap-4 rounded-lg border p-4">
-                <button
-                  type="button"
-                  className={`h-28 w-28 shrink-0 overflow-hidden rounded-md bg-muted ${item.imageUrl ? 'cursor-zoom-in' : 'cursor-default'}`}
-                  onClick={() => item.imageUrl && setPreviewImage({ url: item.imageUrl, title: item.itemName })}
-                >
-                  {item.imageUrl ? (
-                    <img src={item.imageUrl} alt={item.itemName} className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-center text-xs text-muted-foreground">
-                      No image saved
-                    </div>
-                  )}
-                </button>
+            {items.map((item, index) => {
+              const preEventBadgeClassName = item.readyForDispatch
+                ? 'bg-green-100 text-green-800'
+                : item.itemStatus === 'prepared'
+                  ? 'bg-blue-100 text-blue-800'
+                  : 'bg-yellow-100 text-yellow-800';
+              const preEventBadgeLabel = item.readyForDispatch
+                ? 'Dispatch ready'
+                : formatEnumLabel(item.itemStatus);
+              const stockBadgeClassName = item.enoughStock ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
 
-                <div className="min-w-0 flex-1 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{item.itemName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {[item.itemCode, item.category].filter(Boolean).join(' | ') || 'Inventory item'}
-                      </p>
+              return (
+                <div key={`${sectionKey}-${item.itemName}-${index}`} className="rounded-xl border bg-white p-4 shadow-sm">
+                  <div className="flex gap-4">
+                    <button
+                      type="button"
+                      className={`h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-muted ${item.imageUrl ? 'cursor-zoom-in' : 'cursor-default'}`}
+                      onClick={() => item.imageUrl && setPreviewImage({ url: item.imageUrl, title: item.itemName })}
+                    >
+                      {item.imageUrl ? (
+                        <img src={item.imageUrl} alt={item.itemName} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full items-center justify-center px-2 text-center text-xs text-muted-foreground">
+                          No image
+                        </div>
+                      )}
+                    </button>
+
+                    <div className="min-w-0 flex-1 space-y-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-base font-semibold">{item.itemName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {[item.itemCode, item.category].filter(Boolean).join(' | ') || 'Inventory item'}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant="outline">Need {item.requestedQuantity}</Badge>
+                          <Badge className={stockBadgeClassName}>
+                            {item.enoughStock ? 'Enough stock' : 'Stock shortage'}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <div className="rounded-lg border bg-slate-50 px-3 py-2">
+                          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">Available</p>
+                          <p className="mt-1 text-lg font-semibold text-slate-900">{item.availableQuantity ?? '-'}</p>
+                          <p className="text-xs text-muted-foreground">For this event date</p>
+                        </div>
+                        <div className="rounded-lg border bg-slate-50 px-3 py-2">
+                          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">Reserved</p>
+                          <p className="mt-1 text-lg font-semibold text-slate-900">{item.reservedOnDate}</p>
+                          <p className="text-xs text-muted-foreground">Same event date</p>
+                        </div>
+                        <div className="rounded-lg border bg-slate-50 px-3 py-2">
+                          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">Inventory Status</p>
+                          <p className="mt-1 text-sm font-semibold capitalize text-slate-900">{item.inventoryStatus.replace('_', ' ')}</p>
+                          <p className="text-xs text-muted-foreground">Current stock record</p>
+                        </div>
+                      </div>
+
+                      {item.blockers.length > 0 ? (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                          {item.blockers.join(' ')}
+                        </div>
+                      ) : null}
+
+                      {eventHasPassed ? (
+                        <div className="rounded-lg border bg-slate-50/80 p-3">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">Post-Event Check</p>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                Review the return, then report any missing, damaged, or wrong-quantity issue here.
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap justify-end gap-2">
+                              {item.postEventStatus === 'incident_reported' ? (
+                                <Badge className="bg-red-100 text-red-800">Incident reported</Badge>
+                              ) : null}
+                              <Badge className={getPostEventStatusClassName(item.postEventStatus, item.itemStatus)}>
+                                {getPostEventStatusLabel(item.postEventStatus, item.itemStatus)}
+                              </Badge>
+                            </div>
+                          </div>
+
+                          {item.postEventNotes ? (
+                            <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                              {item.postEventNotes}
+                            </div>
+                          ) : null}
+
+                          <div className="mt-3">
+                            {canManagePostEvent ? (
+                              <div className="space-y-3">
+                                <div className="space-y-2">
+                                  <Label>Post-Event Status</Label>
+                                  <Select
+                                    value={resolvePostEventStatus(item.postEventStatus, item.itemStatus)}
+                                    onValueChange={(value) => handleUpdateInventoryPostEventStatus(sectionKey, index, value)}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {POST_EVENT_STATUS_OPTIONS.map((statusOption) => (
+                                        <SelectItem key={statusOption} value={statusOption}>
+                                          {getPostEventStatusLabel(statusOption)}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant={item.postEventStatus === 'incident_reported' ? 'outline' : 'destructive'}
+                                  onClick={() => openIncidentReportDialog(sectionKey, index, item.itemName, item.requestedQuantity)}
+                                >
+                                  <AlertTriangle className="mr-2 h-4 w-4" />
+                                  {item.postEventStatus === 'incident_reported' ? 'Add Another Incident' : 'Report Incident'}
+                                </Button>
+                              </div>
+                            ) : (
+                              <p className="text-sm">
+                                <span className="text-muted-foreground">Post-event status: </span>
+                                <span className="font-medium">{getPostEventStatusLabel(item.postEventStatus, item.itemStatus)}</span>
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border bg-slate-50/80 p-3">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">Pre-Event Preparation</p>
+                              <p className="mt-1 text-sm text-muted-foreground">Prepare the item, then mark it ready for release.</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {item.sameDayConflict ? (
+                                <Badge className="bg-red-100 text-red-800">Same-day conflict</Badge>
+                              ) : null}
+                              <Badge className={preEventBadgeClassName}>{preEventBadgeLabel}</Badge>
+                            </div>
+                          </div>
+                          {item.requestAction ? (
+                            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+                              {item.requestAction}
+                            </div>
+                          ) : null}
+                          {canCreateProcurementRequest && item.itemId ? (
+                            <div className="mt-3">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={item.shortageQuantity > 0 ? 'default' : 'outline'}
+                                onClick={() => openProcurementRequestDialog(sectionKey, item)}
+                              >
+                                {item.shortageQuantity > 0 ? 'Request Purchasing Or Rental' : 'Create Purchasing Request'}
+                              </Button>
+                            </div>
+                          ) : null}
+                          <div className="mt-3">
+                            {canEdit ? (
+                              <div className="space-y-2">
+                                <Label>Preparation Status</Label>
+                                <Select
+                                  value={item.itemStatus}
+                                  onValueChange={(value) => handleUpdateInventoryItemStatus(sectionKey, index, value)}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {inventoryStatusOptions[sectionKey].map(statusOption => (
+                                      <SelectItem key={statusOption} value={statusOption}>
+                                        {formatEnumLabel(statusOption)}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            ) : (
+                              <p className="text-sm">
+                                <span className="text-muted-foreground">Preparation status: </span>
+                                <span className="font-medium">{formatEnumLabel(item.itemStatus)}</span>
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <Badge variant="outline">Qty {item.requestedQuantity}</Badge>
                   </div>
-
-                  <div className="grid gap-2 text-sm text-muted-foreground">
-                    <div className="flex justify-between gap-4">
-                      <span>Available for event date</span>
-                      <span className="font-medium text-foreground">{item.availableQuantity ?? '-'}</span>
-                    </div>
-                    <div className="flex justify-between gap-4">
-                      <span>Reserved on same date</span>
-                      <span className="font-medium text-foreground">{item.reservedOnDate}</span>
-                    </div>
-                    <div className="flex justify-between gap-4">
-                      <span>Inventory status</span>
-                      <span className="font-medium text-foreground">{item.inventoryStatus.replace('_', ' ')}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Badge className={item.enoughStock ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
-                      {item.enoughStock ? 'Enough stock' : 'Stock shortage'}
-                    </Badge>
-                    <Badge className={item.readyForDispatch ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'}>
-                      {item.readyForDispatch ? 'Ready for dispatch' : 'Not ready for dispatch'}
-                    </Badge>
-                  </div>
-
-                  {item.blockers.length > 0 ? (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                      {item.blockers.join(' ')}
-                    </div>
-                  ) : null}
-
-                  {canEdit ? (
-                    <div className="space-y-2">
-                      <Label>Checklist Status</Label>
-                      <Select
-                        value={item.itemStatus}
-                        onValueChange={(value) => handleUpdateInventoryItemStatus(sectionKey, index, value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {inventoryStatusOptions[sectionKey].map(statusOption => (
-                            <SelectItem key={statusOption} value={statusOption}>
-                              {statusOption.replace(/_/g, ' ')}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ) : (
-                    <div className="text-sm">
-                      <span className="text-muted-foreground">Checklist Status: </span>
-                      <span className="font-medium">{item.itemStatus.replace(/_/g, ' ')}</span>
-                    </div>
-                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>
     );
   };
 
-  const canViewDetailsTab = true;
-  const canViewMenuTab = isAdmin() || isSales() || isKitchen() || isPurchasing() || isBanquet();
-  const canViewInventoryTab = isAdmin() || isCreative() || isLinen() || isLogistics() || isSales();
-  const canViewPaymentsTab = isAdmin() || isAccounting() || isSales();
-  const canViewLogisticsTab = isAdmin() || isLogistics() || isBanquet() || isSales();
-  const canViewPreferencesTab = isAdmin() || isSales() || isCreative() || isLinen() || isKitchen() || isPurchasing() || isBanquet();
-  const canViewTimelineTab = role !== 'accounting';
+  const canViewDetailsTab = useBanquetFocusedContractView || !useInventoryFocusedContractView;
+  const canViewMenuTab = !useRestrictedDepartmentContractView && (isAdmin() || isSales() || isKitchen() || isPurchasing() || isBanquet());
+  const canViewInventoryTab = useBanquetFocusedContractView ? false : true;
+  const canViewPaymentsTab = !useRestrictedDepartmentContractView && (isAdmin() || isAccounting() || isSales());
+  const canViewBanquetTab = useBanquetFocusedContractView || (!useInventoryFocusedContractView && (isAdmin() || isBanquet() || isSales()));
+  const canViewLogisticsTab = !useRestrictedDepartmentContractView && (isAdmin() || isLogistics() || isBanquet() || isSales());
+  const canViewPreferencesTab = useBanquetFocusedContractView || (!useInventoryFocusedContractView && (isAdmin() || isSales() || isCreative() || isLinen() || isKitchen() || isPurchasing() || isBanquet()));
+  const canViewTimelineTab = !useRestrictedDepartmentContractView && role !== 'accounting';
   const visibleTabs = ALL_CONTRACT_TABS.filter((tab) => {
     switch (tab) {
       case 'details':
@@ -1715,6 +2748,8 @@ export default function ContractDetail() {
         return canViewInventoryTab;
       case 'payments':
         return canViewPaymentsTab;
+      case 'banquet':
+        return canViewBanquetTab;
       case 'logistics':
         return canViewLogisticsTab;
       case 'preferences':
@@ -1726,6 +2761,59 @@ export default function ContractDetail() {
     }
   });
   const activeTab = visibleTabs.includes(rawActiveTab) ? rawActiveTab : visibleTabs[0] || 'details';
+  const canManageBanquet = (isAdmin() || isBanquet() || isSales()) && Boolean(contract && ['approved', 'completed'].includes(contract.status));
+  const banquetSummary = operationsSummary?.banquet;
+  const banquetSelectedAssignments = banquetSummary?.selectedAssignments || [];
+  const banquetSuggestedAssignments = banquetSummary?.suggestedAssignments || [];
+  const banquetAssignedTotal = BANQUET_ASSIGNMENT_ROLE_KEYS.reduce(
+    (sum, roleKey) => sum + banquetAssignmentDraft.assignments[roleKey].length,
+    0
+  );
+  const banquetPlannedTotal = getBanquetPlanTotal(banquetAssignmentDraft.staffingPlan);
+  const banquetDraftCoveragePercent = (() => {
+    const totalSteps = banquetPlannedTotal + 1;
+
+    if (totalSteps === 0) {
+      return 0;
+    }
+
+    const coveredAssignments = BANQUET_ASSIGNMENT_ROLE_KEYS.reduce((sum, roleKey) => (
+      sum + Math.min(
+        banquetAssignmentDraft.assignments[roleKey].length,
+        Number(banquetAssignmentDraft.staffingPlan[roleKey]) || 0
+      )
+    ), 0);
+
+    const completedSteps = coveredAssignments + (banquetAssignmentDraft.supervisorId ? 1 : 0);
+    return Math.round((completedSteps / totalSteps) * 100);
+  })();
+  const getBanquetAvailableStaffForRole = (roleKey: BanquetAssignmentRole) => (
+    banquetSummary?.availableByRole?.[roleKey] || []
+  );
+  const banquetStaffLookup = (() => {
+    const entries = new Map<string, BanquetStaffSummary>();
+
+    banquetSelectedAssignments.forEach((assignment) => {
+      entries.set(assignment.staffId, assignment.staff);
+    });
+
+    banquetSuggestedAssignments.forEach((assignment) => {
+      entries.set(assignment.staffId, assignment.staff);
+    });
+
+    BANQUET_ASSIGNMENT_ROLE_KEYS.forEach((roleKey) => {
+      getBanquetAvailableStaffForRole(roleKey).forEach((staff) => {
+        entries.set(staff._id, staff);
+      });
+    });
+
+    return entries;
+  })();
+  const getBanquetDraftStaffForRole = (roleKey: BanquetAssignmentRole) => (
+    banquetAssignmentDraft.assignments[roleKey]
+      .map((staffId) => banquetStaffLookup.get(staffId))
+      .filter((staff): staff is BanquetStaffSummary => Boolean(staff))
+  );
 
   useEffect(() => {
     if (visibleTabs.includes(rawActiveTab)) {
@@ -1740,6 +2828,36 @@ export default function ContractDetail() {
     }
     setSearchParams(next, { replace: true });
   }, [activeTab, rawActiveTab, searchParams, setSearchParams, visibleTabs]);
+
+  useEffect(() => {
+    if (!contract || !canManageLogistics || contract.status !== 'approved' || isOperationsLoading) {
+      return;
+    }
+
+    const currentSnapshot = buildLogisticsAssignmentSnapshot(logisticsAssignment);
+
+    if (currentSnapshot === logisticsLastSavedSnapshotRef.current) {
+      return;
+    }
+
+    setLogisticsAutoSaveErrorMessage('');
+    setLogisticsAutoSaveState('saving');
+
+    const timeoutId = window.setTimeout(() => {
+      void handleUpdateLogisticsAssignment(logisticsAssignment, { silent: true });
+    }, 700);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    contract,
+    canManageLogistics,
+    isOperationsLoading,
+    logisticsAssignment.driverId,
+    logisticsAssignment.notes,
+    logisticsAssignment.truckId,
+  ]);
 
   if (isLoading) {
     return (
@@ -1792,10 +2910,6 @@ export default function ContractDetail() {
       : `${downPaymentPercent}% Down Payment`;
   const paymentSummaryLabel = fullPaymentPlan ? 'Payment Required' : 'Required Deposit';
   const isPreSignatureStage = ['draft', 'pending_client_signature'].includes(contract.status);
-  const paymentTermConfirmed = isSectionConfirmed('payments');
-  const paymentTermNeedsConfirmation = isPreSignatureStage && (
-    !paymentTermConfirmed || pendingPaymentPlan !== savedPaymentPlan
-  );
   const paymentPlanSummary = fullPaymentPlan
     ? isPreSignatureStage
       ? 'This records the agreed full-payment arrangement before signature. Payment posting starts only after the client signs.'
@@ -1805,25 +2919,120 @@ export default function ContractDetail() {
       : `${downPaymentPercent}% is collected after signature for preparation release, and the remaining ${finalPaymentPercent}% stays due one month before the event.`;
   const menuItemCount = contract.menuDetails?.length || 0;
   const confirmedMenuCount = contract.menuDetails?.filter(item => item.confirmed).length || 0;
+  const creativeItemCount = contract.creativeAssets?.length || 0;
+  const linenItemCount = contract.linenRequirements?.length || 0;
+  const stockroomItemCount = contract.equipmentChecklist?.length || 0;
+  const creativeSectionConfirmed = isSectionConfirmed('creative');
+  const linenSectionConfirmed = isSectionConfirmed('linen');
+  const stockroomSectionConfirmed = isSectionConfirmed('stockroom');
   const savedInventoryItemCount = (contract.creativeAssets?.length || 0)
     + (contract.linenRequirements?.length || 0)
     + (contract.equipmentChecklist?.length || 0);
-  const creativeItems = operationsSummary?.inventory.creativeAssets || [];
-  const linenItems = operationsSummary?.inventory.linenRequirements || [];
-  const stockroomItems = operationsSummary?.inventory.equipmentChecklist || [];
+  const buildFallbackInventoryItems = (
+    sectionKey: InventorySectionKey,
+    items: Array<any>,
+    itemNameKey: 'item' | 'type',
+  ): InventorySummaryItem[] => items.map((item) => ({
+    sectionKey,
+    itemId: item.itemId || null,
+    itemName: item[itemNameKey] || 'Inventory item',
+    itemCode: item.itemCode || '',
+    category: item.category || '',
+    requestedQuantity: Number(item.quantity) || 0,
+    availableQuantity: null,
+    reservedOnDate: 0,
+    inventoryStatus: 'unavailable',
+    itemStatus: item.status || 'pending',
+    postEventStatus: item.postEventStatus || 'pending_check',
+    postEventNotes: item.postEventNotes || '',
+    enoughStock: false,
+    shortageQuantity: 0,
+    sameDayConflict: false,
+    requestAction: '',
+    readyForDispatch: item.status === 'prepared',
+    imageUrl: item.imageUrl || '',
+    notes: item.notes || '',
+    blockers: operationsSummary ? [] : ['Automated inventory availability checks are unavailable right now.'],
+  }));
+  const creativeItems = (operationsSummary?.inventory.creativeAssets || buildFallbackInventoryItems('creativeAssets', contract.creativeAssets || [], 'item')).map((item) => ({
+    ...item,
+    sectionKey: 'creativeAssets' as const,
+  }));
+  const linenItems = (operationsSummary?.inventory.linenRequirements || buildFallbackInventoryItems('linenRequirements', contract.linenRequirements || [], 'type')).map((item) => ({
+    ...item,
+    sectionKey: 'linenRequirements' as const,
+  }));
+  const stockroomItems = (operationsSummary?.inventory.equipmentChecklist || buildFallbackInventoryItems('equipmentChecklist', contract.equipmentChecklist || [], 'item')).map((item) => ({
+    ...item,
+    sectionKey: 'equipmentChecklist' as const,
+  }));
   const allInventoryItems = [...creativeItems, ...linenItems, ...stockroomItems];
-  const canViewCreativeInventorySection = isAdmin() || isCreative() || isSales();
-  const canViewLinenInventorySection = isAdmin() || isLinen() || isSales();
-  const canViewStockroomInventorySection = isAdmin() || isLogistics() || isSales();
+  const canViewCreativeInventorySection = isAdmin() || isCreative() || isSales() || isPurchasing();
+  const canViewLinenInventorySection = isAdmin() || isLinen() || isSales() || isPurchasing();
+  const canViewStockroomInventorySection = isAdmin() || isLogistics() || isSales() || isPurchasing() || isStockroom();
   const visibleInventoryItems = [
     ...(canViewCreativeInventorySection ? creativeItems : []),
     ...(canViewLinenInventorySection ? linenItems : []),
     ...(canViewStockroomInventorySection ? stockroomItems : []),
   ];
+  const visibleInventoryShortages = visibleInventoryItems.filter((item) => item.shortageQuantity > 0);
   const hasVisibleInventoryItems = visibleInventoryItems.length > 0;
+  const canRenderSavedInventorySections = Boolean(operationsSummary) || savedInventoryItemCount > 0;
   const visibleInventoryItemsReady = hasVisibleInventoryItems
     ? visibleInventoryItems.every((item) => item.enoughStock && item.readyForDispatch && item.blockers.length === 0)
     : false;
+  const visiblePendingPostEventChecks = visibleInventoryItems.filter((item) => (
+    !isPostEventClosed(item.postEventStatus, item.itemStatus)
+  )).length;
+  const inventoryValidationItems: DepartmentReadiness[] = [
+    creativeItemCount > 0 ? {
+      key: 'creative',
+      label: 'Creative Validation',
+      status: creativeSectionConfirmed ? 'ready' : 'not_started',
+      detail: creativeSectionConfirmed
+        ? `${creativeItemCount} creative ${pluralize(creativeItemCount, 'item')} confirmed for the draft contract.`
+        : `Creative still needs to confirm ${creativeItemCount} assigned ${pluralize(creativeItemCount, 'item')} before signature release.`,
+    } : null,
+    linenItemCount > 0 ? {
+      key: 'linen',
+      label: 'Linen Validation',
+      status: linenSectionConfirmed ? 'ready' : 'not_started',
+      detail: linenSectionConfirmed
+        ? `${linenItemCount} linen ${pluralize(linenItemCount, 'item')} confirmed for the draft contract.`
+        : `Linen still needs to confirm ${linenItemCount} assigned ${pluralize(linenItemCount, 'item')} before signature release.`,
+    } : null,
+    stockroomItemCount > 0 ? {
+      key: 'stockroom',
+      label: 'Stockroom Validation',
+      status: stockroomSectionConfirmed ? 'ready' : 'not_started',
+      detail: stockroomSectionConfirmed
+        ? `${stockroomItemCount} stockroom ${pluralize(stockroomItemCount, 'item')} confirmed for the draft contract.`
+        : `Stockroom still needs to confirm ${stockroomItemCount} assigned ${pluralize(stockroomItemCount, 'item')} before signature release.`,
+    } : null,
+  ].filter(Boolean) as DepartmentReadiness[];
+  const paymentTermConfirmed = isSectionConfirmed('payments');
+  const pendingInventoryValidationLabels = inventoryValidationItems
+    .filter((item) => item.status !== 'ready')
+    .map((item) => item.label);
+  const paymentTermConfirmationLocked = isPreSignatureStage && pendingInventoryValidationLabels.length > 0;
+  const paymentTermNeedsConfirmation = isPreSignatureStage && (
+    paymentTermConfirmationLocked
+    || !paymentTermConfirmed
+    || pendingPaymentPlan !== savedPaymentPlan
+  );
+  const paymentTermStatusLabel = paymentTermConfirmationLocked
+    ? 'Waiting On Inventory'
+    : !paymentTermNeedsConfirmation && paymentTermConfirmed
+      ? 'Confirmed'
+      : 'Pending Confirmation';
+  const paymentTermStatusClassName = paymentTermConfirmationLocked
+    ? READINESS_STATUS_META.blocked.badgeClassName
+    : !paymentTermNeedsConfirmation && paymentTermConfirmed
+      ? READINESS_STATUS_META.ready.badgeClassName
+      : READINESS_STATUS_META.not_started.badgeClassName;
+  const paymentTermLockMessage = paymentTermConfirmationLocked
+    ? `Confirm ${pendingInventoryValidationLabels.join(', ')} first. Inventory changes can still affect the final contract value.`
+    : '';
   const canManagePayments = isAccounting() || isAdmin();
   const canPostPayments = canManagePayments && contract.clientSigned && contract.status !== 'completed';
   const canConfigurePaymentPlan = (
@@ -1835,15 +3044,18 @@ export default function ContractDetail() {
   const eventEndDate = new Date(contract.eventDate);
   eventEndDate.setHours(23, 59, 59, 999);
   const eventHasPassed = new Date() > eventEndDate;
+  const canCreateCreativeProcurementRequest = !eventHasPassed && !isContractClosed && (isCreative() || isSales() || isPurchasing() || isAdmin());
+  const canCreateLinenProcurementRequest = !eventHasPassed && !isContractClosed && (isLinen() || isSales() || isPurchasing() || isAdmin());
+  const canCreateStockroomProcurementRequest = !eventHasPassed && !isContractClosed && (isLogistics() || isSales() || isPurchasing() || isStockroom() || isAdmin());
   const logisticsBooked = Boolean(
     contract.logisticsAssignment?.truck
     || contract.logisticsAssignment?.driver
     || ((contract.logisticsAssignment?.assignmentStatus || 'pending') !== 'pending')
   );
   const logisticsClosedOut = !logisticsBooked || contract.logisticsAssignment?.assignmentStatus === 'completed';
-  const creativeReturnsRemaining = (contract.creativeAssets || []).filter(item => item.status !== 'returned').length;
-  const linenReturnsRemaining = (contract.linenRequirements || []).filter(item => item.status !== 'returned').length;
-  const stockroomReturnsRemaining = (contract.equipmentChecklist || []).filter(item => item.status !== 'returned').length;
+  const creativeReturnsRemaining = (contract.creativeAssets || []).filter(item => !isPostEventClosed(item.postEventStatus, item.status)).length;
+  const linenReturnsRemaining = (contract.linenRequirements || []).filter(item => !isPostEventClosed(item.postEventStatus, item.status)).length;
+  const stockroomReturnsRemaining = (contract.equipmentChecklist || []).filter(item => !isPostEventClosed(item.postEventStatus, item.status)).length;
   const closureIssues: string[] = [];
 
   if (!eventHasPassed) {
@@ -1859,15 +3071,15 @@ export default function ContractDetail() {
   }
 
   if (creativeReturnsRemaining > 0) {
-    closureIssues.push(`${creativeReturnsRemaining} creative item(s) still need return updates.`);
+    closureIssues.push(`${creativeReturnsRemaining} creative item(s) still need post-event checking.`);
   }
 
   if (linenReturnsRemaining > 0) {
-    closureIssues.push(`${linenReturnsRemaining} linen item(s) still need return updates.`);
+    closureIssues.push(`${linenReturnsRemaining} linen item(s) still need post-event checking.`);
   }
 
   if (stockroomReturnsRemaining > 0) {
-    closureIssues.push(`${stockroomReturnsRemaining} stockroom item(s) still need return updates.`);
+    closureIssues.push(`${stockroomReturnsRemaining} stockroom item(s) still need post-event checking.`);
   }
 
   const canShowCloseContractAction = contract.status === 'approved' && canManagePayments;
@@ -1938,6 +3150,7 @@ export default function ContractDetail() {
     const readyCount = items.filter(item => item.readyForDispatch).length;
     const blockerCount = items.filter(item => item.blockers.length > 0).length;
     const shortageCount = items.filter(item => !item.enoughStock).length;
+    const requestCount = items.filter(item => item.shortageQuantity > 0).length;
 
     if (readyCount === items.length) {
       return {
@@ -1961,7 +3174,7 @@ export default function ContractDetail() {
         key,
         label,
         status: 'blocked',
-        detail: `${issueParts.join(' and ')} need attention before release.`,
+        detail: `${issueParts.join(' and ')} need attention before release.${requestCount > 0 ? ' Request purchasing or rental for the shortage items.' : ''}`,
       };
     }
 
@@ -1979,6 +3192,51 @@ export default function ContractDetail() {
       label,
       status: 'not_started',
       detail: `${items.length} ${pluralize(items.length, 'item')} are saved but still waiting for prep updates.`,
+    };
+  };
+
+  const buildPostEventInventoryReadiness = (
+    key: string,
+    label: string,
+    items: Array<{ postEventStatus?: string; itemStatus?: string; status?: string }>,
+    emptyDetail: string
+  ): DepartmentReadiness => {
+    if (!items.length) {
+      return {
+        key,
+        label,
+        status: 'ready',
+        detail: emptyDetail,
+      };
+    }
+
+    const completedCount = items.filter((item) => (
+      isPostEventClosed(item.postEventStatus, item.itemStatus || item.status)
+    )).length;
+
+    if (completedCount === items.length) {
+      return {
+        key,
+        label,
+        status: 'ready',
+        detail: `All ${items.length} ${pluralize(items.length, 'item')} completed post-event checks.`,
+      };
+    }
+
+    if (completedCount > 0) {
+      return {
+        key,
+        label,
+        status: 'in_progress',
+        detail: `${completedCount} of ${items.length} ${pluralize(items.length, 'item')} completed post-event checks.`,
+      };
+    }
+
+    return {
+      key,
+      label,
+      status: 'not_started',
+      detail: `${items.length} ${pluralize(items.length, 'item')} are still waiting for post-event checking.`,
     };
   };
 
@@ -2188,6 +3446,81 @@ export default function ContractDetail() {
     };
   })();
 
+  const banquetReadiness: DepartmentReadiness = (() => {
+    const savedSupervisor = contract.assignedSupervisor?.name || '';
+    const savedPlanTotal = getBanquetPlanTotal(contract.banquetAssignment?.staffingPlan);
+    const savedAssignedCount = (contract.banquetAssignment?.assignments || []).length;
+
+    if (isOperationsLoading) {
+      return {
+        key: 'banquet',
+        label: 'Banquet',
+        status: savedPlanTotal > 0 || savedAssignedCount > 0 || savedSupervisor ? 'in_progress' : 'not_started',
+        detail: 'Loading banquet staffing coverage and same-day availability...',
+      };
+    }
+
+    if (!banquetSummary) {
+      if (savedPlanTotal > 0 || savedAssignedCount > 0 || savedSupervisor) {
+        return {
+          key: 'banquet',
+          label: 'Banquet',
+          status: 'in_progress',
+          detail: 'A saved banquet team exists, but automated staffing coverage checks are unavailable right now.',
+        };
+      }
+
+      return {
+        key: 'banquet',
+        label: 'Banquet',
+        status: 'not_started',
+        detail: 'No banquet supervisor or staffing plan has been saved yet.',
+      };
+    }
+
+    if (banquetSummary.blockers.length > 0) {
+      return {
+        key: 'banquet',
+        label: 'Banquet',
+        status: 'blocked',
+        detail: banquetSummary.blockers.join(' '),
+      };
+    }
+
+    if (
+      banquetSummary.selectedSupervisorId
+      && banquetSummary.coverage.planned > 0
+      && banquetSummary.coverage.assigned >= banquetSummary.coverage.planned
+    ) {
+      return {
+        key: 'banquet',
+        label: 'Banquet',
+        status: 'ready',
+        detail: `${banquetSummary.coverage.assigned} banquet staff assigned across ${banquetSummary.coverage.planned} planned positions.`,
+      };
+    }
+
+    if (
+      banquetSummary.selectedSupervisorId
+      || banquetSummary.coverage.planned > 0
+      || banquetSummary.selectedAssignments.length > 0
+    ) {
+      return {
+        key: 'banquet',
+        label: 'Banquet',
+        status: 'in_progress',
+        detail: `${banquetSummary.coverage.assigned} assigned of ${banquetSummary.coverage.planned} planned banquet position(s).`,
+      };
+    }
+
+    return {
+      key: 'banquet',
+      label: 'Banquet',
+      status: 'not_started',
+      detail: 'No banquet supervisor or staffing plan has been saved yet.',
+    };
+  })();
+
   const creativeReadiness = buildInventoryReadiness(
     'creative',
     'Creative',
@@ -2206,12 +3539,87 @@ export default function ContractDetail() {
     'No linen items are required for this contract.'
   );
 
+  const creativePostEventItems = creativeItems.length > 0
+    ? creativeItems.map((item) => ({ postEventStatus: item.postEventStatus, itemStatus: item.itemStatus }))
+    : (contract.creativeAssets || []).map((item) => ({ postEventStatus: item.postEventStatus, status: item.status }));
+  const linenPostEventItems = linenItems.length > 0
+    ? linenItems.map((item) => ({ postEventStatus: item.postEventStatus, itemStatus: item.itemStatus }))
+    : (contract.linenRequirements || []).map((item) => ({ postEventStatus: item.postEventStatus, status: item.status }));
+  const stockroomPostEventItems = stockroomItems.length > 0
+    ? stockroomItems.map((item) => ({ postEventStatus: item.postEventStatus, itemStatus: item.itemStatus }))
+    : (contract.equipmentChecklist || []).map((item) => ({ postEventStatus: item.postEventStatus, status: item.status }));
+
+  const postEventCreativeReadiness = buildPostEventInventoryReadiness(
+    'creative-post-event',
+    'Creative',
+    creativePostEventItems,
+    'No creative items need post-event checking for this contract.'
+  );
+  const postEventLinenReadiness = buildPostEventInventoryReadiness(
+    'linen-post-event',
+    'Linen',
+    linenPostEventItems,
+    'No linen items need post-event checking for this contract.'
+  );
+  const postEventStockroomReadiness = buildPostEventInventoryReadiness(
+    'stockroom-post-event',
+    'Stockroom',
+    stockroomPostEventItems,
+    'No stockroom items need post-event checking for this contract.'
+  );
+  const postEventLogisticsReadiness: DepartmentReadiness = (() => {
+    const currentStatus = operationsSummary?.logistics.assignmentStatus
+      || contract.logisticsAssignment?.assignmentStatus
+      || 'pending';
+
+    if (!logisticsBooked) {
+      return {
+        key: 'logistics-post-event',
+        label: 'Logistics',
+        status: 'ready',
+        detail: 'No logistics closeout is needed for this contract.',
+      };
+    }
+
+    if (currentStatus === 'completed') {
+      return {
+        key: 'logistics-post-event',
+        label: 'Logistics',
+        status: 'ready',
+        detail: 'Transport closeout is already completed.',
+      };
+    }
+
+    if (currentStatus === 'dispatched') {
+      return {
+        key: 'logistics-post-event',
+        label: 'Logistics',
+        status: 'in_progress',
+        detail: 'Dispatch was recorded. Mark logistics completed after the truck returns.',
+      };
+    }
+
+    return {
+      key: 'logistics-post-event',
+      label: 'Logistics',
+      status: 'blocked',
+      detail: `Transport closeout is still open. Current status is ${getLogisticsStatusLabel(currentStatus)}.`,
+    };
+  })();
+
   const preparationReadinessItems: DepartmentReadiness[] = [
     kitchenReadiness,
+    banquetReadiness,
     inventoryReadiness,
     logisticsReadiness,
     creativeReadiness,
     linenReadiness,
+  ];
+  const postEventProgressItems: DepartmentReadiness[] = [
+    postEventLogisticsReadiness,
+    postEventCreativeReadiness,
+    postEventLinenReadiness,
+    postEventStockroomReadiness,
   ];
 
   const readinessCounts = preparationReadinessItems.reduce<Record<ReadinessStatus, number>>((counts, item) => {
@@ -2250,6 +3658,40 @@ export default function ContractDetail() {
       ? `Still working on: ${activeDepartmentLabels.join(', ')}.`
       : 'Everything is marked ready.';
   const showPreparationReadiness = ['approved', 'completed'].includes(contract.status);
+  const showPostEventProgress = showPreparationReadiness && eventHasPassed;
+  const postEventCounts = postEventProgressItems.reduce<Record<ReadinessStatus, number>>((counts, item) => {
+    counts[item.status] += 1;
+    return counts;
+  }, {
+    ready: 0,
+    in_progress: 0,
+    blocked: 0,
+    not_started: 0,
+  });
+  const postEventOverallStatus: ReadinessStatus = postEventCounts.blocked > 0
+    ? 'blocked'
+    : postEventCounts.ready === postEventProgressItems.length
+      ? 'ready'
+      : postEventCounts.in_progress > 0 || postEventCounts.ready > 0
+        ? 'in_progress'
+        : 'not_started';
+  const postEventOverallDetail = postEventOverallStatus === 'ready'
+    ? 'All post-event department checks are complete.'
+    : postEventOverallStatus === 'blocked'
+      ? `${postEventCounts.blocked} department ${pluralize(postEventCounts.blocked, 'issue')} still need closeout attention.`
+      : postEventOverallStatus === 'in_progress'
+        ? `${postEventCounts.ready} ready, ${postEventCounts.in_progress} in progress, ${postEventCounts.not_started} not started.`
+        : 'Post-event closeout has not started yet.';
+  const postEventProgressValue = Math.round((postEventCounts.ready / postEventProgressItems.length) * 100);
+  const blockedPostEventLabels = postEventProgressItems.filter((item) => item.status === 'blocked').map((item) => item.label);
+  const activePostEventLabels = postEventProgressItems
+    .filter((item) => item.status === 'in_progress' || item.status === 'not_started')
+    .map((item) => item.label);
+  const postEventSummary = blockedPostEventLabels.length > 0
+    ? `Needs closeout: ${blockedPostEventLabels.join(', ')}.`
+    : activePostEventLabels.length > 0
+      ? `Still checking: ${activePostEventLabels.join(', ')}.`
+      : 'All post-event checks are complete.';
   const detailsReady = Boolean(
     contract.clientName
     && contract.clientContact
@@ -2276,6 +3718,7 @@ export default function ContractDetail() {
         ? `${menuItemCount} menu ${pluralize(menuItemCount, 'item')} included in the contract.`
         : 'Add the agreed menu items before sending for signature.',
     },
+    ...inventoryValidationItems,
     {
       key: 'payments',
       label: isPreSignatureStage ? 'Payment Term' : 'Payment Received',
@@ -2291,9 +3734,11 @@ export default function ContractDetail() {
               ? 'blocked'
               : 'not_started',
       detail: isPreSignatureStage
-        ? !paymentTermNeedsConfirmation && paymentTermConfirmed
-          ? `${paymentPlanLabel} confirmed for the contract.`
-          : 'Sales still needs to confirm the agreed payment term.'
+        ? paymentTermConfirmationLocked
+          ? `${paymentTermLockMessage} Payment confirmation should happen after inventory validation is complete.`
+          : !paymentTermNeedsConfirmation && paymentTermConfirmed
+            ? `${paymentPlanLabel} confirmed for the contract.`
+            : 'Sales still needs to confirm the agreed payment term.'
         : !contract.clientSigned
           ? 'Payment collection starts after the client signs the contract.'
           : fullyPaid
@@ -2339,7 +3784,7 @@ export default function ContractDetail() {
   ];
   const completedFinalizationCount = finalizationItems.filter((item) => item.status === 'ready').length;
   const finalizationProgressValue = Math.round((completedFinalizationCount / finalizationItems.length) * 100);
-  const preSignatureItems = finalizationItems.filter((item) => ['details', 'menu', 'payments'].includes(item.key));
+  const preSignatureItems = finalizationItems.filter((item) => !['signature', 'approval'].includes(item.key));
   const pendingPreSignatureLabels = preSignatureItems
     .filter((item) => item.status !== 'ready')
     .map((item) => item.label);
@@ -2364,8 +3809,8 @@ export default function ContractDetail() {
         : READINESS_STATUS_META.ready.badgeClassName;
   const finalizationSummary = contract.status === 'draft'
     ? pendingPreSignatureLabels.length > 0
-      ? `Confirm these tabs before sending for signature: ${pendingPreSignatureLabels.join(', ')}.`
-      : 'Every required tab is confirmed and the contract is ready to send for signature.'
+      ? `Confirm these sections before sending for signature: ${pendingPreSignatureLabels.join(', ')}.`
+      : 'Every required section is confirmed and the contract is ready to send for signature.'
     : contract.status === 'pending_client_signature'
       ? 'The contract is finalized and waiting for the client signature before internal approval can continue.'
     : contract.status === 'submitted'
@@ -2480,8 +3925,45 @@ export default function ContractDetail() {
   const logisticsStatusValue = resolveLogisticsAssignmentStatus(logisticsAssignment);
   const logisticsStatusWillChange = savedLogisticsStatus !== logisticsStatusValue;
   const canMarkLogisticsDispatched = !logisticsStatusWillChange && logisticsStatusValue === 'ready_for_dispatch';
-  const canMarkLogisticsCompleted = !logisticsStatusWillChange && logisticsStatusValue === 'dispatched';
-  const canSaveLogisticsBooking = Boolean(logisticsAssignment.truckId);
+  const logisticsCompletionWaitsForPostEvent = !logisticsStatusWillChange && logisticsStatusValue === 'dispatched' && !eventHasPassed;
+  const canMarkLogisticsCompleted = !logisticsStatusWillChange && logisticsStatusValue === 'dispatched' && eventHasPassed;
+  const logisticsAutoSaveMessage = !logisticsAssignment.truckId
+    ? {
+        label: 'No Truck Booked Yet',
+        className: 'border-amber-200 bg-amber-50 text-amber-900',
+        note: 'Choose a truck to create or update the logistics booking for this event.',
+      }
+    : logisticsAutoSaveState === 'saving'
+      ? {
+          label: 'Saving Changes...',
+          className: 'border-blue-200 bg-blue-50 text-blue-800',
+          note: 'Truck and driver changes are being saved automatically.',
+        }
+      : logisticsAutoSaveState === 'error'
+        ? {
+            label: 'Auto-Save Failed',
+            className: 'border-red-200 bg-red-50 text-red-800',
+            note: logisticsAutoSaveErrorMessage || 'The latest booking change did not save. Try changing the truck or driver again.',
+          }
+        : {
+            label: 'All Changes Saved',
+            className: 'border-green-200 bg-green-50 text-green-800',
+            note: `${logisticsTruckOptions.length} truck option(s) and ${logisticsDriverOptions.length} driver option(s) are currently available for this event date.`,
+          };
+
+  const logisticsNextAction = canMarkLogisticsDispatched
+    ? {
+        label: 'Mark Dispatched',
+        note: 'Use this once the booked truck and driver are already leaving for the event venue.',
+        onClick: () => handleAdvanceLogisticsAssignment('dispatched'),
+      }
+    : canMarkLogisticsCompleted
+      ? {
+          label: 'Mark Completed',
+          note: 'Use this after the truck returns and logistics closeout for the event is done.',
+          onClick: () => handleAdvanceLogisticsAssignment('completed'),
+        }
+      : null;
 
   return (
     <Layout>
@@ -2520,29 +4002,42 @@ export default function ContractDetail() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="outline" onClick={handleExportPdf}>
-              <FileDown className="mr-2 h-4 w-4" />
-              Export PDF
-            </Button>
-            <Button variant="outline" onClick={() => handlePrintSection(activeTab)}>
-              <Printer className="mr-2 h-4 w-4" />
-              Print {SECTION_PRINT_LABELS[activeTab] || 'Section'}
-            </Button>
-            
-            {contract.status === 'draft' && (isSales() || isAdmin()) && (
+            {!useRestrictedDepartmentContractView ? (
               <>
-                <Button variant="outline" onClick={() => navigate(`/contracts/edit/${id}`)}>
-                  <Edit className="mr-2 h-4 w-4" />
-                  Edit
+                <Button variant="outline" onClick={handleExportPdf}>
+                  <FileDown className="mr-2 h-4 w-4" />
+                  Export PDF
                 </Button>
+                <Button variant="outline" onClick={() => handlePrintSection(activeTab)}>
+                  <Printer className="mr-2 h-4 w-4" />
+                  Print {SECTION_PRINT_LABELS[activeTab] || 'Section'}
+                </Button>
+              </>
+            ) : null}
+            
+            {contract.status === 'draft' && (canEditDraftSalesContract || canEditDraftAnyInventorySection) && (
+              <>
                 <Button
-                  onClick={() => setSignatureDialogOpen(true)}
-                  disabled={!allPreSignatureSectionsReady}
-                  title={!allPreSignatureSectionsReady ? `Still waiting on: ${pendingPreSignatureLabels.join(', ')}` : undefined}
+                  variant="outline"
+                  onClick={() => navigate(
+                    canEditDraftSalesContract
+                      ? `/contracts/edit/${id}`
+                      : `/contracts/edit/${id}?tab=addons`
+                  )}
                 >
-                  <Send className="mr-2 h-4 w-4" />
-                  Send For Signature
+                  <Edit className="mr-2 h-4 w-4" />
+                  {canEditDraftSalesContract ? 'Edit' : 'Update Inventory'}
                 </Button>
+                {(isSales() || isAdmin()) && (
+                  <Button
+                    onClick={() => setSignatureDialogOpen(true)}
+                    disabled={!allPreSignatureSectionsReady}
+                    title={!allPreSignatureSectionsReady ? `Still waiting on: ${pendingPreSignatureLabels.join(', ')}` : undefined}
+                  >
+                    <Send className="mr-2 h-4 w-4" />
+                    Send For Signature
+                  </Button>
+                )}
               </>
             )}
 
@@ -2581,112 +4076,161 @@ export default function ContractDetail() {
                 {isClosingContract ? 'Closing...' : 'Close Contract'}
               </Button>
             )}
+
+            {isAdmin() && contract && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive">
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete Contract
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete this contract?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This permanently removes {contract.contractNumber || 'this contract'} and its saved workflow data. Only delete it if you are sure it should no longer appear in your records.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Keep Contract</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteContract}
+                      disabled={isDeletingContract}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {isDeletingContract ? 'Deleting...' : 'Delete Contract'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
           </div>
         </div>
 
         {/* Readiness */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="space-y-1">
-                <CardTitle>{showPreparationReadiness ? 'Preparation Readiness' : 'Contract Progress'}</CardTitle>
-                <p className="text-sm text-muted-foreground">
+        {!useRestrictedDepartmentContractView ? (
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1">
+                  <CardTitle>
+                    {showPreparationReadiness
+                      ? showPostEventProgress ? 'Post-Event Progress' : 'Preparation Readiness'
+                      : 'Contract Progress'}
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {showPreparationReadiness
+                      ? showPostEventProgress
+                        ? 'Tracks return checks, logistics closeout, and incident follow-up after the event date.'
+                        : 'Based on the saved contract plus automated same-day inventory and logistics checks.'
+                      : 'Finalize the contract, collect the client signature, and release it to accounting before preparation begins.'}
+                  </p>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={showPreparationReadiness
+                    ? READINESS_STATUS_META[showPostEventProgress ? postEventOverallStatus : overallReadinessStatus].badgeClassName
+                    : finalizationStatusClassName}
+                >
                   {showPreparationReadiness
-                    ? 'Based on the saved contract plus automated same-day inventory and logistics checks.'
-                    : 'Finalize the contract, collect the client signature, and release it to accounting before preparation begins.'}
-                </p>
+                    ? READINESS_STATUS_META[showPostEventProgress ? postEventOverallStatus : overallReadinessStatus].label
+                    : finalizationStatusLabel}
+                </Badge>
               </div>
-              <Badge
-                variant="outline"
-                className={showPreparationReadiness ? READINESS_STATUS_META[overallReadinessStatus].badgeClassName : finalizationStatusClassName}
-              >
-                {showPreparationReadiness ? READINESS_STATUS_META[overallReadinessStatus].label : finalizationStatusLabel}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {showPreparationReadiness ? (
-              <>
-                <div>
-                  <div className="mb-2 flex items-center justify-between text-sm">
-                    <span className="font-medium">{readinessCounts.ready} of {preparationReadinessItems.length} departments ready</span>
-                    <span className="text-muted-foreground">{readinessProgressValue}%</span>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {showPreparationReadiness ? (
+                <>
+                  <div>
+                    <div className="mb-2 flex items-center justify-between text-sm">
+                      <span className="font-medium">
+                        {showPostEventProgress
+                          ? `${postEventCounts.ready} of ${postEventProgressItems.length} closeout areas done`
+                          : `${readinessCounts.ready} of ${preparationReadinessItems.length} departments ready`}
+                      </span>
+                      <span className="text-muted-foreground">{showPostEventProgress ? postEventProgressValue : readinessProgressValue}%</span>
+                    </div>
+                    <Progress value={showPostEventProgress ? postEventProgressValue : readinessProgressValue} className="h-3" />
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      {showPostEventProgress
+                        ? `${postEventOverallDetail} ${postEventSummary}`
+                        : `${overallReadinessDetail} ${readinessSummary}`}
+                    </p>
                   </div>
-                  <Progress value={readinessProgressValue} className="h-3" />
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    {overallReadinessDetail} {readinessSummary}
-                  </p>
-                </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {preparationReadinessItems.map((item) => {
-                    const statusMeta = READINESS_STATUS_META[item.status];
+                  <div className="flex flex-wrap gap-2">
+                    {(showPostEventProgress ? postEventProgressItems : preparationReadinessItems).map((item) => {
+                      const statusMeta = READINESS_STATUS_META[item.status];
 
-                    return (
-                      <Badge
-                        key={item.key}
-                        variant="outline"
-                        className={statusMeta.badgeClassName}
-                      >
-                        {item.label}: {statusMeta.label}
-                      </Badge>
-                    );
-                  })}
-                </div>
-
-                <div className="text-xs text-muted-foreground">
-                  Inventory and logistics already include same-day stock reservations plus driver and truck conflict checks.
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <div className="mb-2 flex items-center justify-between text-sm">
-                    <span className="font-medium">{completedFinalizationCount} of {finalizationItems.length} final steps complete</span>
-                    <span className="text-muted-foreground">{finalizationProgressValue}%</span>
+                      return (
+                        <Badge
+                          key={item.key}
+                          variant="outline"
+                          className={statusMeta.badgeClassName}
+                        >
+                          {item.label}: {statusMeta.label}
+                        </Badge>
+                      );
+                    })}
                   </div>
-                  <Progress value={finalizationProgressValue} className="h-3" />
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    {finalizationSummary}
-                  </p>
-                </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {finalizationItems.map((item) => {
-                    const statusMeta = READINESS_STATUS_META[item.status];
+                  <div className="text-xs text-muted-foreground">
+                    {showPostEventProgress
+                      ? 'Incident-reported items count as checked here, while the issue itself stays visible in the Incidents page for follow-up.'
+                      : 'Inventory and logistics already include same-day stock reservations plus driver and truck conflict checks.'}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <div className="mb-2 flex items-center justify-between text-sm">
+                      <span className="font-medium">{completedFinalizationCount} of {finalizationItems.length} final steps complete</span>
+                      <span className="text-muted-foreground">{finalizationProgressValue}%</span>
+                    </div>
+                    <Progress value={finalizationProgressValue} className="h-3" />
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      {finalizationSummary}
+                    </p>
+                  </div>
 
-                    return (
-                      <Badge
-                        key={item.key}
-                        variant="outline"
-                        className={statusMeta.badgeClassName}
-                      >
-                        {item.label}: {statusMeta.label}
-                      </Badge>
-                    );
-                  })}
-                </div>
+                  <div className="flex flex-wrap gap-2">
+                    {finalizationItems.map((item) => {
+                      const statusMeta = READINESS_STATUS_META[item.status];
 
-                <div className={`rounded-lg border px-4 py-3 text-sm ${fullPaymentPlan ? (fullyPaid ? 'border-green-200 bg-green-50 text-green-900' : 'border-slate-200 bg-slate-50 text-slate-700') : finalBalancePastDue ? 'border-red-200 bg-red-50 text-red-900' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
-                  {fullPaymentPlan ? (
-                    <>
-                      Remaining balance: <strong>{formatCurrency(remainingBalance)}</strong>.{' '}
-                      {fullyPaid
-                        ? 'This contract is already fully paid.'
-                        : `Full payment must be settled by ${finalBalanceDueDate.toLocaleDateString()}.`}
-                    </>
-                  ) : (
-                    <>
-                      Remaining {finalPaymentPercent}% balance: <strong>{formatCurrency(remainingBalance)}</strong>{' '}
-                      due on <strong>{finalBalanceDueDate.toLocaleDateString()}</strong>.
-                      {fullyPaid ? ' This contract is already fully paid.' : finalBalancePastDue ? ' The final balance due date has already passed and the event is on payment hold.' : ''}
-                    </>
-                  )}
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+                      return (
+                        <Badge
+                          key={item.key}
+                          variant="outline"
+                          className={statusMeta.badgeClassName}
+                        >
+                          {item.label}: {statusMeta.label}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+
+                  <div className={`rounded-lg border px-4 py-3 text-sm ${fullPaymentPlan ? (fullyPaid ? 'border-green-200 bg-green-50 text-green-900' : 'border-slate-200 bg-slate-50 text-slate-700') : finalBalancePastDue ? 'border-red-200 bg-red-50 text-red-900' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                    {fullPaymentPlan ? (
+                      <>
+                        Remaining balance: <strong>{formatCurrency(remainingBalance)}</strong>.{' '}
+                        {fullyPaid
+                          ? 'This contract is already fully paid.'
+                          : `Full payment must be settled by ${finalBalanceDueDate.toLocaleDateString()}.`}
+                      </>
+                    ) : (
+                      <>
+                        Remaining {finalPaymentPercent}% balance: <strong>{formatCurrency(remainingBalance)}</strong>{' '}
+                        due on <strong>{finalBalanceDueDate.toLocaleDateString()}</strong>.
+                        {fullyPaid ? ' This contract is already fully paid.' : finalBalancePastDue ? ' The final balance due date has already passed and the event is on payment hold.' : ''}
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        ) : null}
 
         {/* Tabs */}
         <Tabs
@@ -2714,40 +4258,69 @@ export default function ContractDetail() {
             <div data-print-section="details" className="space-y-4">
               <Card>
                 <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <CardTitle>Contract Details Review</CardTitle>
+                  <CardTitle>{useBanquetFocusedContractView ? 'Event Details' : 'Contract Details Review'}</CardTitle>
                   <div className="flex flex-wrap items-center gap-2">
                     {isPreSignatureStage ? renderReferenceBadge() : null}
-                    {renderTabEditButton('client')}
+                    {!useBanquetFocusedContractView ? renderTabEditButton('client') : null}
                   </div>
                 </CardHeader>
               </Card>
-              <div className="grid gap-4 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    Client Information
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Name</span>
-                    <span className="font-medium">{contract.clientName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Type</span>
-                    <span className="font-medium capitalize">{contract.clientType}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Contact</span>
-                    <span className="font-medium">{contract.clientContact || '-'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Email</span>
-                    <span className="font-medium">{contract.clientEmail || '-'}</span>
-                  </div>
-                </CardContent>
-              </Card>
+              <div className={`grid gap-4 ${useBanquetFocusedContractView ? 'md:grid-cols-2 xl:grid-cols-3' : 'md:grid-cols-2'}`}>
+              {!useBanquetFocusedContractView ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Users className="h-5 w-5" />
+                      Client Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Name</span>
+                      <span className="font-medium">{contract.clientName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Type</span>
+                      <span className="font-medium capitalize">{contract.clientType}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Contact</span>
+                      <span className="font-medium">{contract.clientContact || '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Email</span>
+                      <span className="font-medium">{contract.clientEmail || '-'}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Users className="h-5 w-5" />
+                      Event Snapshot
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Client</span>
+                      <span className="font-medium text-right">{contract.clientName}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Event Type</span>
+                      <span className="font-medium capitalize text-right">{contract.clientType}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Package</span>
+                      <span className="font-medium capitalize text-right">{contract.packageSelected}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Guest Packs</span>
+                      <span className="font-medium text-right">{contract.totalPacks}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               <Card>
                 <CardHeader>
@@ -2780,7 +4353,7 @@ export default function ContractDetail() {
                 </CardContent>
               </Card>
 
-              <Card className="md:col-span-2">
+              <Card className={useBanquetFocusedContractView ? 'xl:col-span-1' : 'md:col-span-2'}>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <MapPin className="h-5 w-5" />
@@ -2860,31 +4433,146 @@ export default function ContractDetail() {
 
           <TabsContent value="inventory" className="space-y-4">
             <div data-print-section="inventory" className="space-y-4">
+              {useInventoryFocusedContractView ? (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle>Inventory Review Context</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      This view is limited to inventory validation so your department can review, adjust, and confirm assigned items without exposing the rest of the contract.
+                    </p>
+                  </CardHeader>
+                  <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-lg border bg-slate-50 px-4 py-3">
+                      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">Event Date</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{new Date(contract.eventDate).toLocaleDateString()}</p>
+                    </div>
+                    <div className="rounded-lg border bg-slate-50 px-4 py-3">
+                      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">Venue</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{contract.venue?.name || 'Not set'}</p>
+                    </div>
+                    <div className="rounded-lg border bg-slate-50 px-4 py-3">
+                      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">Contract Stage</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{formatStatusLabel(contract.status)}</p>
+                    </div>
+                    <div className="rounded-lg border bg-slate-50 px-4 py-3">
+                      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">Guest Packs</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{contract.totalPacks || 0}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : null}
               {isOperationsLoading ? (
               <Card>
                 <CardContent className="py-10 text-center text-muted-foreground">
                   Loading automated inventory checks...
                 </CardContent>
               </Card>
-            ) : operationsSummary ? (
+            ) : canRenderSavedInventorySections ? (
               <>
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle>Inventory Readiness Overview</CardTitle>
+                    <CardTitle>{eventHasPassed ? 'Inventory Post-Event Overview' : 'Inventory Readiness Overview'}</CardTitle>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge className={isContractClosed ? 'bg-purple-100 text-purple-800' : !canUpdatePreparation ? 'bg-slate-100 text-slate-700' : !hasVisibleInventoryItems ? 'bg-slate-100 text-slate-700' : visibleInventoryItemsReady ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
-                        {isContractClosed ? 'Closed contract' : !canUpdatePreparation ? 'Locked until approval' : !hasVisibleInventoryItems ? 'No assigned items' : visibleInventoryItemsReady ? 'All items ready' : 'Action needed'}
+                      <Badge className={
+                        isContractClosed
+                          ? 'bg-purple-100 text-purple-800'
+                          : !hasVisibleInventoryItems
+                            ? 'bg-slate-100 text-slate-700'
+                            : eventHasPassed
+                              ? visiblePendingPostEventChecks === 0
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-yellow-100 text-yellow-800'
+                              : !canUpdatePreparation
+                                ? 'bg-slate-100 text-slate-700'
+                                : visibleInventoryItemsReady
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-yellow-100 text-yellow-800'
+                      }>
+                        {isContractClosed
+                          ? 'Closed contract'
+                          : !hasVisibleInventoryItems
+                            ? 'No assigned items'
+                            : eventHasPassed
+                              ? visiblePendingPostEventChecks === 0 ? 'Post-event complete' : 'Post-event action needed'
+                              : !canUpdatePreparation
+                                ? 'Locked until approval'
+                                : visibleInventoryItemsReady
+                                  ? 'All items ready'
+                                  : 'Action needed'}
                       </Badge>
-                      {renderTabEditButton('addons')}
+                      {renderTabEditButton('addons', 'Edit Inventory Items', canEditDraftAnyInventorySection)}
                     </div>
                   </CardHeader>
+                  <CardContent className="space-y-3">
+                    {!operationsSummary ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        Automated inventory checks are unavailable right now, but the saved contract inventory is still shown below so departments can continue draft validation and checklist review.
+                      </div>
+                    ) : null}
+                    <p className="text-sm text-muted-foreground">
+                      {eventHasPassed
+                        ? 'Post-event checking is active now. Review returned items, confirm the check, and report any missing, damaged, or wrong-quantity issue to incidents.'
+                        : 'Pre-event preparation is active now. Use this checklist to get every assigned item stocked and ready before the event date.'}
+                    </p>
+                  </CardContent>
                 </Card>
+
+                {!eventHasPassed && visibleInventoryShortages.length > 0 ? (
+                  <Card className="border-red-200 bg-red-50/70">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-red-900">
+                        <AlertTriangle className="h-5 w-5" />
+                        Purchasing Or Rental Needed
+                      </CardTitle>
+                      <p className="text-sm text-red-900/80">
+                        This contract can stay saved as draft, but approval and preparation should wait until purchasing or rental requests cover these shortages.
+                      </p>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {visibleInventoryShortages.map((item, index) => (
+                        <div key={`${item.itemName}-${index}`} className="rounded-lg border border-red-200 bg-white/80 p-3">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <p className="font-medium text-red-950">{item.itemName}</p>
+                              <p className="text-sm text-red-900/80">
+                                Need {item.requestedQuantity} | Available for this date {item.availableQuantity ?? 0}
+                                {item.reservedOnDate > 0 ? ` | Reserved on same day ${item.reservedOnDate}` : ''}
+                              </p>
+                            </div>
+                            <Badge className="bg-red-100 text-red-800">
+                              Short by {item.shortageQuantity}
+                            </Badge>
+                          </div>
+                          {item.requestAction ? (
+                            <div className="mt-2 space-y-3">
+                              <p className="text-sm text-red-900">{item.requestAction}</p>
+                              {item.sectionKey && item.itemId && (
+                                ((item.sectionKey === 'creativeAssets' && canCreateCreativeProcurementRequest)
+                                  || (item.sectionKey === 'linenRequirements' && canCreateLinenProcurementRequest)
+                                  || (item.sectionKey === 'equipmentChecklist' && canCreateStockroomProcurementRequest))
+                              ) ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-red-300 bg-white text-red-900 hover:bg-red-100"
+                                  onClick={() => openProcurementRequestDialog(item.sectionKey!, item)}
+                                >
+                                  Request Purchasing Or Rental
+                                </Button>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                ) : null}
 
                 {canViewCreativeInventorySection && renderInventorySection(
                   'Creative And Decor',
                   <Palette className="h-5 w-5" />,
                   'creativeAssets',
-                  operationsSummary?.inventory.creativeAssets || [],
+                  creativeItems,
                   canManageCreative
                 )}
 
@@ -2892,7 +4580,7 @@ export default function ContractDetail() {
                   'Linen Items',
                   <Shirt className="h-5 w-5" />,
                   'linenRequirements',
-                  operationsSummary?.inventory.linenRequirements || [],
+                  linenItems,
                   canManageLinen
                 )}
 
@@ -2900,8 +4588,8 @@ export default function ContractDetail() {
                   'Stockroom And Equipment',
                   <Box className="h-5 w-5" />,
                   'equipmentChecklist',
-                  operationsSummary?.inventory.equipmentChecklist || [],
-                  canManageLogistics
+                  stockroomItems,
+                  canManageStockroom
                 )}
 
                 {!canViewCreativeInventorySection && !canViewLinenInventorySection && !canViewStockroomInventorySection && (
@@ -2914,8 +4602,15 @@ export default function ContractDetail() {
               </>
             ) : (
               <Card>
-                <CardContent className="py-10 text-center text-muted-foreground">
-                  Automated inventory checks are unavailable for this contract right now, but the saved contract details are still available.
+                <CardContent className="space-y-2 py-10 text-center">
+                  <p className="text-muted-foreground">
+                    Automated inventory checks are unavailable for this contract right now, but the saved contract details are still available.
+                  </p>
+                  {operationsErrorMessage ? (
+                    <p className="text-sm text-red-700">
+                      Error: {operationsErrorMessage}
+                    </p>
+                  ) : null}
                 </CardContent>
               </Card>
               )}
@@ -3014,11 +4709,9 @@ export default function ContractDetail() {
                           <Badge variant="outline">{paymentPlanLabel}</Badge>
                           <Badge
                             variant="outline"
-                            className={!paymentTermNeedsConfirmation && paymentTermConfirmed
-                              ? READINESS_STATUS_META.ready.badgeClassName
-                              : READINESS_STATUS_META.not_started.badgeClassName}
+                            className={paymentTermStatusClassName}
                           >
-                            {!paymentTermNeedsConfirmation && paymentTermConfirmed ? 'Confirmed' : 'Pending Confirmation'}
+                            {paymentTermStatusLabel}
                           </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">{paymentPlanSummary}</p>
@@ -3027,17 +4720,27 @@ export default function ContractDetail() {
                             No payment receipt is needed yet. This only confirms the agreed payment term before the client signs.
                           </p>
                         )}
+                        {paymentTermConfirmationLocked ? (
+                          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                            {paymentTermLockMessage}
+                          </div>
+                        ) : null}
                       </div>
                       <div className="flex flex-wrap gap-2" data-print-hide="true">
                         {isPreSignatureStage && canConfigurePaymentPlan && (
                           <Button
                             type="button"
                             size="sm"
-                            variant={paymentTermNeedsConfirmation ? 'default' : 'outline'}
+                            variant={!paymentTermConfirmationLocked && paymentTermNeedsConfirmation ? 'default' : 'outline'}
                             onClick={() => handleUpdatePaymentPlan(pendingPaymentPlan)}
-                            disabled={!paymentTermNeedsConfirmation}
+                            disabled={!paymentTermNeedsConfirmation || paymentTermConfirmationLocked}
+                            title={paymentTermConfirmationLocked ? paymentTermLockMessage : undefined}
                           >
-                            {paymentTermNeedsConfirmation ? 'Confirm Payment Term' : 'Payment Term Confirmed'}
+                            {paymentTermConfirmationLocked
+                              ? 'Confirm Inventory First'
+                              : paymentTermNeedsConfirmation
+                                ? 'Confirm Payment Term'
+                                : 'Payment Term Confirmed'}
                           </Button>
                         )}
                       </div>
@@ -3048,7 +4751,7 @@ export default function ContractDetail() {
                           value={pendingPaymentPlan}
                           onValueChange={(value) => setPendingPaymentPlan(value as 'split' | 'full')}
                           className="space-y-3"
-                          disabled={!canConfigurePaymentPlan}
+                          disabled={!canConfigurePaymentPlan || paymentTermConfirmationLocked}
                         >
                           <label className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer">
                             <RadioGroupItem value="split" id="payment-plan-split" className="mt-1" />
@@ -3193,13 +4896,345 @@ export default function ContractDetail() {
             </div>
           </TabsContent>
 
+          <TabsContent value="banquet" className="space-y-4">
+            <div data-print-section="banquet" className="space-y-4">
+              <Card>
+                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Banquet Staffing Form
+                  </CardTitle>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isPreSignatureStage ? renderReferenceBadge() : null}
+                    <Button variant="outline" size="sm" data-print-hide="true" onClick={handlePrintBanquetStaffPlan}>
+                      <Printer className="mr-2 h-4 w-4" />
+                      Print Staff Check-In Sheet
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  {isOperationsLoading ? (
+                    <p className="text-muted-foreground">Loading banquet staffing recommendations...</p>
+                  ) : banquetSummary ? (
+                    <>
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="rounded-lg border p-4">
+                          <p className="text-sm text-muted-foreground">Event Guests</p>
+                          <p className="mt-1 text-2xl font-semibold">{banquetAssignmentDraft.serviceGuestCount || banquetSummary.planningGuestCount || 0}</p>
+                          <p className="text-xs text-muted-foreground">Guest base used for staffing</p>
+                        </div>
+                        <div className="rounded-lg border p-4">
+                          <p className="text-sm text-muted-foreground">Assigned Supervisor</p>
+                          <p className="mt-1 font-semibold">
+                            {banquetSummary.supervisorOptions.find((option) => option._id === banquetAssignmentDraft.supervisorId)?.name
+                              || contract.assignedSupervisor?.name
+                              || 'Not assigned'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Main owner of the service team</p>
+                        </div>
+                        <div className="rounded-lg border p-4">
+                          <p className="text-sm text-muted-foreground">Crew Assigned</p>
+                          <p className="mt-1 text-2xl font-semibold">{banquetAssignedTotal}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {banquetPlannedTotal > 0 ? `${Math.max(0, banquetPlannedTotal - banquetAssignedTotal)} slot(s) still open` : 'No staffing target saved yet'}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border p-4">
+                          <p className="text-sm text-muted-foreground">Coverage</p>
+                          <p className="mt-1 text-2xl font-semibold">{banquetDraftCoveragePercent}%</p>
+                          <Progress value={banquetDraftCoveragePercent} className="mt-3 h-2" />
+                        </div>
+                      </div>
+
+                      {!['approved', 'completed'].includes(contract.status) ? (
+                        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                          Banquet staffing becomes editable after accounting approval. You can still review the suggested headcount here ahead of time.
+                        </div>
+                      ) : null}
+
+                      {banquetSummary.blockers.length > 0 ? (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                          {banquetSummary.blockers.join(' ')}
+                        </div>
+                      ) : null}
+
+                      <div className="rounded-xl border bg-slate-50/70 px-4 py-3 text-sm text-muted-foreground">
+                        Fill out the banquet plan top to bottom: confirm the service guest count, set the supervisor and staffing targets, assign names, then save and print the check-in sheet.
+                      </div>
+
+                      <div className="space-y-4">
+                        <Card className="border-slate-200 bg-slate-50/50">
+                          <CardHeader className="pb-3">
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                              <div>
+                                <CardTitle className="text-base">Recommended Staffing</CardTitle>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                  Based on {banquetSummary.planningGuestCount.toLocaleString()} service guests and the banquet staff still free on {new Date(contract.eventDate).toLocaleDateString()}.
+                                </p>
+                              </div>
+                              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-800">
+                                {banquetSuggestedAssignments.length} recommended name(s)
+                              </Badge>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              {BANQUET_ASSIGNMENT_ROLE_KEYS.map((roleKey) => (
+                                <div key={roleKey} className="rounded-xl border bg-background p-4">
+                                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                                    {BANQUET_ROLE_LABELS[roleKey]}
+                                  </p>
+                                  <p className="mt-2 text-2xl font-semibold">{banquetSummary.suggestedPlan[roleKey] || 0}</p>
+                                  <p className="mt-1 text-xs text-muted-foreground">{BANQUET_ROLE_NOTES[roleKey]}</p>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="rounded-xl border bg-background p-4">
+                              <p className="text-sm font-medium">Quick use</p>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                Load the recommended plan first, then adjust guest count, role targets, or names if the event needs something different.
+                              </p>
+                            </div>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                              <p className="text-sm text-muted-foreground">
+                                This is the fastest path for near-term events: load the plan, review it, then save and print the check-in sheet.
+                              </p>
+                              <Button type="button" variant="outline" onClick={handleUseSuggestedBanquetTeam} disabled={!canManageBanquet}>
+                                Load Recommended Plan
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        <Card>
+                          <CardHeader className="pb-3">
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                              <div>
+                                <CardTitle className="text-base">Planning Form</CardTitle>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                  Complete the guest base, banquet supervisor, and planned headcount before assigning individual names below.
+                                </p>
+                              </div>
+                              {banquetSummary.updatedAt ? (
+                                <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
+                                  Updated {new Date(banquetSummary.updatedAt).toLocaleDateString()}
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="grid gap-4 md:grid-cols-2">
+                              <div className="space-y-2">
+                                <Label>Service Guest Count</Label>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={banquetAssignmentDraft.serviceGuestCount || ''}
+                                  onChange={(event) => setBanquetAssignmentDraft((current) => ({
+                                    ...current,
+                                    serviceGuestCount: Math.max(0, Math.floor(Number(event.target.value) || 0))
+                                  }))}
+                                  disabled={!canManageBanquet}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Banquet Supervisor</Label>
+                                <Select
+                                  value={banquetAssignmentDraft.supervisorId || '__none__'}
+                                  onValueChange={(value) => setBanquetAssignmentDraft((current) => ({
+                                    ...current,
+                                    supervisorId: value === '__none__' ? '' : value
+                                  }))}
+                                  disabled={!canManageBanquet}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Assign supervisor" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">No supervisor assigned</SelectItem>
+                                    {banquetSummary.supervisorOptions.map((option) => (
+                                      <SelectItem key={option._id} value={option._id}>
+                                        {option.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                              {BANQUET_ASSIGNMENT_ROLE_KEYS.map((roleKey) => (
+                                <div key={roleKey} className="rounded-xl border bg-slate-50/60 p-3">
+                                  <Label className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                                    {BANQUET_ROLE_LABELS[roleKey]}
+                                  </Label>
+                                  <Input
+                                    className="mt-2"
+                                    type="number"
+                                    min={0}
+                                    value={banquetAssignmentDraft.staffingPlan[roleKey] || ''}
+                                    onChange={(event) => handleBanquetPlanCountChange(roleKey, event.target.value)}
+                                    disabled={!canManageBanquet}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="rounded-xl border bg-slate-50/70 p-4">
+                              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                <div>
+                                  <p className="text-sm font-medium">Current staffing coverage</p>
+                                  <p className="text-sm text-muted-foreground">
+                                    {banquetAssignedTotal} assigned of {banquetPlannedTotal} planned team positions.
+                                  </p>
+                                </div>
+                                <Badge variant="outline" className="border-slate-200 bg-background text-slate-700">
+                                  {banquetDraftCoveragePercent}% ready
+                                </Badge>
+                              </div>
+                              <Progress value={banquetDraftCoveragePercent} className="mt-4 h-2" />
+                            </div>
+
+                            {canManageBanquet ? (
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-sm text-muted-foreground">
+                                  Saving here also refreshes banquet visibility for the assigned supervisor and updates the staffing baseline used across operations.
+                                </p>
+                                <Button type="button" onClick={handleSaveBanquetAssignment} disabled={isSavingBanquetAssignment}>
+                                  {isSavingBanquetAssignment ? 'Saving Banquet Form...' : 'Save Banquet Form'}
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="rounded-xl border bg-slate-50/70 p-4 text-sm text-muted-foreground">
+                                Read-only for this account.
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                      <div className="divide-y overflow-hidden rounded-2xl border">
+                        {BANQUET_ASSIGNMENT_ROLE_KEYS.map((roleKey) => {
+                          const assignedStaff = getBanquetDraftStaffForRole(roleKey);
+                          const availableStaff = getBanquetAvailableStaffForRole(roleKey);
+                          const missingCount = Math.max(0, (banquetAssignmentDraft.staffingPlan[roleKey] || 0) - assignedStaff.length);
+                          const suggestedIds = new Set(
+                            banquetSuggestedAssignments
+                              .filter((assignment) => assignment.assignmentRole === roleKey)
+                              .map((assignment) => assignment.staffId)
+                          );
+
+                          return (
+                            <div key={roleKey} className="space-y-4 px-5 py-5">
+                              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                <div>
+                                  <h4 className="text-base font-semibold">{BANQUET_ROLE_LABELS[roleKey]}</h4>
+                                  <p className="mt-1 text-sm text-muted-foreground">
+                                    {BANQUET_ROLE_NOTES[roleKey]} {availableStaff.length > 0 ? `${availableStaff.length} available for this date.` : 'No one is currently free for this date.'}
+                                  </p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
+                                    {assignedStaff.length} assigned / {banquetAssignmentDraft.staffingPlan[roleKey] || 0} planned
+                                  </Badge>
+                                  {missingCount > 0 ? (
+                                    <Badge className="bg-amber-100 text-amber-900">
+                                      Need {missingCount} more
+                                    </Badge>
+                                  ) : null}
+                                </div>
+                              </div>
+
+                              {canManageBanquet ? (
+                                <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                                  <Select
+                                    value={banquetPickers[roleKey] || '__none__'}
+                                    onValueChange={(value) => setBanquetPickers((current) => ({
+                                      ...current,
+                                      [roleKey]: value === '__none__' ? '' : value
+                                    }))}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder={`Select ${BANQUET_ROLE_LABELS[roleKey]}`} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="__none__">Choose staff member</SelectItem>
+                                      {availableStaff.map((staff) => (
+                                        <SelectItem key={staff._id} value={staff._id}>
+                                          {staff.fullName}
+                                          {suggestedIds.has(staff._id) ? ' - Suggested' : ''}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Button type="button" variant="outline" onClick={() => handleAddBanquetStaff(roleKey)}>
+                                    Add Staff
+                                  </Button>
+                                </div>
+                              ) : null}
+
+                              {assignedStaff.length > 0 ? (
+                                <div className="overflow-hidden rounded-xl border">
+                                  {assignedStaff.map((staff, index) => (
+                                    <div
+                                      key={`${roleKey}-${staff._id}`}
+                                      className={`flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${index !== assignedStaff.length - 1 ? 'border-b' : ''}`}
+                                    >
+                                      <div>
+                                        <p className="font-medium">{staff.fullName}</p>
+                                        <p className="text-sm text-muted-foreground">
+                                          {[staff.employeeId, formatBanquetStaffRole(staff.role)].filter(Boolean).join(' | ')}
+                                        </p>
+                                      </div>
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        {suggestedIds.has(staff._id) ? (
+                                          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-800">
+                                            Suggested
+                                          </Badge>
+                                        ) : null}
+                                        <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
+                                          {formatBanquetStaffRole(staff.status)}
+                                        </Badge>
+                                        {canManageBanquet ? (
+                                          <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveBanquetStaff(roleKey, staff._id)}>
+                                            Remove
+                                          </Button>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+                                  No {BANQUET_ROLE_LABELS[roleKey].toLowerCase()} assigned yet.
+                                </div>
+                              )}
+
+                              {availableStaff.length === 0 ? (
+                                <p className="text-sm text-amber-700">
+                                  No available {BANQUET_ROLE_LABELS[roleKey].toLowerCase()} staff for this event date.
+                                </p>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-muted-foreground">Banquet staffing recommendations are unavailable right now.</p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
           <TabsContent value="logistics" className="space-y-4">
             <div data-print-section="logistics" className="space-y-4">
               <Card>
               <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <Truck className="h-5 w-5" />
-                  Logistics Booking
+                  Logistics Booking Form
                 </CardTitle>
                 <div className="flex flex-wrap items-center gap-2">
                   {isPreSignatureStage ? renderReferenceBadge() : null}
@@ -3239,21 +5274,21 @@ export default function ContractDetail() {
                       </div>
                     )}
 
-                    <div className="grid gap-4 xl:grid-cols-[0.95fr,1.35fr]">
-                      <Card className="h-full border-slate-200 bg-slate-50/50">
+                    <div className="space-y-4">
+                      <Card className="border-slate-200 bg-slate-50/50">
                         <CardHeader className="pb-3">
-                          <CardTitle className="text-base">Current Assignment</CardTitle>
+                          <CardTitle className="text-base">Booking Overview</CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-3">
+                        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                           <div className="rounded-xl border bg-background p-4">
-                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Truck</p>
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Booked Truck</p>
                             <p className="mt-1 font-semibold">{savedLogisticsTruck?.plateNumber || selectedLogisticsTruck?.plateNumber || 'Not booked yet'}</p>
                             <p className="text-sm text-muted-foreground">
                               {savedLogisticsTruck?.truckType?.replace(/_/g, ' ') || selectedLogisticsTruck?.truckType?.replace(/_/g, ' ') || 'No truck assigned'}
                             </p>
                           </div>
                           <div className="rounded-xl border bg-background p-4">
-                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Driver</p>
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Booked Driver</p>
                             <p className="mt-1 font-semibold">{savedLogisticsDriver?.fullName || selectedLogisticsDriver?.fullName || 'Not assigned yet'}</p>
                             <p className="text-sm text-muted-foreground">
                               {savedLogisticsDriver?.driverId || selectedLogisticsDriver?.driverId || 'No driver assigned'}
@@ -3272,30 +5307,45 @@ export default function ContractDetail() {
                               ) : null}
                             </div>
                           </div>
+                          <div className="rounded-xl border bg-background p-4">
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Auto-Save</p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <Badge variant="outline" className={logisticsAutoSaveMessage.className}>
+                                {logisticsAutoSaveMessage.label}
+                              </Badge>
+                            </div>
+                            <p className="mt-2 text-sm text-muted-foreground">{logisticsAutoSaveMessage.note}</p>
+                          </div>
                         </CardContent>
                       </Card>
 
-                      <Card className="h-full border-slate-200 shadow-sm" data-print-hide="true">
+                      <Card className="border-slate-200 shadow-sm" data-print-hide="true">
                         <CardHeader className="pb-3">
-                          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                            <CardTitle className="text-base">Manage Booking</CardTitle>
-                            <div className="flex flex-wrap gap-2">
-                              {operationsSummary.logistics.recommendedTruck && (
-                                <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-800">
-                                  Suggested Truck: {operationsSummary.logistics.recommendedTruck.plateNumber}
-                                </Badge>
-                              )}
-                              {operationsSummary.logistics.recommendedDriver && (
-                                <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-800">
-                                  Suggested Driver: {operationsSummary.logistics.recommendedDriver.fullName}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
+                          <CardTitle className="text-base">Booking Form</CardTitle>
+                          <p className="text-sm text-muted-foreground">
+                            Choose the truck and driver for this event here. Changes save automatically, and the dispatch action only appears when the booking is already ready.
+                          </p>
                         </CardHeader>
                         <CardContent className="space-y-5">
                           {canManageLogistics ? (
                             <>
+                              {(operationsSummary.logistics.recommendedTruck || operationsSummary.logistics.recommendedDriver) ? (
+                                <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+                                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-800">Recommended Match</p>
+                                  <div className="mt-2 space-y-1 text-sm text-emerald-950">
+                                    <p>
+                                      Truck: <strong>{operationsSummary.logistics.recommendedTruck?.plateNumber || 'Choose any available truck'}</strong>
+                                    </p>
+                                    <p>
+                                      Driver: <strong>{operationsSummary.logistics.recommendedDriver?.fullName || 'Choose any available driver'}</strong>
+                                    </p>
+                                  </div>
+                                  <p className="mt-2 text-sm text-emerald-900/80">
+                                    This is just a starting suggestion. You can still choose any available option below.
+                                  </p>
+                                </div>
+                              ) : null}
+
                               <div className="grid gap-4 md:grid-cols-2">
                                 <div className="space-y-2">
                                   <Label>Truck</Label>
@@ -3318,6 +5368,7 @@ export default function ContractDetail() {
                                   {selectedLogisticsTruck ? (
                                     <div className="rounded-lg border bg-slate-50/70 px-3 py-2 text-sm text-muted-foreground">
                                       {selectedLogisticsTruck.truckType.replace(/_/g, ' ')} | {selectedLogisticsTruck.capacityVolume || 0} m3
+                                      {operationsSummary.logistics.recommendedTruck?._id === selectedLogisticsTruck._id ? ' | Recommended' : ''}
                                     </div>
                                   ) : null}
                                 </div>
@@ -3343,172 +5394,64 @@ export default function ContractDetail() {
                                   {selectedLogisticsDriver ? (
                                     <div className="rounded-lg border bg-slate-50/70 px-3 py-2 text-sm text-muted-foreground">
                                       {selectedLogisticsDriver.driverId}{selectedLogisticsDriver.phone ? ` | ${selectedLogisticsDriver.phone}` : ''}
+                                      {operationsSummary.logistics.recommendedDriver?._id === selectedLogisticsDriver._id ? ' | Recommended' : ''}
                                     </div>
                                   ) : null}
                                 </div>
                               </div>
 
-                              <div className="grid gap-4 md:grid-cols-[minmax(0,0.9fr),minmax(0,1.1fr)]">
-                                <div className="rounded-xl border bg-slate-50/70 p-4">
-                                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Dispatch Status</p>
-                                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                                    <Badge className={getLogisticsStatusClassName(savedLogisticsStatus)}>
-                                      {getLogisticsStatusLabel(savedLogisticsStatus)}
-                                    </Badge>
-                                    {logisticsStatusWillChange ? (
-                                      <Badge variant="outline" className="border-slate-200 bg-white text-slate-700">
-                                        After Save: {getLogisticsStatusLabel(logisticsStatusValue)}
+                              <div className="rounded-xl border bg-slate-50/70 p-4">
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                  <div>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Booking Status</p>
+                                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                                      <Badge className={getLogisticsStatusClassName(savedLogisticsStatus)}>
+                                        {getLogisticsStatusLabel(savedLogisticsStatus)}
                                       </Badge>
-                                    ) : null}
+                                      {logisticsStatusWillChange ? (
+                                        <Badge variant="outline" className="border-slate-200 bg-white text-slate-700">
+                                          After Save: {getLogisticsStatusLabel(logisticsStatusValue)}
+                                        </Badge>
+                                      ) : null}
+                                    </div>
+                                    <p className="mt-3 text-sm text-muted-foreground">
+                                      {logisticsStatusWillChange
+                                        ? 'Saving will update the logistics stage automatically based on the current truck and driver selection.'
+                                        : logisticsNextAction
+                                          ? logisticsNextAction.note
+                                          : logisticsCompletionWaitsForPostEvent
+                                            ? 'Dispatch is already recorded. Mark Completed will become available once the event date has passed.'
+                                            : 'No day-of action is needed yet. Update the truck or driver here and the booking will save automatically.'}
+                                    </p>
                                   </div>
-                                </div>
-
-                                <div className="rounded-xl border p-4">
-                                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Day-Of Actions</p>
-                                  <div className="mt-3 flex flex-wrap gap-2">
-                                    <Button
-                                      type="button"
-                                      variant={canMarkLogisticsDispatched ? 'default' : 'outline'}
-                                      size="sm"
-                                      disabled={!canMarkLogisticsDispatched}
-                                      onClick={() => handleAdvanceLogisticsAssignment('dispatched')}
-                                    >
-                                      Mark Dispatched
+                                  {logisticsNextAction ? (
+                                    <Button type="button" onClick={logisticsNextAction.onClick}>
+                                      {logisticsNextAction.label}
                                     </Button>
-                                    <Button
-                                      type="button"
-                                      variant={canMarkLogisticsCompleted ? 'default' : 'outline'}
-                                      size="sm"
-                                      disabled={!canMarkLogisticsCompleted}
-                                      onClick={() => handleAdvanceLogisticsAssignment('completed')}
-                                    >
-                                      Mark Completed
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge
-                                    variant="outline"
-                                    className={canSaveLogisticsBooking
-                                      ? 'border-slate-200 bg-slate-50 text-slate-700'
-                                      : 'border-amber-200 bg-amber-50 text-amber-900'}
-                                  >
-                                    {canSaveLogisticsBooking ? 'Ready To Save' : 'Truck Required'}
-                                  </Badge>
-                                  {logisticsStatusWillChange ? (
-                                    <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800">
-                                      Stage Updates On Save
-                                    </Badge>
                                   ) : null}
                                 </div>
-                                <Button onClick={handleUpdateLogisticsAssignment} disabled={!canSaveLogisticsBooking}>Save Booking</Button>
                               </div>
+
+                              {logisticsAutoSaveState === 'error' && logisticsAutoSaveErrorMessage ? (
+                                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                                  <div className="flex items-start gap-2">
+                                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                                    <div>
+                                      <p className="font-semibold">Already booked for another same-day event</p>
+                                      <p className="mt-1">{logisticsAutoSaveErrorMessage}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : null}
+
+                              <p className="text-sm text-muted-foreground">
+                                Review the booking details above. This form saves automatically as you update the truck or driver selection.
+                              </p>
                             </>
                           ) : (
                             <div className="rounded-xl border bg-slate-50/70 p-4 text-sm text-muted-foreground">
                               Read-only for this account.
                             </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </div>
-
-                    <div className="grid gap-4 lg:grid-cols-2" data-print-hide="true">
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-base">Available Trucks For This Event</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          {logisticsTruckOptions.length > 0 ? (
-                            logisticsTruckOptions.map((truck) => {
-                              const isRecommended = operationsSummary.logistics.recommendedTruck?._id === truck._id;
-                              const isSelected = logisticsAssignment.truckId === truck._id;
-
-                              return (
-                                <div
-                                  key={truck._id}
-                                  className={`rounded-lg border p-4 ${isSelected ? 'border-blue-200 bg-blue-50/60' : ''}`}
-                                >
-                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                    <div>
-                                      <p className="font-medium">{truck.plateNumber}</p>
-                                      <p className="text-sm text-muted-foreground">
-                                        {truck.truckType.replace(/_/g, ' ')} | {truck.capacityVolume || 0} m3
-                                      </p>
-                                      {truck.assignedDriver && (
-                                        <p className="mt-1 text-sm text-muted-foreground">
-                                          Assigned driver: {truck.assignedDriver.fullName}
-                                        </p>
-                                      )}
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                      {isRecommended && (
-                                        <Badge variant="outline" className="border-green-200 bg-green-50 text-green-800">
-                                          Best Match
-                                        </Badge>
-                                      )}
-                                      {isSelected && (
-                                        <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800">
-                                          Selected
-                                        </Badge>
-                                      )}
-                                      <Badge variant="outline">{formatStatusLabel(truck.status)}</Badge>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <p className="text-sm text-muted-foreground">No available trucks for this event date.</p>
-                          )}
-                        </CardContent>
-                      </Card>
-
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-base">Available Drivers For This Event</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          {logisticsDriverOptions.length > 0 ? (
-                            logisticsDriverOptions.map((driver) => {
-                              const isRecommended = operationsSummary.logistics.recommendedDriver?._id === driver._id;
-                              const isSelected = logisticsAssignment.driverId === driver._id;
-
-                              return (
-                                <div
-                                  key={driver._id}
-                                  className={`rounded-lg border p-4 ${isSelected ? 'border-blue-200 bg-blue-50/60' : ''}`}
-                                >
-                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                    <div>
-                                      <p className="font-medium">{driver.fullName}</p>
-                                      <p className="text-sm text-muted-foreground">{driver.driverId}</p>
-                                      {driver.phone && (
-                                        <p className="mt-1 text-sm text-muted-foreground">{driver.phone}</p>
-                                      )}
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                      {isRecommended && (
-                                        <Badge variant="outline" className="border-green-200 bg-green-50 text-green-800">
-                                          Best Match
-                                        </Badge>
-                                      )}
-                                      {isSelected && (
-                                        <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800">
-                                          Selected
-                                        </Badge>
-                                      )}
-                                      <Badge variant="outline">{formatStatusLabel(driver.status)}</Badge>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <p className="text-sm text-muted-foreground">No available drivers for this event date.</p>
                           )}
                         </CardContent>
                       </Card>
@@ -3598,19 +5541,23 @@ export default function ContractDetail() {
                               <div className="space-y-2">
                                 <Label>Booking Status</Label>
                                 <Select
-                                  value={logisticsAssignment.assignmentStatus}
+                                  value={!eventHasPassed && logisticsAssignment.assignmentStatus === 'completed'
+                                    ? 'dispatched'
+                                    : logisticsAssignment.assignmentStatus}
                                   onValueChange={(value) => setLogisticsAssignment(prev => ({ ...prev, assignmentStatus: value }))}
                                 >
                                   <SelectTrigger>
                                     <SelectValue />
                                   </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="pending">pending</SelectItem>
-                                    <SelectItem value="scheduled">scheduled</SelectItem>
-                                    <SelectItem value="ready_for_dispatch">ready for dispatch</SelectItem>
-                                    <SelectItem value="dispatched">dispatched</SelectItem>
-                                    <SelectItem value="completed">completed</SelectItem>
-                                  </SelectContent>
+                                    <SelectContent>
+                                      <SelectItem value="pending">pending</SelectItem>
+                                      <SelectItem value="scheduled">scheduled</SelectItem>
+                                      <SelectItem value="ready_for_dispatch">ready for dispatch</SelectItem>
+                                      <SelectItem value="dispatched">dispatched</SelectItem>
+                                      {eventHasPassed ? (
+                                        <SelectItem value="completed">completed</SelectItem>
+                                      ) : null}
+                                    </SelectContent>
                                 </Select>
                               </div>
                               <div className="space-y-2">
@@ -3621,7 +5568,7 @@ export default function ContractDetail() {
                                   placeholder="Truck, loading plan, dispatch notes, or reminders"
                                 />
                               </div>
-                              <Button data-print-hide="true" onClick={handleUpdateLogisticsAssignment}>Save Truck Booking</Button>
+                              <Button data-print-hide="true" onClick={() => void handleUpdateLogisticsAssignment()}>Save Truck Booking</Button>
                             </>
                           )}
                           <div className="space-y-2">
@@ -3909,6 +5856,228 @@ export default function ContractDetail() {
                 </Button>
                 <Button type="button" onClick={handleSaveEsignaturesAndOpenPdf} disabled={isSavingEsignatures}>
                   {isSavingEsignatures ? 'Saving Signatures...' : 'Save Signatures And Open PDF'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={incidentDialogOpen} onOpenChange={setIncidentDialogOpen}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Report Inventory Incident</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="rounded-lg border bg-muted/20 px-4 py-3 text-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium">{incidentTarget?.itemName || 'Inventory item'}</p>
+                    <p className="text-muted-foreground">
+                      Department: {incidentTarget?.departmentLabel || '-'}
+                    </p>
+                  </div>
+                  <Badge variant="outline">Contract Qty {incidentTarget?.requestedQuantity ?? '-'}</Badge>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Incident Type</Label>
+                  <Select
+                    value={incidentForm.incidentType}
+                    onValueChange={(value) => setIncidentForm((current) => ({ ...current, incidentType: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {INCIDENT_TYPE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Severity</Label>
+                  <Select
+                    value={incidentForm.severity}
+                    onValueChange={(value) => setIncidentForm((current) => ({ ...current, severity: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Affected Quantity</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={incidentForm.affectedQuantity}
+                  onChange={(event) => setIncidentForm((current) => ({ ...current, affectedQuantity: event.target.value }))}
+                  placeholder="How many items were affected?"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Use this for missing, damaged, or wrong-quantity issues.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Damage Reference Image (optional)</Label>
+                <Input type="file" accept="image/*" onChange={handleIncidentAttachmentChange} />
+                {incidentForm.attachmentUrl ? (
+                  <button
+                    type="button"
+                    className="h-28 w-28 overflow-hidden rounded-md border bg-muted"
+                    onClick={() => setPreviewImage({ url: incidentForm.attachmentUrl, title: 'Incident Reference Image' })}
+                  >
+                    <img src={incidentForm.attachmentUrl} alt="Incident reference preview" className="h-full w-full object-cover" />
+                  </button>
+                ) : null}
+                <p className="text-xs text-muted-foreground">
+                  Upload a photo if the damage or missing item needs visual reference.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Description</Label>
+                <Textarea
+                  value={incidentForm.description}
+                  onChange={(event) => setIncidentForm((current) => ({ ...current, description: event.target.value }))}
+                  placeholder="Describe what was missing, damaged, or incorrect after the event..."
+                  rows={4}
+                />
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setIncidentDialogOpen(false);
+                    setIncidentTarget(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="button" variant="destructive" onClick={handleSubmitInventoryIncident}>
+                  Submit Incident Report
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={procurementRequestDialogOpen} onOpenChange={setProcurementRequestDialogOpen}>
+          <DialogContent className="sm:max-w-xl">
+            <DialogHeader>
+              <DialogTitle>Create Procurement Request</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="rounded-lg border bg-muted/20 px-4 py-3 text-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium">{procurementRequestTarget?.item.itemName || 'Inventory item'}</p>
+                    <p className="text-muted-foreground">
+                      {procurementRequestTarget ? INVENTORY_SECTION_LABELS[procurementRequestTarget.section] : '-'} | {contract?.contractNumber || '-'}
+                    </p>
+                    {procurementRequestTarget && !procurementRequestTarget.item.itemId ? (
+                      <p className="mt-2 text-xs text-amber-700">
+                        This item is not linked to a saved inventory record yet. Purchasing can still prepare the report, but it should be linked before fulfillment updates stock.
+                      </p>
+                    ) : null}
+                  </div>
+                  <Badge variant="outline">
+                    {procurementRequestTarget && procurementRequestTarget.item.shortageQuantity > 0
+                      ? `Short by ${procurementRequestTarget.item.shortageQuantity}`
+                      : `Suggested qty ${procurementRequestTarget?.item.requestedQuantity ?? '-'}`}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Request Type</Label>
+                  <Select
+                    value={procurementRequestForm.requestType}
+                    onValueChange={(value) => setProcurementRequestForm((current) => ({ ...current, requestType: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="purchase">Purchase</SelectItem>
+                      <SelectItem value="rental">Rental</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Quantity Needed</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={procurementRequestForm.requestedQuantity}
+                    onChange={(event) => setProcurementRequestForm((current) => ({ ...current, requestedQuantity: event.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Needed By</Label>
+                <Input
+                  type="date"
+                  value={procurementRequestForm.neededBy}
+                  onChange={(event) => setProcurementRequestForm((current) => ({ ...current, neededBy: event.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Reason</Label>
+                <Textarea
+                  value={procurementRequestForm.reason}
+                  onChange={(event) => setProcurementRequestForm((current) => ({ ...current, reason: event.target.value }))}
+                  rows={3}
+                  placeholder="Explain why purchasing or rental support is needed for this item."
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Textarea
+                  value={procurementRequestForm.notes}
+                  onChange={(event) => setProcurementRequestForm((current) => ({ ...current, notes: event.target.value }))}
+                  rows={3}
+                  placeholder="Optional note for purchasing, supplier, or event handling."
+                />
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setProcurementRequestDialogOpen(false);
+                    setProcurementRequestTarget(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="button" onClick={handleSubmitProcurementRequest}>
+                  Send To Purchasing
                 </Button>
               </div>
             </div>

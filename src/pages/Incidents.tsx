@@ -25,14 +25,18 @@ interface Incident {
     contractNumber: string;
     clientName: string;
   };
+  department?: string;
   incidentType: string;
   description: string;
+  inventoryItemName?: string;
+  affectedQuantity?: number;
   eventDate: string;
   reportedBy: { name: string };
   reportedAt: string;
   severity: string;
   status: string;
   resolution?: string;
+  attachments?: string[];
 }
 
 const incidentTypes = [
@@ -51,12 +55,15 @@ export default function Incidents() {
   const [contracts, setContracts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     contract: '',
     incidentType: '',
     description: '',
     eventDate: '',
-    severity: 'low'
+    affectedQuantity: '',
+    severity: 'low',
+    attachmentUrl: '',
   });
 
   useEffect(() => {
@@ -80,9 +87,20 @@ export default function Incidents() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const trimmedAffectedQuantity = formData.affectedQuantity.trim();
+    if (trimmedAffectedQuantity && (!/^\d+$/.test(trimmedAffectedQuantity) || Number(trimmedAffectedQuantity) <= 0)) {
+      toast.error('Affected quantity must be a whole number greater than 0.');
+      return;
+    }
     
     try {
-      await api.createIncident(formData);
+      const { affectedQuantity, attachmentUrl, ...baseFormData } = formData;
+      await api.createIncident({
+        ...baseFormData,
+        ...(trimmedAffectedQuantity ? { affectedQuantity: Number(trimmedAffectedQuantity) } : {}),
+        ...(attachmentUrl ? { attachments: [attachmentUrl] } : {}),
+      });
       toast.success('Incident reported successfully!');
       setDialogOpen(false);
       setFormData({
@@ -90,12 +108,37 @@ export default function Incidents() {
         incidentType: '',
         description: '',
         eventDate: '',
-        severity: 'low'
+        affectedQuantity: '',
+        severity: 'low',
+        attachmentUrl: '',
       });
       fetchData();
     } catch (error: any) {
       toast.error(error.message || 'Failed to report incident');
     }
+  };
+
+  const handleAttachmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setFormData((current) => ({ ...current, attachmentUrl: '' }));
+      return;
+    }
+
+    if (file.size > 3 * 1024 * 1024) {
+      toast.error('Please upload a damage reference image smaller than 3 MB.');
+      event.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFormData((current) => ({
+        ...current,
+        attachmentUrl: typeof reader.result === 'string' ? reader.result : '',
+      }));
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleResolve = async (id: string) => {
@@ -128,6 +171,15 @@ export default function Incidents() {
       case 'resolved': return 'bg-green-100 text-green-800';
       case 'closed': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getDepartmentColor = (department?: string) => {
+    switch (department) {
+      case 'creative': return 'bg-rose-100 text-rose-800';
+      case 'linen': return 'bg-sky-100 text-sky-800';
+      case 'logistics': return 'bg-amber-100 text-amber-900';
+      default: return 'bg-slate-100 text-slate-700';
     }
   };
 
@@ -231,6 +283,18 @@ export default function Incidents() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div className="space-y-2">
+                  <Label>Affected Quantity</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={formData.affectedQuantity}
+                    onChange={(e) => setFormData({...formData, affectedQuantity: e.target.value})}
+                    placeholder="Optional"
+                  />
+                </div>
                 
                 <div className="space-y-2">
                   <Label>Description</Label>
@@ -240,6 +304,20 @@ export default function Incidents() {
                     placeholder="Describe the incident..."
                     rows={3}
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Damage Reference Image (optional)</Label>
+                  <Input type="file" accept="image/*" onChange={handleAttachmentChange} />
+                  {formData.attachmentUrl ? (
+                    <button
+                      type="button"
+                      className="h-28 w-28 overflow-hidden rounded-md border bg-muted"
+                      onClick={() => setPreviewImage(formData.attachmentUrl)}
+                    >
+                      <img src={formData.attachmentUrl} alt="Incident reference preview" className="h-full w-full object-cover" />
+                    </button>
+                  ) : null}
                 </div>
                 
                 <Button type="submit" className="w-full">
@@ -315,6 +393,11 @@ export default function Incidents() {
                           <Badge className={getStatusColor(incident.status)}>
                             {incident.status}
                           </Badge>
+                          {incident.department ? (
+                            <Badge className={getDepartmentColor(incident.department)}>
+                              {incident.department.replace(/_/g, ' ')}
+                            </Badge>
+                          ) : null}
                           <span className="text-sm text-muted-foreground capitalize">
                             {incident.incidentType.replace('_', ' ')}
                           </span>
@@ -322,6 +405,22 @@ export default function Incidents() {
                         <h3 className="text-lg font-medium">
                           {incident.contract?.contractNumber} - {incident.contract?.clientName}
                         </h3>
+                        {incident.inventoryItemName ? (
+                          <p className="text-xs text-muted-foreground">Item: {incident.inventoryItemName}</p>
+                        ) : null}
+                        {incident.affectedQuantity ? (
+                          <p className="text-xs text-muted-foreground">Affected Qty: {incident.affectedQuantity}</p>
+                        ) : null}
+                        {incident.attachments?.[0] ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPreviewImage(incident.attachments?.[0] || null)}
+                          >
+                            View Damage Photo
+                          </Button>
+                        ) : null}
                         <p className="text-sm">{incident.description}</p>
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1">
@@ -360,14 +459,29 @@ export default function Incidents() {
               resolvedIncidents.map((incident) => (
                 <Card key={incident._id}>
                   <CardContent className="p-6">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                         <Badge className={getSeverityColor(incident.severity)}>
                           {incident.severity}
                         </Badge>
                         <Badge className={getStatusColor(incident.status)}>
                           {incident.status}
                         </Badge>
+                        {incident.department ? (
+                          <Badge className={getDepartmentColor(incident.department)}>
+                            {incident.department.replace(/_/g, ' ')}
+                          </Badge>
+                        ) : null}
+                        {incident.attachments?.[0] ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPreviewImage(incident.attachments?.[0] || null)}
+                          >
+                            View Damage Photo
+                          </Button>
+                        ) : null}
                         <span className="text-sm text-muted-foreground capitalize">
                           {incident.incidentType.replace('_', ' ')}
                         </span>
@@ -375,6 +489,12 @@ export default function Incidents() {
                       <h3 className="text-lg font-medium">
                         {incident.contract?.contractNumber} - {incident.contract?.clientName}
                       </h3>
+                      {incident.inventoryItemName ? (
+                        <p className="text-xs text-muted-foreground">Item: {incident.inventoryItemName}</p>
+                      ) : null}
+                      {incident.affectedQuantity ? (
+                        <p className="text-xs text-muted-foreground">Affected Qty: {incident.affectedQuantity}</p>
+                      ) : null}
                       <p className="text-sm">{incident.description}</p>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
@@ -412,6 +532,11 @@ export default function Incidents() {
                         <Badge className={getStatusColor(incident.status)}>
                           {incident.status}
                         </Badge>
+                        {incident.department ? (
+                          <Badge className={getDepartmentColor(incident.department)}>
+                            {incident.department.replace(/_/g, ' ')}
+                          </Badge>
+                        ) : null}
                         <span className="text-sm text-muted-foreground capitalize">
                           {incident.incidentType.replace('_', ' ')}
                         </span>
@@ -419,6 +544,12 @@ export default function Incidents() {
                       <h3 className="text-lg font-medium">
                         {incident.contract?.contractNumber} - {incident.contract?.clientName}
                       </h3>
+                      {incident.inventoryItemName ? (
+                        <p className="text-xs text-muted-foreground">Item: {incident.inventoryItemName}</p>
+                      ) : null}
+                      {incident.affectedQuantity ? (
+                        <p className="text-xs text-muted-foreground">Affected Qty: {incident.affectedQuantity}</p>
+                      ) : null}
                       <p className="text-sm">{incident.description}</p>
                     </div>
                   </CardContent>
@@ -427,6 +558,17 @@ export default function Incidents() {
             )}
           </TabsContent>
         </Tabs>
+
+        <Dialog open={Boolean(previewImage)} onOpenChange={(open) => !open && setPreviewImage(null)}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Incident Reference Image</DialogTitle>
+            </DialogHeader>
+            {previewImage ? (
+              <img src={previewImage} alt="Incident reference" className="max-h-[70vh] w-full rounded-lg object-contain" />
+            ) : null}
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );

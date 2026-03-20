@@ -47,7 +47,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: 'Home', href: '/', icon: Home, roles: ['all'] },
   { label: 'Menu Tastings', href: '/menu-tastings', icon: Utensils, roles: ['sales', 'admin'] },
-  { label: 'Contracts', href: '/contracts', icon: FileText, roles: ['sales', 'accounting', 'admin'] },
+  { label: 'Contracts', href: '/contracts', icon: FileText, roles: ['sales', 'accounting', 'purchasing', 'stockroom', 'creative', 'linen', 'admin'] },
   { label: 'Sales', href: '/sales', icon: Briefcase, roles: ['sales', 'admin'] },
   { label: 'Accounting', href: '/accounting', icon: Calculator, roles: ['accounting', 'admin'] },
   { label: 'Logistics', href: '/logistics', icon: Truck, roles: ['logistics', 'admin'] },
@@ -64,8 +64,8 @@ const managementNavItems: NavItem[] = [
   { label: 'Banquet Staff', href: '/banquet/staff', icon: UserCog, roles: ['banquet_supervisor', 'admin'] },
   { label: 'Drivers & Trucks', href: '/logistics/management', icon: Truck, roles: ['logistics', 'admin'] },
   { label: 'Linen Inventory', href: '/linen/inventory', icon: Package, roles: ['linen', 'admin'] },
-  { label: 'Stockroom', href: '/stockroom/inventory', icon: Package, roles: ['logistics', 'admin'] },
-  { label: 'Kitchen Inventory', href: '/kitchen/inventory', icon: ChefHat, roles: ['kitchen', 'purchasing', 'admin'] },
+  { label: 'Stockroom', href: '/stockroom/inventory', icon: Package, roles: ['logistics', 'stockroom', 'admin'] },
+  { label: 'Kitchen Inventory', href: '/kitchen/inventory', icon: ChefHat, roles: ['kitchen', 'admin'] },
   { label: 'Admin Management', href: '/admin/management', icon: Shield, roles: ['admin'] },
 ];
 

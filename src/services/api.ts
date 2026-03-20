@@ -41,6 +41,12 @@ class ApiService {
       if (errorData.errors) {
         error.errors = errorData.errors;
       }
+      if (errorData.issues) {
+        error.issues = errorData.issues;
+      }
+      if (errorData.error) {
+        error.detail = errorData.error;
+      }
       throw error;
     }
 
@@ -145,6 +151,20 @@ class ApiService {
     });
   }
 
+  async updateKitchenMenuItem(id: string, data: { index: number; confirmed: boolean }) {
+    return this.request(`/contracts/${id}/kitchen-menu-item`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async updateKitchenIngredientStatus(id: string, data: { status: 'pending' | 'procured' | 'prepared' }) {
+    return this.request(`/contracts/${id}/kitchen-ingredient-status`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
   async deleteContract(id: string) {
     return this.request(`/contracts/${id}`, {
       method: 'DELETE'
@@ -196,6 +216,13 @@ class ApiService {
     });
   }
 
+  async updateBanquetAssignment(id: string, data: any) {
+    return this.request(`/contracts/${id}/banquet-assignment`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
   async addPayment(id: string, payment: any) {
     return this.request(`/contracts/${id}/payment`, {
       method: 'POST',
@@ -207,6 +234,97 @@ class ApiService {
     return this.request(`/contracts/${id}/inventory-item-status`, {
       method: 'PUT',
       body: JSON.stringify(data)
+    });
+  }
+
+  async updateInventoryPostEventStatus(id: string, data: any) {
+    return this.request(`/contracts/${id}/inventory-post-event-status`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async reportInventoryIncident(id: string, data: any) {
+    return this.request(`/contracts/${id}/inventory-incident`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async getProcurementRequests(params?: {
+    department?: string;
+    status?: string;
+    contractId?: string;
+    requestType?: string;
+  }) {
+    const filteredParams = params
+      ? Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''))
+      : null;
+    const queryParams = filteredParams ? `?${new URLSearchParams(filteredParams as Record<string, string>).toString()}` : '';
+    return this.request(`/procurement-requests${queryParams}`);
+  }
+
+  async createProcurementRequest(data: any) {
+    return this.request('/procurement-requests', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async updateProcurementQuote(id: string, data: any) {
+    return this.request(`/procurement-requests/${id}/quote`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async reviewProcurementRequest(id: string, data: any) {
+    return this.request(`/procurement-requests/${id}/accounting-review`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async fulfillProcurementRequest(id: string, data: any) {
+    return this.request(`/procurement-requests/${id}/fulfill`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async getSuppliers(params?: {
+    department?: string;
+    requestType?: string;
+    active?: boolean;
+  }) {
+    const filteredParams = params
+      ? Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''))
+      : null;
+    const queryParams = filteredParams
+      ? `?${new URLSearchParams(Object.fromEntries(
+        Object.entries(filteredParams).map(([key, value]) => [key, String(value)])
+      )).toString()}`
+      : '';
+    return this.request(`/suppliers${queryParams}`);
+  }
+
+  async createSupplier(data: any) {
+    return this.request('/suppliers', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async updateSupplier(id: string, data: any) {
+    return this.request(`/suppliers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async deleteSupplier(id: string) {
+    return this.request(`/suppliers/${id}`, {
+      method: 'DELETE'
     });
   }
 

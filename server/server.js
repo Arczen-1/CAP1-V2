@@ -10,7 +10,7 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/juancarlos';
@@ -25,6 +25,8 @@ app.use('/api/contracts', require('./routes/contracts'));
 app.use('/api/menu-tastings', require('./routes/menuTastings'));
 app.use('/api/incidents', require('./routes/incidents'));
 app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/procurement-requests', require('./routes/procurementRequests'));
+app.use('/api/suppliers', require('./routes/suppliers'));
 
 // New Department Management Routes
 app.use('/api/creative-inventory', require('./routes/creativeInventory'));

@@ -87,6 +87,8 @@ export default function Dashboard() {
         return { label: 'Kitchen Dashboard', href: '/kitchen', color: 'bg-red-500' };
       case 'purchasing':
         return { label: 'Purchasing Dashboard', href: '/purchasing', color: 'bg-teal-500' };
+      case 'stockroom':
+        return { label: 'Stockroom Inventory', href: '/stockroom/inventory', color: 'bg-amber-600' };
       case 'creative':
         return { label: 'Creative Dashboard', href: '/creative', color: 'bg-pink-500' };
       case 'linen':

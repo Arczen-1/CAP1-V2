@@ -9,9 +9,10 @@ const mockUsers = [
   { id: '4', name: 'Banquet Supervisor', email: 'banquet@juancarlos.com', role: 'banquet_supervisor', department: 'Banquet Operations' },
   { id: '5', name: 'Kitchen Manager', email: 'kitchen@juancarlos.com', role: 'kitchen', department: 'Kitchen' },
   { id: '6', name: 'Purchasing Manager', email: 'purchasing@juancarlos.com', role: 'purchasing', department: 'Purchasing' },
-  { id: '7', name: 'Creative Manager', email: 'creative@juancarlos.com', role: 'creative', department: 'Creative' },
-  { id: '8', name: 'Linen Manager', email: 'linen@juancarlos.com', role: 'linen', department: 'Linen' },
-  { id: '9', name: 'Admin', email: 'admin@juancarlos.com', role: 'admin', department: 'Admin' }
+  { id: '7', name: 'Stockroom', email: 'stockroom@juancarlos.com', role: 'stockroom', department: 'Stockroom' },
+  { id: '8', name: 'Creative Manager', email: 'creative@juancarlos.com', role: 'creative', department: 'Creative' },
+  { id: '9', name: 'Linen Manager', email: 'linen@juancarlos.com', role: 'linen', department: 'Linen' },
+  { id: '10', name: 'Admin', email: 'admin@juancarlos.com', role: 'admin', department: 'Admin' }
 ];
 
 const mockMenuTastings = [
@@ -590,6 +591,7 @@ const mockPasswords: Record<string, string> = {
   'banquet@juancarlos.com': 'password123',
   'kitchen@juancarlos.com': 'password123',
   'purchasing@juancarlos.com': 'password123',
+  'stockroom@juancarlos.com': 'password123',
   'creative@juancarlos.com': 'password123',
   'linen@juancarlos.com': 'password123',
   'admin@juancarlos.com': 'admin123',
@@ -992,8 +994,11 @@ export const mockApi = {
     if (currentUser?.role === 'accounting') {
       return contracts.filter(c => ['submitted', 'accounting_review', 'approved', 'completed'].includes(c.status));
     }
-    if (['kitchen', 'purchasing'].includes(currentUser?.role)) {
+    if (currentUser?.role === 'kitchen') {
       return contracts.filter(c => ['approved', 'completed'].includes(c.status));
+    }
+    if (['purchasing', 'stockroom'].includes(currentUser?.role)) {
+      return contracts.filter(c => ['draft', 'pending_client_signature', 'submitted', 'accounting_review', 'approved', 'completed'].includes(c.status));
     }
     return contracts;
   },

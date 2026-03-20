@@ -46,7 +46,7 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // Create new item
-router.post('/', auth, requireRole(['logistics', 'admin']), [
+router.post('/', auth, requireRole(['logistics', 'stockroom', 'admin']), [
   body('name').trim().notEmpty().withMessage('Item name is required'),
   body('category').isIn(['Chair', 'Table', 'Tent', 'Equipment', 'Tool', 'Decor', 'Other']).withMessage('Invalid category'),
   body('quantity').isInt({ min: 0 }).withMessage('Quantity must be a positive number')
@@ -58,6 +58,7 @@ router.post('/', auth, requireRole(['logistics', 'admin']), [
     }
     
     const item = new StockroomInventory(req.body);
+    item.updateAvailable();
     await item.save();
     res.status(201).json(item);
   } catch (error) {
@@ -72,7 +73,7 @@ router.post('/', auth, requireRole(['logistics', 'admin']), [
 });
 
 // Update item
-router.put('/:id', auth, requireRole(['logistics', 'admin']), async (req, res) => {
+router.put('/:id', auth, requireRole(['logistics', 'stockroom', 'admin']), async (req, res) => {
   try {
     const item = await StockroomInventory.findById(req.params.id);
     if (!item) {
@@ -80,6 +81,7 @@ router.put('/:id', auth, requireRole(['logistics', 'admin']), async (req, res) =
     }
     
     Object.assign(item, req.body);
+    item.updateAvailable();
     await item.save();
     res.json(item);
   } catch (error) {
@@ -103,7 +105,7 @@ router.delete('/:id', auth, requireRole(['admin']), async (req, res) => {
 });
 
 // Reserve items for event
-router.post('/:id/reserve', auth, requireRole(['sales', 'logistics', 'admin']), async (req, res) => {
+router.post('/:id/reserve', auth, requireRole(['sales', 'logistics', 'stockroom', 'admin']), async (req, res) => {
   try {
     const { quantity } = req.body;
     const item = await StockroomInventory.findById(req.params.id);
@@ -131,7 +133,7 @@ router.post('/:id/reserve', auth, requireRole(['sales', 'logistics', 'admin']), 
 });
 
 // Release reserved items
-router.post('/:id/release', auth, requireRole(['sales', 'logistics', 'admin']), async (req, res) => {
+router.post('/:id/release', auth, requireRole(['sales', 'logistics', 'stockroom', 'admin']), async (req, res) => {
   try {
     const { quantity } = req.body;
     const item = await StockroomInventory.findById(req.params.id);

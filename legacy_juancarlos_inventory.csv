@@ -1,0 +1,1079 @@
+Item ID,Item Name,Category,Unit,Quantity,Department,Price,,Description
+1,Table Napkin Apple Green Big,Table Napkin,pcs,360,linen,50,,With stain / Basahan
+2,Table Napkin Aqua Blue,Table Napkin,pcs,760,linen,50,,With stain/Basahan
+3,Table Napkin Aquamarine,Table Napkin,pcs,378,linen,50,,With stain/Basahan
+4,Table Napkin Beige,Table Napkin,pcs,366,linen,50,,With stain/Basahan
+5,Table Napkin Beige Big,Table Napkin,pcs,,linen,50,,
+6,Table Napkin Beige Khaki Old,Table Napkin,pcs,59,linen,50,,Oil stain /basahan
+7,Table Napkin Black Big,Table Napkin,pcs,493,linen,50,,wrong count before
+8,Table Napkin Black Small,Table Napkin,pcs,3193,linen,50,,wrong count before
+9,Table Napkin Brown,Table Napkin,pcs,360,linen,50,,Burn /Stain
+10,Table Napkin Celadon Green New,Table Napkin,pcs,252,linen,50,,wrong count before
+11,Table Napkin Celadon Green Old,Table Napkin,pcs,611,linen,50,,pinagsama na po ang bilang ng old item
+12,Table Napkin Celadon Green New (Old Grove),Table Napkin,pcs,,linen,50,,
+13,Table Napkin Christmas Green / Emerald Green,Table Napkin,pcs,414,linen,50,,With ooil stain/basahan
+14,Table Napkin Coral Pink,Table Napkin,pcs,160,linen,50,,wrong count before
+15,Table Napkin Cream New,Table Napkin,pcs,1764,linen,50,,New item
+16,Table Napkin Cream Katsa Old,Table Napkin,pcs,6,linen,50,,Old cream napkin
+17,Table Napkin Fuchsia Pink,Table Napkin,pcs,550,linen,50,,With stain / Basahan
+18,Table Napkin Gaza,Table Napkin,pcs,,linen,50,,New item
+19,Table Napkin Gray,Table Napkin,pcs,790,linen,50,,pinagsama na po ang bilang ng Big and small
+20,Table Napkin Gray Big,Table Napkin,pcs,,linen,50,,
+21,Table Napkin Gray Old,Table Napkin,pcs,288,linen,50,,Condemed/Basahan
+22,Table Napkin Light Pink / Baby Pink,Table Napkin,pcs,597,linen,50,,With stain / Basahan /Burn
+23,Table Napkin Lilac Napkin,Table Napkin,pcs,387,linen,50,,With stain/Basahan
+24,Table Napkin Maroon Jersey,Table Napkin,pcs,,linen,50,,
+25,Table Napkin Maroon New,Table Napkin,pcs,636,linen,50,,Burn/ with stain
+26,Table Napkin Maroon Old,Table Napkin,pcs,615,linen,50,,Burn / With Stain
+27,Table Napkin Navy Blue,Table Napkin,pcs,130,linen,50,,May bago tahi
+28,Table Napkin Navy Blue Big,Table Napkin,pcs,140,linen,50,,isinama n po sa bilang small item
+29,Table Napkin Navy Blue Old,Table Napkin,pcs,,linen,50,,
+30,Table Napkin Off White,Table Napkin,pcs,6,linen,50,,Same as cream new napkin
+31,Table Napkin Orange,Table Napkin,pcs,658,linen,50,,With oil stain/burn / basahan
+32,Table Napkin Peach Big,Table Napkin,pcs,6,linen,50,,Condemed/Basahan
+33,Table Napkin Peach New,Table Napkin,pcs,655,linen,50,,May bago tahi
+34,Table Napkin Pink Old,Table Napkin,pcs,6,linen,50,,same as light pink napkin
+35,Table Napkin Powder Blue,Table Napkin,pcs,1712,linen,50,,may bago tahi
+36,Table Napkin Powder Blue Old,Table Napkin,pcs,160,linen,50,,isinama n po sa bilang ng new item
+37,Table Napkin Red,Table Napkin,pcs,595,linen,50,,Losses/with stain/basahan
+38,Table Napkin Royal Blue,Table Napkin,pcs,210,linen,50,,isinama na po ang bilang sa big item
+39,Table Napkin Royal Blue Big,Table Napkin,pcs,633,linen,50,,Pinagsama na po ang bilang ng big and small
+40,Table Napkin Sage Green,Table Napkin,pcs,522,linen,50,,
+41,Table Napkin Sage Green Old,Table Napkin,pcs,,linen,50,,
+42,Table Napkin Salmon Pink,Table Napkin,pcs,561,linen,50,,Losses/with stain/basahan
+43,Table Napkin Seafoam Green,Table Napkin,pcs,932,linen,50,,Same as sage green/napagsama po ang bilang ng sage green at celadon new {old grove
+44,Table Napkin Teal Blue,Table Napkin,pcs,807,linen,50,,1 Damage
+45,Table Napkin Teal Green,Table Napkin,pcs,665,linen,50,,Losses/with stain/basahan
+46,Table Napkin Teracotta,Table Napkin,pcs,780,linen,50,,Fadded/with stain/basahan
+47,Table Napkin Violet / Purple,Table Napkin,pcs,387,linen,50,,with stain/basahan
+48,Table Napkin White,Table Napkin,pcs,6515,linen,50,,Double counting
+49,Table Napkin White Big,Table Napkin,pcs,,linen,50,,
+50,Table Napkin Yellow Gold,Table Napkin,pcs,480,linen,50,,isinama na po ang bilang sa big item
+51,Table Napkin Yellow Gold Big,Table Napkin,pcs,402,linen,50,,isinama na po sa bilang ng small item
+52,Table Napkin Yellow,Table Napkin,pcs,879,linen,50,,New Item
+53,Table Napkin Yellow Old,Table Napkin,pcs,273,linen,50,,Fadded/with stain/basahan
+54,Barong,UNIFORM,pcs,,linen,750,,new item
+55,Camiso De Chino,UNIFORM,pcs,35,linen,750,,wrong count
+56,Long Sleeve Black,UNIFORM,pcs,25,linen,750,,
+57,Long Sleeve White,UNIFORM,pcs,21,linen,750,,
+58,Pajama Brown,UNIFORM,pcs,28,linen,750,,burn
+59,Scarf Brown,UNIFORM,pcs,39,linen,750,,new item
+60,Uniform Black,UNIFORM,pcs,318,linen,750,,Fadded
+61,Uniform Gray,UNIFORM,pcs,45,linen,750,,wrong count
+62,Uniform Maroon,UNIFORM,pcs,46,linen,750,,wrong count
+63,Uniform White,UNIFORM,pcs,324,linen,750,,condemed
+64,Uniform Yellow,UNIFORM,pcs,80,linen,750,,condemed
+65,Apron Black,APRON,pcs,427,linen,150,,
+66,Apron Black New,APRON,pcs,55,linen,150,,c/o sir Alex
+67,Apron Brown New,APRON,pcs,50,linen,150,,c/o sir Alex
+68,Apron Gray w/ Logo,APRON,pcs,126,linen,150,,
+69,Apron Maong / JC Maong,APRON,pcs,31,linen,150,,
+70,Apron Maroon,APRON,pcs,121,linen,150,,
+71,Apron White,APRON,pcs,,linen,150,,
+72,Cap Black,CAPS,pcs,206,linen,200,,
+73,Cap Kitchen Black,CAPS,pcs,,linen,200,,
+74,Cap Kitchen Maroon,CAPS,pcs,,linen,200,,
+75,Cap Kitchen White,CAPS,pcs,13,linen,200,,
+76,Cap Maong,CAPS,pcs,22,linen,200,,
+77,Cap Steward,CAPS,pcs,,linen,200,,
+78,Hat w/ Black Ribbon,CAPS,pcs,99,linen,200,,
+79,Bowtie Maroon,NECKTIE/BOWTIE,pcs,41,linen,125,,
+80,Necktie Plain Black,NECKTIE/BOWTIE,pcs,27,linen,125,,
+81,Bowtie Black,NECKTIE/BOWTIE,pcs,65,linen,125,,may bago tahi
+82,Bowtie White,NECKTIE/BOWTIE,pcs,12,linen,125,,new item
+83,Buckels,MISCELLANEOUS,pcs,144,linen,50,,buckles ng w/eyelet afron
+84,Hanger,MISCELLANEOUS,pcs,131,linen,50,,new item
+85,Sash Red,MISCELLANEOUS,pcs,13,linen,50,,new item
+86,Sash Blue,MISCELLANEOUS,pcs,12,linen,50,,new item
+87,Sash Green,MISCELLANEOUS,pcs,13,linen,50,,new item
+88,Panyo Red,MISCELLANEOUS,pcs,11,linen,50,,new item
+89,Bowtie Pink,NECKTIE/BOWTIE,pcs,,linen,50,,
+90,Bread Basket,BREAD BASKET,pcs,20,linen,50,,
+91,Bread Basket Cover,BREAD BASKET,pcs,45,linen,50,,dagdag tahi
+92,Towel Pink,MISCELLANEOUS,pcs,,linen,50,,
+93,Seat Cover Black,SEAT COVER,yards,7580,linen,50,,7580 yards /new item
+94,Seat Cover Plain / Printed,SEAT COVER,pcs,2075,linen,50,,wrong count
+95,Foam Cover Divan,FOAM COVER,pcs,,linen,50,,
+96,Foam Cover Kiddie,FOAM COVER,pcs,,linen,50,,
+97,Foam Cover Tiffany,FOAM COVER,pcs,,linen,50,,
+98,Foam Divan,FOAM,pcs,,linen,50,,
+99,Foam Kiddie,FOAM,pcs,128,linen,50,,
+100,Foam Tiffany,FOAM,pcs,550,linen,50,,
+101,Skirting Acrylic,SKIRTING,pcs,36,linen,50,,
+102,Skirting Old,SKIRTING,pcs,117,linen,50,,
+103,Skirting Royal Blue,SKIRTING,pcs,9,linen,50,,
+104,Runner Apple Green,RUNNERS,pcs,35,linen,50,,
+105,Runner Army Green,RUNNERS,pcs,39,linen,50,,mga di na po ngagamit
+106,Runner Black,RUNNERS,pcs,36,linen,50,,may bago po napadagdag
+107,Runner Black w/ Lace,RUNNERS,pcs,8,linen,50,,ginamit na po pang repair
+108,Runner Blue,RUNNERS,pcs,7,linen,50,,mga di na po ngagamit
+109,Runner Blue Stripe,RUNNERS,pcs,6,linen,50,,mga di na po ngagamit
+110,Runner Brown,RUNNERS,pcs,48,linen,50,,d na po nagagamit
+111,Runner Celadon Green,RUNNERS,pcs,30,linen,50,,condemed
+112,Runner Cream,RUNNERS,pcs,86,linen,50,,Ginagamit po na pangrepair
+113,Runner Cream Ara,RUNNERS,pcs,,linen,50,,
+114,Runner Cream Revilla,RUNNERS,pcs,,linen,50,,
+115,Runner Emerald Green,RUNNERS,pcs,30,linen,50,,condemed
+116,Runner Floral,RUNNERS,pcs,40,linen,50,,di na po ngagamit
+117,Runner Four Colors,RUNNERS,pcs,48,linen,50,,di na po nagagamit
+118,Runner Gold,RUNNERS,pcs,23,linen,50,,
+119,Runner Gold Organza,RUNNERS,pcs,7,linen,50,,condemed
+120,Runner Gray,RUNNERS,pcs,91,linen,50,,condemed
+121,Runner Gray VIP,RUNNERS,pcs,,linen,50,,
+122,Runner Jute / Sako,RUNNERS,pcs,93,linen,50,,may narepair
+123,Runner Lilac,RUNNERS,pcs,24,linen,50,,condemed
+124,Runner Maroon,RUNNERS,pcs,,linen,50,,
+125,Runner Midnight Blue,RUNNERS,pcs,,linen,50,,
+126,Runner Moss Green,RUNNERS,pcs,55,linen,50,,nagamit for repair
+127,Runner Navy Blue,RUNNERS,pcs,21,linen,50,,nagamit for repair
+128,Runner Nude,RUNNERS,pcs,65,linen,50,,nagamit po sa pagrerepair
+129,Runner Old Rose,RUNNERS,pcs,31,linen,50,,bago item
+130,Runner Orange,RUNNERS,pcs,29,linen,50,,d na po nagagamit
+131,Runner Peach,RUNNERS,pcs,10,linen,50,,condemed
+132,Runner Pink,RUNNERS,pcs,9,linen,50,,napasama sa napatago
+133,Runner Pomelo,RUNNERS,pcs,28,linen,50,,condemed
+134,Runner Red,RUNNERS,pcs,41,linen,50,,condemed/for repair
+135,Runner Royal Blue,RUNNERS,pcs,44,linen,50,,condemed
+136,Runner Safari 1 & 2,RUNNERS,pcs,255,linen,50,,condemed
+137,Runner Salmon Pink,RUNNERS,pcs,16,linen,50,,di na po nagagamit
+138,Runner Silver Satin,RUNNERS,pcs,67,linen,50,,napasama sa napatago
+139,Runner Tan,RUNNERS,pcs,34,linen,50,,condemed
+140,Runner Thailand Blue,RUNNERS,pcs,26,linen,50,,new item
+141,Runner Thailand Green,RUNNERS,pcs,6,linen,50,,new item
+142,Runner Thailand Red,RUNNERS,pcs,29,linen,50,,new item
+143,Runner Tribal,RUNNERS,pcs,32,linen,50,,di na po nagagamit
+144,Runner Vintage Mohair / Feather,RUNNERS,pcs,33,linen,50,,condemed
+145,Runner Violet,RUNNERS,pcs,14,linen,50,,
+146,Runner White,RUNNERS,pcs,34,linen,50,,nagamit po sa pagrerepair
+147,Runner White Twill,RUNNERS,pcs,,linen,50,,
+148,Runner Yellow Gold,RUNNERS,pcs,24,linen,50,,di na po nagagamit
+149,Organza Built In Gold Tree Design / Gold organza,Built In,pcs,31,linen,50,,condemed/for eepait
+150,Organza Built In Magenta,Built In,pcs,,linen,50,,
+151,Organza Built In Naomi,Built In,pcs,35,linen,50,,
+152,Organza Built In Old Rose,Built In,pcs,4,linen,50,,Di na Nagagamit
+153,Organza Built In Peach,Built In,pcs,13,linen,50,,Di na Nagagamit
+154,Organza Built In Powder Blue,Built In,pcs,24,linen,50,,Di na Nagagamit
+155,Organza Built In Royal Blue,Built In,pcs,28,linen,50,,for repair
+156,Organza Built In Silver Gray,Built In,pcs,19,linen,50,,Di na Nagagamit
+157,Organza Built In Violet,Built In,pcs,25,linen,50,,for repair
+158,Organza Built In White (w/ silver),Built In,pcs,11,linen,50,,for repair
+159,Organza Built In White I do,Built In,pcs,7,linen,50,,for repair
+160,Built In Beige Satin,Built In,pcs,26,linen,50,,may narepair
+161,Built In Black All,Built In,pcs,217,linen,50,,May bago tahi
+162,Built In Black Diamond,Built In,pcs,22,linen,50,,condemed
+163,Built In Brown Gamoza,Built In,pcs,64,linen,50,,condemed/with stain/for repair
+164,Built In Christmas Printed,Built In,pcs,,linen,50,,
+165,Built In Cream Ara,Built In,pcs,22,linen,50,,condemed
+166,Built In Cream New,Built In,pcs,266,linen,50,,May bago tahi
+167,Built In Cream Old,Built In,pcs,25,linen,50,,condemed/with stain/for repair
+168,Built In Cream w/ Dots,Built In,pcs,10,linen,50,,condemed
+169,Built In Gold Matte Satin,Built In,pcs,,linen,50,,
+170,Built In Gold Satin,Built In,pcs,14,linen,50,,condemed
+171,Built In Golden Ecru,Built In,pcs,61,linen,50,,condemed / with stain/for repair
+172,Built In Gracia,Built In,pcs,24,linen,50,,may narepair
+173,Built In Gray New,Built In,pcs,,linen,50,,
+174,Built In Gray Satin,Built In,pcs,25,linen,50,,
+175,Built In Katsa,Built In,pcs,22,linen,50,,Di na nagagamit
+176,Built In Maroon New,Built In,pcs,,linen,50,,
+177,Built In Midnight Blue,Built In,pcs,,linen,50,,
+178,Built In Moss Green,Built In,pcs,37,linen,50,,May bago po tahi
+179,Built In Navy Blue,Built In,pcs,114,linen,50,,OLD/NEW(may bago tahi)
+180,Built In Nude,Built In,pcs,15,linen,50,,condemed/with stain/for repair
+181,Built In Old Gold,Built In,pcs,7,linen,50,,Di na nagagamit
+182,Built In Old Rose,Built In,pcs,34,linen,50,,OLD/NEW (may bago tahi)
+183,Built In Old White,Built In,pcs,9,linen,50,,Di na nagagamit
+184,Built In Orange,Built In,pcs,14,linen,50,,With stain/condemed
+185,Built In Peach Satin,Built In,pcs,14,linen,50,,may nirepair po
+186,Built In Peacock Blue,Built In,pcs,9,linen,50,,condemed
+187,Built In Pink (Alpha Gina),Built In,pcs,4,linen,50,,
+188,Built In Powder Blue,Built In,pcs,2,linen,50,,for phase out
+189,Built In Printed Brown,Built In,pcs,8,linen,50,,may napasama po na brown gamoza
+190,Built In Printed Gold / Yellow,Built In,pcs,1,linen,50,,condemed
+191,Built In Printed Maroon,Built In,pcs,4,linen,50,,may nirepair po
+192,Built In Printed White Old,Built In,pcs,3,linen,50,,Di na nagagamit
+193,Built In Red Satin,Built In,pcs,17,linen,50,,condemed
+194,Built In Satin,Built In,pcs,9,linen,50,,
+195,Built In Seafoam Green,Built In,pcs,16,linen,50,,condemed/with stain
+196,Built In Silver Old,Built In,pcs,5,linen,50,,condemed
+197,Built In Tan,Built In,pcs,19,linen,50,,may bago tahi
+198,Built In Violet,Built In,pcs,11,linen,50,,
+199,Built In White New,Built In,pcs,62,linen,50,,May bago tahi
+200,Built In White Satin,Built In,pcs,26,linen,50,,
+201,RTC Apple Green Satin,ROUND TABLE CLOTH,pcs,46,linen,100,,
+202,RTC Beige Rectangular Cloth,ROUND TABLE CLOTH,pcs,2,linen,100,,
+203,RTC Beige Satin,ROUND TABLE CLOTH,pcs,45,linen,100,,for phase out
+204,RTC Black Plain All,ROUND TABLE CLOTH,pcs,413,linen,100,,wrong count before
+205,RTC Black Satin,ROUND TABLE CLOTH,pcs,87,linen,100,,may nerepair
+206,RTC Brown Rectangular Cloth,ROUND TABLE CLOTH,pcs,2,linen,100,,
+207,RTC Brown Satin Dark,ROUND TABLE CLOTH,pcs,29,linen,100,,burn/condemed
+208,RTC Brown Satin Light,ROUND TABLE CLOTH,pcs,16,linen,100,,
+209,RTC Celadon Green,ROUND TABLE CLOTH,pcs,9,linen,100,,Di na nagagamit
+210,RTC Checkered Blue,ROUND TABLE CLOTH,pcs,27,linen,100,,may nerepair
+211,RTC Checkered Red,ROUND TABLE CLOTH,pcs,25,linen,100,,condemed
+212,RTC Christmas Printed,ROUND TABLE CLOTH,pcs,,linen,100,,
+213,RTC Cream Katsa,ROUND TABLE CLOTH,pcs,269,linen,100,,with stain/condemed/for repair
+214,RTC Cream Camille,ROUND TABLE CLOTH,pcs,4,linen,100,,may nirepair
+215,RTC Cream Cube,ROUND TABLE CLOTH,pcs,21,linen,100,,condemed
+216,RTC Cream Dots,ROUND TABLE CLOTH,pcs,387,linen,100,,condemed/with stsin
+217,RTC Cream New,ROUND TABLE CLOTH,pcs,187,linen,100,,Condemed/with stain/for repeair
+218,RTC Cream New Revilla,ROUND TABLE CLOTH,pcs,14,linen,100,,with stain/condemed
+219,RTC Cream Old,ROUND TABLE CLOTH,pcs,8,linen,100,,
+220,RTC Emerald Green Satin,ROUND TABLE CLOTH,pcs,33,linen,100,,wrong count before
+221,RTC Fuchsia Pink Satin,ROUND TABLE CLOTH,pcs,,linen,100,,
+222,RTC Fuschia Pink,ROUND TABLE CLOTH,pcs,4,linen,100,,
+223,RTC Gold Satin,ROUND TABLE CLOTH,pcs,89,linen,100,,may narepair
+224,RTC Golden Ecru,ROUND TABLE CLOTH,pcs,23,linen,100,,
+225,RTC Gray,ROUND TABLE CLOTH,pcs,,linen,100,,
+226,RTC Gray Satin,ROUND TABLE CLOTH,pcs,8,linen,100,,
+227,RTC Green Satin,ROUND TABLE CLOTH,pcs,2,linen,100,,Di na nagagamit
+228,RTC Lilac,ROUND TABLE CLOTH,pcs,46,linen,100,,with oil stain/condemed
+229,RTC Magenta,ROUND TABLE CLOTH,pcs,18,linen,100,,
+230,RTC Maroon,ROUND TABLE CLOTH,pcs,,linen,100,,
+231,RTC Matte Gold,ROUND TABLE CLOTH,pcs,3,linen,100,,Di na nagagamit
+232,RTC Moss Green New,ROUND TABLE CLOTH,pcs,48,linen,100,,new item
+233,RTC Moss Green Old,ROUND TABLE CLOTH,pcs,21,linen,100,,for phase out
+234,RTC Navy Blue,ROUND TABLE CLOTH,pcs,31,linen,100,,may bago tahi
+235,RTC Navy Blue Old,ROUND TABLE CLOTH,pcs,4,linen,100,,old
+236,RTC Nude,ROUND TABLE CLOTH,pcs,58,linen,100,,
+237,RTC Old Rose,ROUND TABLE CLOTH,pcs,38,linen,100,,OLD/NEW
+238,RTC Orange Satin,ROUND TABLE CLOTH,pcs,2,linen,100,,old
+239,RTC Peach Satin,ROUND TABLE CLOTH,pcs,29,linen,100,,with stain/condemed
+240,RTC Peacock Blue,ROUND TABLE CLOTH,pcs,50,linen,100,,wrong count before
+241,RTC Periwinkle Blue,ROUND TABLE CLOTH,pcs,,linen,100,,
+242,RTC Periwinkle Blue Satin,ROUND TABLE CLOTH,pcs,7,linen,100,,with stain/condemed
+243,RTC Pink Satin,ROUND TABLE CLOTH,pcs,28,linen,100,,with stain/condemed
+244,RTC Powder Blue,ROUND TABLE CLOTH,pcs,,linen,100,,
+245,RTC Powder Blue Satin,ROUND TABLE CLOTH,pcs,4,linen,100,,for phase out
+246,RTC Printed Pink,ROUND TABLE CLOTH,pcs,23,linen,100,,with stain/condemed
+247,RTC Printed White,ROUND TABLE CLOTH,pcs,140,linen,100,,with stain/condemed
+248,RTC Printed Yellow,ROUND TABLE CLOTH,pcs,28,linen,100,,with stain/condemed
+249,RTC Red Satin,ROUND TABLE CLOTH,pcs,130,linen,100,,with stain/condemed/For repair
+250,RTC Royal Blue Satin,ROUND TABLE CLOTH,pcs,50,linen,100,,may narepair
+251,RTC Seafoam Green,ROUND TABLE CLOTH,pcs,15,linen,100,,
+252,RTC Silver Satin,ROUND TABLE CLOTH,pcs,63,linen,100,,may narepair
+253,RTC Tan,ROUND TABLE CLOTH,pcs,16,linen,100,,
+254,RTC Teal Green Satin,ROUND TABLE CLOTH,pcs,29,linen,100,,
+255,RTC Violet,ROUND TABLE CLOTH,pcs,21,linen,100,,
+256,RTC Violet Stripe,ROUND TABLE CLOTH,pcs,20,linen,100,,wrong count before
+257,RTC White Gina (SMX Cloth),ROUND TABLE CLOTH,pcs,404,linen,100,,Di po nagagamit yung iba(napatago)
+258,RTC White Plain,ROUND TABLE CLOTH,pcs,83,linen,100,,May bago tahi
+259,RTC White Plain New (Ara Mina),ROUND TABLE CLOTH,pcs,4,linen,100,,for repair
+260,RTC White Satin,ROUND TABLE CLOTH,pcs,4,linen,100,,Napatago dahil hindi po nagagamit
+261,RTC White Thick,ROUND TABLE CLOTH,pcs,7,linen,100,,Di na nagagamit
+262,RTC Yellow Satin,ROUND TABLE CLOTH,pcs,27,linen,100,,condemed
+263,Band Abaca String,BAND,pcs,801,linen,85,,May bago po gawa
+264,Band Abaca w/ Lace,BAND,pcs,131,linen,85,,w/out lace 30 (losses)
+265,Band Apple Green,BAND,pcs,730,linen,85,,
+266,Band Aquamarine / Aqua Blue,BAND,pcs,517,linen,85,,
+267,Band Beige,BAND,pcs,549,linen,85,,
+268,Band Black,BAND,pcs,1862,linen,85,,Losses
+269,Band Blue Stripe / Navy Blue Stripe,BAND,pcs,214,linen,85,,
+270,Band Brown,BAND,pcs,500,linen,85,,
+271,Band Caramel Brown,BAND,pcs,325,linen,85,,mocha
+272,Band Celadon Green,BAND,pcs,229,linen,85,,
+273,Band Coral Pink,BAND,pcs,600,linen,85,,Losses
+274,Band Creamy white,BAND,pcs,556,linen,85,,
+275,Band Dark Yellow,BAND,pcs,,linen,85,,
+276,Band Emerald / Christmas green,BAND,pcs,751,linen,85,,
+277,Band Fuchsia Pink,BAND,pcs,516,linen,85,,
+278,Band Gold,BAND,pcs,136,linen,85,,2 damage
+279,Band Gold stone,BAND,pcs,384,linen,85,,small/big 6 damage
+280,Band Gray,BAND,pcs,226,linen,85,,Losses
+281,Band Lace,BAND,pcs,196,linen,85,,May bago dagdag
+282,Band Lilac,BAND,pcs,692,linen,85,,
+283,Band Magenta,BAND,pcs,1633,linen,85,,wrong count before
+284,Band Maroon,BAND,pcs,714,linen,85,,wrong count before
+285,Band Matte Gold,BAND,pcs,370,linen,85,,
+286,Band Mint Green,BAND,pcs,352,linen,85,,
+287,Band Moss Green,BAND,pcs,1209,linen,85,,wrong count before
+288,Band Navy Blue,BAND,pcs,912,linen,85,,wrong count before
+289,Band Navy Blue stripes,BAND,pcs,200,linen,85,,
+290,Band Old Rose Pink,BAND,pcs,652,linen,85,,kasama na po ang w/S.lining
+291,Band Old Rose w/ S Lining,BAND,pcs,270,linen,85,,
+292,Band Orange,BAND,pcs,218,linen,85,,
+293,Band Peach,BAND,pcs,911,linen,85,,OLD/NEW( Wrong count before)
+294,Band Peacock Blue,BAND,pcs,637,linen,85,,
+295,Band Periwinkle Blue,BAND,pcs,,linen,85,,
+296,Band Pink,BAND,pcs,207,linen,85,,
+297,Band Pink w/ Lace,BAND,pcs,40,linen,85,,
+298,Band Powder Blue,BAND,pcs,807,linen,85,,
+299,Band Purple / Violet,BAND,pcs,2194,linen,85,,violet(wrong count before)
+300,Band Red,BAND,pcs,888,linen,85,,(wrong count before)
+301,Band Royal Blue,BAND,pcs,2155,linen,85,,(wrong count before)
+302,Band Salmon Pink,BAND,pcs,511,linen,85,,
+303,Band Shiny Gold,BAND,pcs,618,linen,85,,
+304,Band Shiny Gold Organza,BAND,pcs,113,linen,85,,Hindi po ito kasama sa
+305,Band Shiny Orange,BAND,pcs,1162,linen,85,,
+306,Band Shiny Silver,BAND,pcs,1296,linen,85,,(wrong count before)
+307,Band Silver,BAND,pcs,,linen,85,,
+308,Band Silver Abaca Brand,BAND,pcs,155,linen,85,,(wrong count before)
+309,Band White,BAND,pcs,784,linen,85,,losses
+310,Band Yellow,BAND,pcs,520,linen,85,,YG.428/Y 401 (nagkapalit)
+311,Band Yellow Gold,BAND,pcs,829,linen,85,,Yellow (Nagkapalit)
+312,Organza Ribbon Apple Green,ORGANZA RIBBON,rolls,370,linen,120,,Tinanggal na po yung mga may sira
+313,Organza Ribbon Aqua Blue,ORGANZA RIBBON,rolls,380,linen,120,,Tinanggal na po yung mga may sira
+314,Organza Ribbon Black,ORGANZA RIBBON,rolls,530,linen,120,,Tinanggal na po yung mga may sira
+315,Organza Ribbon Brown,ORGANZA RIBBON,rolls,460,linen,120,,Tinanggal na po yung mga may sira
+316,Organza Ribbon Caragumoy Hot Props,ORGANZA RIBBON,rolls,10,linen,120,,Na endorse na sa Florist
+317,Organza Ribbon Celadon Green,ORGANZA RIBBON,rolls,720,linen,120,,May narepair po
+318,Organza Ribbon Ecru,ORGANZA RIBBON,rolls,286,linen,120,,Tinanggal na po yung mga may sira
+319,Organza Ribbon Emerald Green,ORGANZA RIBBON,rolls,450,linen,120,,Tinanggal na po yung mga may sira
+320,Organza Ribbon Fushia Pink,ORGANZA RIBBON,rolls,720,linen,120,,napatago po
+321,Organza Ribbon Gold,ORGANZA RIBBON,rolls,572,linen,120,,Tinanggal na po yung mga may sira
+322,Organza Ribbon Gold Lamain,ORGANZA RIBBON,rolls,,linen,120,,
+323,Organza Ribbon Gray,ORGANZA RIBBON,rolls,270,linen,120,,Tinanggal na po yung mga may sira
+324,Organza Ribbon Lilac,ORGANZA RIBBON,rolls,320,linen,120,,Tinanggal na po yung mga may sira
+325,Organza Ribbon Magenta,ORGANZA RIBBON,rolls,170,linen,120,,Tinanggal na po yung mga may sira
+326,Organza Ribbon Maroon,ORGANZA RIBBON,rolls,350,linen,120,,Tinanggal na po yung mga may sira
+327,Organza Ribbon Metallic Gold,ORGANZA RIBBON,rolls,,linen,120,,
+328,Organza Ribbon Metallic Silver,ORGANZA RIBBON,rolls,317,linen,120,,Tinanggal na po yung mga may sira
+329,Organza Ribbon Old Rose Pink,ORGANZA RIBBON,rolls,140,linen,120,,Tinanggal na po yung mga may sira
+330,Organza Ribbon Orange,ORGANZA RIBBON,rolls,573,linen,120,,wrong count
+331,Organza Ribbon Peach or Pomelo,ORGANZA RIBBON,rolls,360,linen,120,,Tinanggal na po yung mga may sira
+332,Organza Ribbon Periwinkle,ORGANZA RIBBON,rolls,,linen,120,,
+333,Organza Ribbon Pink,ORGANZA RIBBON,rolls,360,linen,120,,Tinanggal na po yung mga may sira
+334,Organza Ribbon Powder Blue,ORGANZA RIBBON,rolls,273,linen,120,,Tinanggal na po yung mga may sira
+335,Organza Ribbon Red,ORGANZA RIBBON,rolls,368,linen,120,,May narepair po
+336,Organza Ribbon Royal blue,ORGANZA RIBBON,rolls,390,linen,120,,May narepair po
+337,Organza Ribbon Silver Lamain,ORGANZA RIBBON,rolls,,linen,120,,
+338,Organza Ribbon Violet,ORGANZA RIBBON,rolls,466,linen,120,,May narepair po
+339,Organza Ribbon Yellow,ORGANZA RIBBON,rolls,510,linen,120,,May narepair po
+340,Carpet Beige Big,CARPET,pcs,,linen,450,,
+341,Carpet Beige Small,CARPET,pcs,,linen,450,,
+342,Carpet Brown Big New,CARPET,pcs,2,linen,450,,new item
+343,Carpet Brown XL New,CARPET,pcs,2,linen,450,,new item
+344,Carpet Gray,CARPET,pcs,2,linen,450,,new item
+345,Carpet Green Small,CARPET,pcs,8,linen,450,,
+346,Carpet Green XL,CARPET,pcs,1,linen,450,,Di na ginagamit
+347,Carpet Red Large,CARPET,pcs,6,linen,450,,
+348,Carpet Red Small,CARPET,pcs,17,linen,450,,
+349,Carpet Red XL,CARPET,pcs,3,linen,450,,di na ginagamit
+350,Carpet White,CARPET,pcs,2,linen,450,,
+351,Sako Abaca (for platform),MISCELLANEOUS,pcs,4,linen,30,,new item
+352,Cloth Steamer Big,MACHINES,sets,,linen,240,,
+353,Cloth Steamer Small,MACHINES,sets,4,linen,240,,not in use
+354,Edging machine 'Juki',MACHINES,sets,1,linen,240,,
+355,Fan - Desk Fan,MACHINES,pcs,1,linen,240,,
+356,Fan - Electric fan,MACHINES,pcs,1,linen,240,,
+357,Fan - Standard Fan,MACHINES,pcs,,linen,240,,
+358,Fan - Wall Fan Heavy Duty,MACHINES,pcs,2,linen,240,,
+359,Flat Iron '3D Automatic',MACHINES,pcs,,linen,240,,
+360,Flat Iron 'Black Decker',MACHINES,pcs,1,linen,240,,
+361,Flat Iron 'Standard',MACHINES,pcs,12,linen,240,,
+362,Heavy Duty Dryer 'LG',MACHINES,sets,3,linen,240,,
+363,Heavy Duty Washer 'LG',MACHINES,sets,1,linen,240,,new item
+364,Iron Board,MACHINES,pcs,11,linen,240,,
+365,Push cart,MISCELLANEOUS,pcs,5,linen,240,,
+366,Sewing Machine 'Brother',MACHINES,sets,1,linen,240,,
+367,Sewing machine 'Juki',MACHINES,sets,2,linen,240,,
+368,Sewing Machine 'Zenith',MACHINES,sets,1,linen,240,,
+369,Spin Dryer 'Sharp',MACHINES,sets,6,linen,240,,3 di ginagamit
+370,Tub Oval,MISCELLANEOUS,pcs,3,linen,240,,
+371,Tub Round,MISCELLANEOUS,pcs,2,linen,240,,
+372,Washing Machine 'Eurotech',MACHINES,sets,,linen,240,,
+373,Washing Machine 'Micromatic',MACHINES,sets,,linen,240,,
+374,Washing machine Semi-Automatic,MACHINES,sets,1,linen,240,,
+375,Washing Machine 'Sharp',MACHINES,sets,8,linen,240,,4 di ginagamit
+376,Couch Brown Sofa Low,COUCH,sets,3,linen,750,,
+377,Couch Brown Sofa w/ Stone,COUCH,sets,2,linen,750,,
+378,Couch Cleopatra White,COUCH,sets,2,linen,750,,
+379,Couch Divan Chair Gold,COUCH,sets,2,linen,750,,2 gold
+380,Couch Divan Chair Silver,COUCH,sets,,linen,750,,
+381,Couch White Cherry,COUCH,sets,2,linen,750,,
+382,Couch Gray Cherry,COUCH,sets,1,linen,750,,
+383,Couch White Old Sofa,COUCH,sets,2,linen,750,,
+384,Couch Kneeler Set,COUCH,sets,1,linen,750,,
+385,Couch Sofa Debut Violet,COUCH,sets,1,linen,750,,
+386,Couch Sofa Debut Magenta,COUCH,sets,1,linen,750,,
+387,Couch Elegant Type Ambassador,COUCH,sets,1,linen,750,,
+388,Couch Baily Flesh Gold,COUCH,sets,1,linen,750,,
+389,Couch Baily Flesh Silver,COUCH,sets,1,linen,750,,
+390,Couch Tensile Elegant,COUCH,sets,1,linen,750,,
+391,Couch Velvet Pink,COUCH,sets,1,linen,750,,
+392,Couch Velvet cream,COUCH,sets,1,linen,750,,
+393,Couch Rattan cream,COUCH,sets,1,linen,750,,
+394,Couch Rattan Lilac,COUCH,sets,1,linen,750,,
+395,Couch Rattan Gray,COUCH,sets,1,linen,750,,
+396,Couch Gray Ambassador,COUCH,sets,1,linen,750,,
+397,Table Stainless,COUCH,pcs,3,linen,750,,
+398,Chiffon Beige,Item Return (CREATIVE),pcs,,linen,,,
+399,Chiffon Gray,Item Return (CREATIVE),pcs,65,linen,,,
+400,Chiffon Nude,Item Return (CREATIVE),pcs,12,linen,,,
+401,Chiffon Old Rose,Item Return (CREATIVE),pcs,1,linen,,,
+402,Chiffon Peach,Item Return (CREATIVE),pcs,6,linen,,,
+403,Chiffon Pink,Item Return (CREATIVE),pcs,,linen,,,
+404,Chiffon White,Item Return (CREATIVE),pcs,57,linen,,,
+405,Cloth Old Rose,Item Return (CREATIVE),pcs,7,linen,,,
+406,Cloth Vicorian,Item Return (CREATIVE),pcs,3,linen,,,
+407,Cloth White,Item Return (CREATIVE),pcs,87,linen,,,
+408,Curtain Black,Item Return (CREATIVE),pcs,38,linen,,,
+409,Runner Gray,Item Return (CREATIVE),pcs,7,linen,,,
+410,Topper Aqua Blue Square,TOPPER,pcs,19,linen,75,,Di na po nagagamit
+411,Topper Blue,TOPPER,pcs,,linen,75,,
+412,Topper Fuchsia,TOPPER,pcs,,linen,75,,
+413,Topper Gold Square Satin,TOPPER,pcs,18,linen,75,,Di na po nagagamit
+414,Topper Gray,TOPPER,pcs,,linen,75,,
+415,Topper Lilac Square Satin,TOPPER,pcs,29,linen,75,,Di na po nagagamit
+416,Topper Old Rose Plain,TOPPER,pcs,12,linen,75,,Di na po nagagamit
+417,Topper Old Rose Square,TOPPER,pcs,30,linen,75,,Di na po nagagamit
+418,Topper Orange Square Satin,TOPPER,pcs,24,linen,75,,Di na po nagagamit
+419,Topper Red Square Satin,TOPPER,pcs,75,linen,75,,Di na po nagagamit
+420,Topper Royal Blue Square,TOPPER,pcs,26,linen,75,,Di na po nagagamit
+421,Topper Apple Green Square,TOPPER,pcs,31,linen,75,,Di na po nagagamit
+422,Topper Gold Square Satin,TOPPER,pcs,44,linen,75,,Di na po nagagamit
+423,Topper Kiddie Cloth Orange,TOPPER,pcs,,linen,75,,
+424,Topper Lilac Square Satin,TOPPER,pcs,,linen,75,,Di na po nagagamit
+425,Topper Maroon Square Satin,TOPPER,pcs,10,linen,75,,Di na po nagagamit
+426,Topper Powder Blue Square,TOPPER,pcs,25,linen,75,,Di na po nagagamit
+427,Topper Silver Square Satin,TOPPER,pcs,34,linen,75,,Di na po nagagamit
+428,Topper Aqua Blue Square,TOPPER,pcs,23,linen,75,,Di na po nagagamit
+429,Topper Celadon Green S.,TOPPER,pcs,32,linen,75,,Di na po nagagamit
+430,Topper Old Rose Square Satin,TOPPER,pcs,50,linen,75,,Di na po nagagamit
+431,Topper Orange Square Satin,TOPPER,pcs,28,linen,75,,Di na po nagagamit
+432,Topper Pink Square Satin,TOPPER,pcs,18,linen,75,,Di na po nagagamit
+433,Topper Red Square Satin,TOPPER,pcs,27,linen,75,,Di na po nagagamit
+434,Topper Royal Blue Square,TOPPER,pcs,8,linen,75,,Di na po nagagamit
+435,Topper Yellow Square Satin,TOPPER,pcs,25,linen,75,,Di na po nagagamit
+436,Topper Dark Brown Square Organza,TOPPER,pcs,24,linen,75,,Di na po nagagamit
+437,Topper Floral Black & White Organza,TOPPER,pcs,31,linen,75,,Di na po nagagamit
+438,Topper Light Brown Square Organza,TOPPER,pcs,2,linen,75,,Di na po nagagamit
+439,Topper Red Square Organza,TOPPER,pcs,27,linen,75,,Di na po nagagamit
+440,Topper Beige Swirl Organza,TOPPER,pcs,59,linen,75,,
+441,Topper Celadon Green New Organza,TOPPER,pcs,,linen,75,,
+442,Topper Celadon Green Old Organza,TOPPER,pcs,,linen,75,,
+443,Topper Glamorous Gold Organza,TOPPER,pcs,39,linen,75,,
+444,Topper Gold Round organza,TOPPER,pcs,33,linen,75,,
+445,Topper I Do Cloth,TOPPER,pcs,4,linen,75,,Kasama na po sa bilang sa taas.
+446,Topper I Do Cloth (Sofa),TOPPER,pcs,4,linen,75,,
+447,Topper Julia Montes Organza,TOPPER,pcs,5,linen,75,,Old Rose Organza (Julia Montes) same
+448,Topper Lilac Organza,TOPPER,pcs,,linen,75,,
+449,Topper Maroon Swirl Organza,TOPPER,pcs,,linen,75,,
+450,Topper New Gray Organza,TOPPER,pcs,12,linen,75,,Condemed
+451,Topper Old Gray Round organza,TOPPER,pcs,,linen,75,,
+452,Topper Old Rose Organza (Julia Montes),TOPPER,pcs,5,linen,75,,Di na po nagagamit
+453,Topper Pink Donut Organza,TOPPER,pcs,,linen,75,,
+454,Topper White Square Design Organza,TOPPER,pcs,15,linen,75,,Di na po nagagamit
+455,Topper White Swirl Organza,TOPPER,pcs,11,linen,75,,condemed
+456,ARKO,Backdrops,sets,2,creative,850,,
+457,INDUSTRIAL CATHEDRAL,Backdrops,sets,1,creative,850,,
+458,METAL RING LEFT SCREEN,Backdrops,sets,1,creative,850,,
+459,METAL RING NO SCREEN HIGH,Backdrops,sets,2,creative,850,,
+460,METAL RING RIGHT SCREEN,Backdrops,sets,1,creative,850,,
+461,PENTAGON,Backdrops,sets,1,creative,850,,
+462,PILLAR LONG,Backdrops,pcs,2,creative,850,,
+463,PLYWOOD PANEL,Backdrops,pcs,20,creative,850,,
+464,QUADRATIC,Backdrops,sets,1,creative,850,,
+465,TUBULAR LONG,Backdrops,pcs,4,creative,850,,
+466,PILLAR SMALL,Backdrops,pcs,1,creative,850,,
+467,STANDARD RING BACK TO BACK,Backdrops,sets,1,creative,850,,
+468,METAL RING NO SCREEN LOW,Backdrops,sets,1,creative,850,,
+469,CLASSIC ROMANCE BACKDROP,Backdrops,sets,1,creative,850,,
+470,TROPICAL BACKDROP,Backdrops,sets,1,creative,850,,
+471,FRENCH GARDEN BACKDROP,Backdrops,sets,1,creative,850,,
+472,MODERN MINIMALIST BACKDROP,Backdrops,sets,1,creative,850,,
+473,FILIPINIANA BACKDROP,Backdrops,sets,1,creative,850,,
+474,STARRY NIGHT BACKDROP,Backdrops,sets,1,creative,850,,
+475,RUSTIC BACKDROP,Backdrops,sets,1,creative,850,,
+476,STANDARD 1 BACKDROP,Backdrops,sets,3,creative,850,,3 pcs
+477,STANDARD 2 BACKDROP,Backdrops,sets,3,creative,850,,3 pcs
+478,STANDARD 3 BACKDROP,Backdrops,sets,6,creative,850,,6 pcs
+479,ENCHANTED BACKDROP,Backdrops,sets,1,creative,850,,
+480,CLASSIC ROMANCE ENTRANCE,Entrance,sets,1,creative,700,,
+481,TROPICAL ENTRANCE,Entrance,sets,1,creative,700,,
+482,FRENCH GARDEN ENTRANCE,Entrance,sets,1,creative,700,,
+483,MODERN MINIMALIST ENTRANCE,Entrance,sets,1,creative,700,,
+484,FILIPINIANA ENTRANCE,Entrance,sets,1,creative,700,,
+485,STARRY NIGHT ENTRANCE,Entrance,sets,1,creative,700,,
+486,RUSTIC ENTRANCE,Entrance,sets,1,creative,700,,
+487,BOTTLE,Glass / Fragile,pcs,2,creative,30,,
+488,CANDLE HOLDER,Glass / Fragile,pcs,3,creative,30,,62489
+489,CRYSTAL VASE,Glass / Fragile,pcs,157,creative,30,,
+490,JAR GLASS,Glass / Fragile,pcs,16,creative,30,,34 s; 13 b; 16 ?
+491,LAMPARA GLASS,Glass / Fragile,pcs,30,creative,30,,21 b; 9 s
+492,MARBLE,Glass / Fragile,pcs,212,creative,30,,
+493,MAZON JAR,Glass / Fragile,pcs,58,creative,30,,
+494,PEARLA GLASS,Glass / Fragile,pcs,179,creative,30,,
+495,PEARLA GLASS BROWN,Glass / Fragile,pcs,10,creative,30,,
+496,PEARLA GLASS GOLD,Glass / Fragile,pcs,14,creative,30,,
+497,TALL GLASS VASE,Glass / Fragile,pcs,12,creative,30,,
+498,MIRROR BALL SILVER BIG,Glass / Fragile,pcs,29,creative,30,,
+499,TERRARIUM GLASS,Glass / Fragile,pcs,12,creative,30,,
+500,WHITE BOWL,Glass / Fragile,pcs,104,creative,30,,
+501,SILVER BUBBLE,Glass / Fragile,pcs,17,creative,30,,
+502,BLACK TAPPERED,Metal Items,pcs,422,creative,45,,103 s; 141 m; 2 l / 112 Gold
+503,GOLD TAPPERED,Metal Items,pcs,112,creative,45,,
+504,GEOMETRIC NO GLASS,Metal Items,pcs,31,creative,45,,
+505,GUILLANA,Metal Items,pcs,5,creative,45,,17 small; 27 medium ; 18 large
+506,GUILLANA SMALL,Metal Items,pcs,13,creative,45,,
+507,GUILLANA MEDIUM,Metal Items,pcs,27,creative,45,,
+508,GUILLANA LARGE,Metal Items,pcs,17,creative,45,,
+509,METAL RING,Metal Items,pcs,80,creative,45,,
+510,METAL URN GOLD,Metal Items,pcs,30,creative,45,,116 s; 14 m
+511,PAMELA,Metal Items,pcs,6143,creative,45,,
+512,SILVER CONE,Metal Items,pcs,101,creative,45,,130 (1 damaged) s; 36 m; 35 l
+513,SILVER CONE SMALL,Metal Items,pcs,30,creative,45,,
+514,SILVER CONE MEDIUM,Metal Items,pcs,36,creative,45,,
+515,SILVER CONE LARGE,Metal Items,pcs,37,creative,45,,
+516,SILVER CRYSTAL,Metal Items,pcs,77,creative,45,,31 s; 25 m; 21 l
+517,SILVER CRYSTAL SMALL,Metal Items,pcs,33,creative,45,,
+518,SILVER CRYSTAL MEDIUM,Metal Items,pcs,32,creative,45,,
+519,SILVER CRYSTAL LARGE,Metal Items,pcs,20,creative,45,,
+520,SILVER TROPHY,Metal Items,pcs,59,creative,45,,19 s; 21 m; 19 l
+521,SILVER TROPHY SMALL,Metal Items,pcs,19,creative,45,,
+522,SILVER TROPHY MEDIUM,Metal Items,pcs,20,creative,45,,
+523,SILVER TROPHY LARGE,Metal Items,pcs,16,creative,45,,
+524,SILVER SET OF 2,Metal Items,pcs,49,creative,45,,18 large; 31 m
+525,SILVER SET OF 2 SMALL,Metal Items,pcs,30,creative,45,,
+526,SILVER SET OF 2 MEDIUM,Metal Items,pcs,17,creative,45,,
+527,SILVER CONE CRYSTAL,Metal Items,pcs,34,creative,45,,9 s; 11 m; 14 l
+528,SILVER CONE CRYSTAL SMALL,Metal Items,pcs,10,creative,45,,
+529,SILVER CONE CRYSTAL MEDIUM,Metal Items,pcs,13,creative,45,,
+530,SILVER CONE CRYSTAL LARGE,Metal Items,pcs,14,creative,45,,
+531,SILVER SEXY,Metal Items,pcs,20,creative,45,,10 s; 10 m
+532,SILVER SEXY SMALL,Metal Items,pcs,10,creative,45,,
+533,SILVER SEXY MEDIUM,Metal Items,pcs,10,creative,45,,
+534,SMALL BIKE,Metal Items,pcs,7,creative,45,,18 flower; 3 basket
+535,WHITE ROYAL ASSORTED,Metal Items,pcs,140,creative,45,,54 s; 76 m; 10 l
+536,WHITE ROYAL SMALL,Metal Items,pcs,105,creative,45,,
+537,WHITE ROYAL MEDIUM,Metal Items,pcs,24,creative,45,,
+538,T-STAND,Metal Items,pcs,22,creative,45,,
+539,TUBULAR NORMAL,Metal Items,pcs,33,creative,45,,
+540,ABANIKO,Wood/Rattan Items,pcs,2,creative,100,,
+541,BASKET ROUND,Wood/Rattan Items,pcs,46,creative,100,,16 s; 16 m; 16 l
+542,BASKET RATTAN,Wood/Rattan Items,pcs,2,creative,100,,28 ; 1 big circle 1 medium circle 2 square
+543,BASKET PENTAGON,Wood/Rattan Items,pcs,37,creative,100,,13 s; 13 m; 14 l
+544,CANDLE HOLDER LOG,Wood/Rattan Items,pcs,51,creative,100,,
+545,RATTAN BALL,Wood/Rattan Items,pcs,116,creative,100,,102 s; 75 l
+546,RATTAN HAT / SALAKOT,Wood/Rattan Items,pcs,6,creative,100,,
+547,SANGKALAN MINI,Wood/Rattan Items,pcs,52,creative,100,,
+548,CRATE SQUARE,Wood/Rattan Items,pcs,31,creative,100,,
+549,CHARGER PLATE WOODEN,Wood/Rattan Items,pcs,19,creative,100,,
+550,SANGKALAN BIG,Wood/Rattan Items,pcs,4,creative,100,,
+551,URN HEAD WHITE BIG,Plastic/Ceramic,pcs,2,creative,25,,
+552,FISH BOWL,Plastic/Ceramic,pcs,3,creative,25,,
+553,SMALL MASKARA,Plastic/Ceramic,pcs,36,creative,25,,
+554,WHITE URN SMALL,Plastic/Ceramic,pcs,705,creative,25,,
+555,CANDLE SMOKELESS,Plastic/Ceramic,pcs,6,creative,25,,
+556,CHRISTMAS LIGHTS,Lights / Electric,pcs,2,creative,110,,
+557,JC SIGNAGE,Lights / Electric,pcs,1,creative,110,,
+558,CANDLE LED,Lights / Electric,pcs,4,creative,110,,
+559,NEON LIGHTS,Lights / Electric,pcs,6,creative,110,,
+560,CANDLE LED BIG,Lights / Electric,pcs,10,creative,110,,
+561,CANDLE LED MEDIUM,Lights / Electric,pcs,4,creative,110,,
+562,LED SILVER BIG,Lights / Electric,pcs,5,creative,110,,
+563,LED SILVER SMALL,Lights / Electric,pcs,5,creative,110,,
+564,LED WOODEN SMALL,Lights / Electric,pcs,6,creative,110,,
+565,LED WOODEN MEDIUM,Lights / Electric,pcs,4,creative,110,,
+566,LED WOODEN LARGE,Lights / Electric,pcs,2,creative,110,,
+567,CANDLE HOLDER SMALL GOLD,Lights / Electric,pcs,8,creative,110,,
+568,CANDLE HOLDER BIG GOLD,Lights / Electric,pcs,8,creative,110,,
+569,ROSE WHITE,Silk Flowers,pcs,1434,creative,340,,
+570,HYDRA WHITE,Silk Flowers,pcs,1516,creative,340,,
+571,PEONY WHITE,Silk Flowers,pcs,1798,creative,340,,
+572,PALEONOPSIS WHITE,Silk Flowers,pcs,18,creative,340,,
+573,ROSE BURGUNDY,Silk Flowers,pcs,694,creative,340,,
+574,HYDRA RED,Silk Flowers,pcs,3603,creative,340,,
+575,ROSE BLUE,Silk Flowers,pcs,798,creative,340,,
+576,HYDRA BW,Silk Flowers,pcs,1101,creative,340,,
+577,ROSE LIGHT BLUE,Silk Flowers,pcs,79,creative,340,,
+578,HYDRA BLUE,Silk Flowers,pcs,845,creative,340,,
+579,HYDRA PINK,Silk Flowers,pcs,1908,creative,340,,
+580,DHALIA PINK,Silk Flowers,pcs,146,creative,340,,
+581,PEONY PEACH,Silk Flowers,pcs,73,creative,340,,
+582,ROSE PEACH,Silk Flowers,pcs,2460,creative,340,,
+583,HYDRA PEACH,Silk Flowers,pcs,111,creative,340,,
+584,OLD ROSE,Silk Flowers,pcs,831,creative,340,,
+585,DHALIA PURPLE,Silk Flowers,pcs,105,creative,340,,
+586,HYDRA PURPLE,Silk Flowers,pcs,1224,creative,340,,
+587,HYDRA DARK PURPLE,Silk Flowers,pcs,21,creative,340,,
+588,ROSE DARK PURPLE,Silk Flowers,pcs,4,creative,340,,
+589,FILLERS PURPLE,Silk Flowers,pcs,16,creative,340,,
+590,ROSE NUDE LILAC,Silk Flowers,pcs,339,creative,340,,
+591,ROSE ORANGE,Silk Flowers,pcs,1734,creative,340,,
+592,PEONY ORANGE,Silk Flowers,pcs,1039,creative,340,,
+593,HYDRA GREEN,Silk Flowers,pcs,305,creative,340,,
+594,ROSE YELLOW,Silk Flowers,pcs,956,creative,340,,
+595,HYDRA ROYAL BLUE,Silk Flowers,pcs,489,creative,340,,
+596,ROSE ROYAL BLUE,Silk Flowers,pcs,44,creative,340,,
+597,ROSE DARK PURPLE,Silk Flowers,pcs,30,creative,340,,
+598,DHALIA PINK,Silk Flowers,pcs,794,creative,340,,
+599,PEONY LIGHT BLUE,Silk Flowers,pcs,144,creative,340,,
+600,HYDRA LIGHT BLUE,Silk Flowers,pcs,33,creative,340,,
+601,ROSE GREEN,Silk Flowers,pcs,42,creative,340,,
+602,LEAVES ASSORTED TROPICAL,Silk Flowers,pcs,983,creative,340,,
+603,HYDRA MAUVE,Silk Flowers,pcs,1203,creative,340,,
+604,PALEONOPSIS PURPLE,Silk Flowers,pcs,75,creative,340,,
+605,PALEONOPSIS YELLOW,Silk Flowers,pcs,45,creative,340,,
+606,PALEONOPSIS PEACH,Silk Flowers,pcs,19,creative,340,,
+607,ROSE LIGHT,Silk Flowers,pcs,456,creative,340,,
+608,HYDRA YELLOW,Silk Flowers,pcs,562,creative,340,,
+609,HYDRA LILAC,Silk Flowers,pcs,54,creative,340,,
+610,EUCALPTUS BURGUNDY,Silk Flowers,bundles,50,creative,340,,
+611,PEONY PINK,Silk Flowers,pcs,680,creative,340,,
+612,HYDRA LIGHT PURPLE,Silk Flowers,pcs,731,creative,340,,
+613,GREEN DOLLAR,Miscellaneous,pcs,2,creative,250,,
+614,LEAVES AUTUMN,Miscellaneous,pcs,3,creative,250,,
+615,GRASS MAT GREEN,Miscellaneous,pcs,4,creative,250,,
+616,DELPHINION WHITE,Miscellaneous,pcs,155,creative,250,,
+617,FLOWER MAT,Miscellaneous,pcs,226,creative,250,,
+618,CHLOROVINE PINK,Miscellaneous,pcs,1263,creative,250,,
+619,LEAVES GOLD,Miscellaneous,pcs,273,creative,250,,
+620,PIN PILLAR,Miscellaneous,pcs,118,creative,250,,
+621,FERN PURPLE,Miscellaneous,pcs,1,creative,250,,
+622,LEAVES ASSORTED GREEN,Miscellaneous,pcs,321,creative,250,,
+623,DHALIA WHITE,Miscellaneous,pcs,331,creative,250,,
+624,DHALIA PEACH,Miscellaneous,pcs,3,creative,250,,
+625,CHROME / GOLD CHROME,Miscellaneous,pcs,18,creative,250,,
+626,CHROME GOLD (SIR ALEX),Miscellaneous,pcs,16,creative,250,,
+627,CHROME SMALL,Miscellaneous,pcs,11,creative,250,,
+628,SLIM SILVER,Miscellaneous,pcs,62,creative,250,,2 s; 4 m; 7 l; 3 xl
+629,CAKE STAND,Miscellaneous,pcs,44,creative,250,,
+630,BOOK,Miscellaneous,pcs,31,creative,250,,
+631,CROWN,Miscellaneous,pcs,8,creative,250,,
+632,BIRD CAGE,Miscellaneous,pcs,1,creative,250,,21 big; 7 small
+633,BIRD CAGE BUTTERFLY,Miscellaneous,,30,creative,250,,
+634,PEARLA STAND,Miscellaneous,pcs,5,creative,250,,
+635,WEIGHING SCALE SMALL,Miscellaneous,pcs,12,creative,250,,
+636,REINDEER WHITE,Miscellaneous,pcs,25,creative,250,,
+637,MARACAS,Miscellaneous,pcs,22,creative,250,,
+638,FRUITS,Miscellaneous,pcs,6,creative,250,,
+639,GOLD STAR,Miscellaneous,pcs,11,creative,250,,
+640,BASKET ASSORTED,Miscellaneous,pcs,102,creative,250,,
+641,VASE WHITE BIG,Miscellaneous,pcs,45,creative,250,,
+642,VASE WHITE SMALL,Miscellaneous,pcs,21,creative,250,,
+643,TIN CAN,Miscellaneous,pcs,2,creative,250,,
+644,SQUARE,Miscellaneous,pcs,13,creative,250,,
+645,CANS,Miscellaneous,pcs,27,creative,250,,
+646,CHARGER PLATE METAL,Miscellaneous,pcs,20,creative,250,,
+647,PILLAR SHORT,Miscellaneous,pcs,7,creative,250,,
+648,TUBULAR SMALL,Miscellaneous,pcs,11,creative,250,,
+649,RECTANGULAR CATHEDRAL,Miscellaneous,pcs,8,creative,250,,
+650,TOPIARY BIG STAND / TOPIARY LONG,Miscellaneous,pcs,3,creative,250,,
+651,TOPIARY SMALL,Miscellaneous,pcs,30,creative,250,,
+652,BIRD CAGE HEAD ONLY,Miscellaneous,pcs,6,creative,250,,
+653,SCREEN PANNEL,Miscellaneous,pcs,4,creative,250,,
+654,PODIUM,Miscellaneous,pcs,22,creative,250,,
+655,RUSTIC PANNEL,Miscellaneous,pcs,24,creative,250,,
+656,URN STAND SMALL,Miscellaneous,pcs,334,creative,250,,
+657,URN MIDDLE BIG,Miscellaneous,pcs,9,creative,250,,
+658,URN STAND BIG,Miscellaneous,pcs,8,creative,250,,
+659,URN MEDIUM,Miscellaneous,pcs,18,creative,250,,
+660,URN MIDDLE MEDIUM,Miscellaneous,pcs,15,creative,250,,
+661,URN STAND MEDIUM,Miscellaneous,pcs,18,creative,250,,
+662,CHRISTMAS BALLS GOLD,Miscellaneous,pcs,377,creative,250,,
+663,CHRISTMAS BALLS RED,Miscellaneous,pcs,260,creative,250,,
+664,CHRISTMAS BALLS SILVER,Miscellaneous,pcs,394,creative,250,,
+665,SPIKES SILVER,Miscellaneous,pcs,5,creative,250,,
+666,SPIKES SILVER HEAD,Miscellaneous,pcs,101,creative,250,,
+667,SPIKES GOLD,Miscellaneous,pcs,249,creative,250,,
+668,SPIKES GOLD HEAD,Miscellaneous,pcs,18,creative,250,,
+669,MIRROR BALLS BIG GOLD,Miscellaneous,pcs,11,creative,250,,
+670,CRATES CANDLE HOLDER,Miscellaneous,pcs,59,creative,250,,
+671,CRATES PEARLA GLASS,Miscellaneous,pcs,5,creative,250,,
+672,ARTIFICIAL GRAPES,Miscellaneous,pcs,35,creative,250,,
+673,METEOR LIGHTS,Lights / Electric,pcs,2,creative,340,,
+674,BUKILYA BULB,Lights / Electric,pcs,9,creative,340,,
+675,BULB,Lights / Electric,pcs,9,creative,200,,
+676,SIR ALEX LED CANDLE,Lights / Electric,pcs,6,creative,200,,292 16 big; 13 small (Used 2025 count)
+677,SIR ALEX MARBLE TOPPER,Plastic/Ceramic,pcs,182,creative,200,,
+678,BEAR,Miscellaneous,pcs,0,creative,200,,
+679,MACHINE PUMP,Miscellaneous,pcs,3,creative,200,,
+680,MANUAL PUMP,Miscellaneous,pcs,3,creative,200,,
+681,GLUE GUN,Miscellaneous,pcs,4,creative,200,,
+682,BLACK BOX BODY SMALL,Miscellaneous,pcs,36,creative,200,,
+683,BLACK BOX BODY MEDIUM,Miscellaneous,pcs,125,creative,200,,
+684,BLACK BOX BODY LARGE,Miscellaneous,pcs,373,creative,200,,
+685,BLACK BOX LID SMALL,Miscellaneous,pcs,74,creative,200,,
+686,BLACK BOX LID MEDIUM,Miscellaneous,pcs,3,creative,200,,
+687,BLACK BOX LID LARGE,Miscellaneous,pcs,37,creative,200,,
+688,WHITE BOX BODY BIG,Miscellaneous,pcs,10,creative,200,,
+689,WHITE BOX LID BIG,Miscellaneous,pcs,3,creative,200,,
+690,WHITE BOX BODY SMALL,Miscellaneous,pcs,27,creative,200,,
+691,WHITE BOX LID BIG,Miscellaneous,pcs,1,creative,200,,
+692,STYRO BOX,Miscellaneous,pcs,1,creative,200,,
+693,EUCALYPTUS GREEN / TRUE BLUE,Silk Flowers,pcs,818,creative,400,,
+694,BOUGAINVILLEA RED,Silk Flowers,pcs,167,creative,400,,
+695,TABACCO BLUE,Silk Flowers,pcs,101,creative,400,,
+696,PEONY BURGUNDY SMALL,Silk Flowers,pcs,16,creative,400,,
+697,PEONY PURPLE SMALL,Silk Flowers,pcs,52,creative,400,,
+698,PILLARS LILAC,Silk Flowers,pcs,64,creative,400,,
+699,WESTERIA LILAC,Silk Flowers,pcs,226,creative,400,,
+700,FLOWERS ORANGE,Silk Flowers,pcs,146,creative,400,,
+701,EUCALYPTUS PINK,Silk Flowers,pcs,139,creative,400,,
+702,EUCALYPTUS BLUE,Silk Flowers,stems,966,creative,400,,
+703,EUCALYPTUS GOLD,Silk Flowers,pcs,190,creative,400,,
+704,PURPLE LEAVES,Silk Flowers,pcs,69,creative,400,,
+705,CHERRY BLOSSOM WHITE,Silk Flowers,pcs,9,creative,400,,
+706,CHLOROVINE RED,Silk Flowers,pcs,267,creative,400,,
+707,CHLOROVINE GREEN,Silk Flowers,pcs,77,creative,400,,
+708,LEAVES GREEN,Silk Flowers,pcs,972,creative,400,,
+709,PEONY BLUE SMALL,Silk Flowers,pcs,32,creative,400,,
+710,HYDRA OLD ROSE,Silk Flowers,pcs,148,creative,400,,
+711,ASTER,Silk Flowers,pcs,122,creative,400,,
+712,MIRROR BALL SILVER SMALL,Glass / Fragile,pcs,8,creative,200,,
+713,CLEAR BOTTLE / CLEAR BOX BOTTLE,Glass / Fragile,pcs,24,creative,200,,
+714,BOTTLE COLOGNE,Glass / Fragile,pcs,65,creative,200,,
+715,BOTTLE GREEN,Glass / Fragile,pcs,11,creative,200,,
+716,VASE BLACK,Plastic/Ceramic,pcs,23,creative,200,,
+717,PROPS ENGLISH,Miscellaneous,pcs,321,creative,200,,
+718,VASE CYLINDRICAL XL,Glass / Fragile,pcs,14,creative,200,,
+719,VASE ASSORTED CLEAR,Glass / Fragile,pcs,26,creative,200,,
+720,PROPS LONDON / TOPPER HOLDER,Metal Items,pcs,13,creative,200,,
+721,CLOTH WHITE,Miscellaneous,pcs,32,creative,200,,
+722,BUBBLE SILVER,Glass / Fragile,pcs,10,creative,200,,
+723,CANDLE BIG,Lights / Electric,pcs,98,creative,200,,
+724,CHERRY BLOSSOM TREE,Silk Flowers,sets,21,creative,200,,
+725,ORCHIDS WHITE,Silk Flowers,pcs,551,creative,200,,
+726,CONE SILVER,Metal Items,sets,8,creative,200,,
+727,CANDLE VIGIL LED,Lights / Electric,pcs,11,creative,200,,
+728,METAL RING,Metal Items,pcs,8,creative,200,,
+729,PAMELA BY 2,Metal Items,sets,39,creative,200,,
+730,CANDLE STICK LED,Lights / Electric,pcs,21,creative,200,,
+731,CHLOROVINE WHITE,Silk Flowers,pcs,50,creative,200,,
+732,WHITE BOX,Miscellaneous,pcs,110,creative,200,,
+733,BLACK BOX,Miscellaneous,pcs,61,creative,200,,
+734,METAL RING RIGHT SCREEN,Metal Items,sets,1,creative,200,,
+735,PEARLA GLASS / STAND,Glass / Fragile,sets,17,creative,200,,
+736,PAMELA BY 3,Metal Items,sets,17,creative,200,,
+737,ROSE LILAC,Silk Flowers,pcs,1,creative,200,,
+738,CANDLE HOLDER MARBLE,Plastic/Ceramic,pcs,6,creative,200,,6 s; 6 m; 5 l
+739,CERAMIC ROUND,Plastic/Ceramic,pcs,385,creative,200,,
+740,CERAMIC LARGE,Plastic/Ceramic,pcs,31,creative,200,,
+741,CERAMIC SUCCULENT,Plastic/Ceramic,pcs,204,creative,200,,
+742,CERAMIC SMALL,Plastic/Ceramic,pcs,81,creative,200,,
+743,CERAMIC DECANTER,Plastic/Ceramic,pcs,390,creative,200,,
+744,CERAMIC LONG,Plastic/Ceramic,pcs,157,creative,200,,
+745,CERAMIC MEDIUM,Plastic/Ceramic,pcs,271,creative,200,,
+746,MIRROR BALL SILVER MEDIUM,Glass / Fragile,pcs,152,creative,200,,
+747,MIRROR BALL SILVER SMALL,Glass / Fragile,pcs,16,creative,200,,
+748,GREEK URN,Plastic/Ceramic,pcs,71,creative,200,,
+749,CANDLE HOLDER CAPIZ,Lights / Electric,pcs,95,creative,200,,5 m; 96 s
+750,CANDLE HOLDER CAPIZ SMALL,Lights / Electric,pcs,94,creative,200,,
+751,CANDLE HOLDER CAPIZ MEDIUM,Lights / Electric,pcs,94,creative,200,,
+752,ROUND SMALL BOTTLE RACKS,Glass / Fragile,pcs,95,creative,200,,
+753,ROUND SMALL BOTTLE,Glass / Fragile,pcs,84,creative,200,,
+754,CYLINDRICAL SLIM SMALL,Glass / Fragile,pcs,326,creative,200,,
+755,CYLINDRICAL SLIM MEDIUM,Glass / Fragile,pcs,367,creative,200,,
+756,POTS TERRACOTA,Plastic/Ceramic,pcs,39,creative,200,,
+757,POTS PEACH,Plastic/Ceramic,pcs,308,creative,200,,
+758,SQUARE MIRROR BOX SMALL,Glass / Fragile,pcs,46,creative,200,,
+759,SQUARE MIRROR BOX LARGE,Glass / Fragile,pcs,47,creative,200,,
+760,RECTANGULAR BOX,Glass / Fragile,pcs,20,creative,200,,
+761,BOTTLE SMALL,Glass / Fragile,pcs,90,creative,200,,
+762,DOME GLASS,Glass / Fragile,pcs,158,creative,200,,
+763,DOME GLASS HOLDER,Glass / Fragile,pcs,177,creative,200,,
+764,ROUND BIG BASKET RATTAN FILIPINIANA,Wood/Rattan Items,pcs,1,creative,200,,
+765,SOLIHIYA,Wood/Rattan Items,pcs,6,creative,200,,
+766,CAPIZ,Lights / Electric,pcs,1320,creative,200,,
+767,CAPIZ CHANDELIER,Lights / Electric,pcs,2,creative,200,,
+768,NYLON BAG / SAKO BAG,Miscellaneous,pcs,20,creative,200,,
+769,GYPSO WHITE,Silk Flowers,pcs,63,creative,200,,
+770,ROSE SINGLE BEIGE,Silk Flowers,pcs,168,creative,200,,
+771,ROSE SINGLE PINK,Silk Flowers,pcs,218,creative,200,,
+772,CARNATION PINK,Silk Flowers,pcs,37,creative,200,,
+773,CARNATION WHITE,Silk Flowers,pcs,60,creative,200,,
+774,PAKOLITO,Silk Flowers,pcs,853,creative,200,,
+775,CHERRY BLOSSOM PINK,Silk Flowers,stems,61,creative,200,,
+776,EUCALYPTUS MAROON,Silk Flowers,stems,50,creative,200,,
+777,DHALIA BROWN,Silk Flowers,pcs,200,creative,200,,
+778,ROSE BROWN,Silk Flowers,pcs,433,creative,200,,
+779,FILLERS ASSORTED,Silk Flowers,pcs,579,creative,200,,
+780,POMPOMS WHITE,Silk Flowers,pcs,71,creative,200,,
+781,CRYSTAL BEADS,Miscellaneous,kilos,6.5,creative,200,,
+782,POMPOMS LIGHT BLUE,Silk Flowers,pcs,293,creative,200,,
+783,HYDRA GRAY,Silk Flowers,pcs,955,creative,200,,
+784,CYLINDRICAL VASE SMALL,Glass / Fragile,pcs,11,creative,200,,
+785,CYLINDRICAL VASE BIG,Glass / Fragile,pcs,7,creative,200,,
+786,BEEHIVE GLASS,Glass / Fragile,pcs,1,creative,200,,
+787,STYRO CUTTER SINGLE,Miscellaneous,pcs,5,creative,200,,
+788,STYRO CUTTER DOUBLE,Miscellaneous,pcs,3,creative,200,,
+789,SCREW GUN,Miscellaneous,pcs,2,creative,200,,
+790,EFTH BOX w/ LOCK,Miscellaneous,pcs,12,creative,200,,
+791,EIFFEL TOWER,Plastic/Ceramic,pcs,3,creative,200,,
+792,ROCKS,Miscellaneous,pcs,81,creative,200,,
+793,POMPOMS ORANGE,Silk Flowers,pcs,121,creative,200,,
+794,LOG BIG,Wood/Rattan Items,pcs,39,creative,200,,
+795,PINE CONES,Miscellaneous,pcs,11,creative,200,,
+796,LEAVES GREEN / BANANA LEAVES,Silk Flowers,pcs,81,creative,200,,
+797,CEMENT URN HEAD,Plastic/Ceramic,pcs,21,creative,200,,
+798,CEMENT URN BASE,Plastic/Ceramic,pcs,18,creative,200,,
+799,BOTTLE SEXY,Glass / Fragile,pcs,11,creative,200,,
+800,BLACK URN HEAD,Plastic/Ceramic,pcs,85,creative,200,,
+801,BLACK URN BASE,Plastic/Ceramic,pcs,36,creative,200,,
+802,SILVER URN HEAD,Plastic/Ceramic,pcs,67,creative,200,,
+803,SILVER URN BASE,Plastic/Ceramic,pcs,90,creative,200,,
+804,ERLENMEYER,Glass / Fragile,pcs,5,creative,200,,
+805,CANDLE HOLDER SHOT GLASS,Glass / Fragile,pcs,266,creative,200,,
+806,BANIG SQUARE,Wood/Rattan Items,pcs,4,creative,200,,
+807,CRYSTAL VASE MINI,Glass / Fragile,pcs,88,creative,200,,
+808,WHITE URN BASE,Plastic/Ceramic,pcs,326,creative,200,,
+809,CYLINDRICAL GOLD SMALL,Metal Items,pcs,3,creative,200,,
+810,CYLINDRICAL GOLD BIG,Metal Items,pcs,10,creative,200,,
+811,ROSE SINGLE RED,Silk Flowers,pcs,160,creative,200,,
+812,POINSETTIA,Silk Flowers,pcs,374,creative,200,,
+813,CLEAR BOTTLE / ABACA STRING,Glass / Fragile,pcs,15,creative,200,,
+814,SPIKES RED,Silk Flowers,pcs,45,creative,200,,
+815,ROSE FUCHSIA,Silk Flowers,pcs,547,creative,200,,
+816,ROSE SINGLE WHITE,Silk Flowers,pcs,552,creative,200,,
+817,BLUE WAX FLOWER,Silk Flowers,pcs,222,creative,200,,
+818,YELLOW DANCING LADY,Silk Flowers,pcs,30,creative,200,,
+819,ROSE SINGLE YELLOW,Silk Flowers,pcs,176,creative,200,,
+820,CHINESE LANTERN,Lights / Electric,pcs,11,creative,200,,
+821,VIETNAM LANTERN,Lights / Electric,pcs,19,creative,200,,
+822,DREAM CATCHER,Miscellaneous,pcs,19,creative,200,,
+823,VIETNAM BANDERITAS,Miscellaneous,pcs,5,creative,200,,
+824,VIETNAM DOLL,Miscellaneous,pcs,10,creative,200,,
+825,Fork CHINAWARE,Utensils,pcs,500,warehouse,200,,
+826,Fork GOLD (new),Utensils,pcs,50,warehouse,200,,
+827,FORK LIANYU,Utensils,pcs,300,warehouse,200,,
+828,Fork SET A,Utensils,set,100,warehouse,200,,
+829,Fork Vikings,Utensils,pcs,400,warehouse,200,,
+830,"Fork, Cocktail Fork LIANYU",Utensils,pcs,200,warehouse,200,,
+831,"Fork, Cocktail Fork SET A",Utensils,set,150,warehouse,200,,
+832,"Fork, Salad Fork GOLD (new)",Utensils,pcs,100,warehouse,200,,
+833,"Knife, Table Knife LIANYU",Utensils,pcs,250,warehouse,200,,
+834,"Knife, Steak Knife GOLD",Utensils,pcs,80,warehouse,200,,
+835,"Knife, Butter Knife GOLD",Utensils,pcs,120,warehouse,200,,
+836,Soup Ladle Short,Utensils,pcs,25,warehouse,200,,
+837,Serving Spoon LIANYU,Utensils,pcs,150,warehouse,200,,
+838,Teaspoon LIANYU,Utensils,pcs,200,warehouse,200,,
+839,Teaspoon GOLD (new),Utensils,pcs,50,warehouse,200,,
+840,"Scooper, Ice Scooper",Utensils,pcs,10,warehouse,200,,
+841,"Tong, Bread Tong",Utensils,pcs,20,warehouse,200,,
+842,"Tong, Stainless Tong",Utensils,pcs,25,warehouse,200,,
+843,"Plate, Dinner Plate Queen White",Tableware,pcs,500,warehouse,200,,
+844,"Plate, Salad Plate Floral",Tableware,pcs,300,warehouse,200,,
+845,"Plate, Dinner Plate Vintage Round",Tableware,pcs,200,warehouse,200,,
+846,"Bowl, Soup Bowl with Handle",Tableware,pcs,150,warehouse,200,,
+847,"Bowl, Rice Bowl",Tableware,pcs,250,warehouse,200,,
+848,Soy Dish Small,Tableware,pcs,100,warehouse,200,,
+849,"Cup, Coffee Cups",Tableware,pcs,200,warehouse,200,,
+850,Saucer,Tableware,pcs,200,warehouse,200,,
+851,Dessert Platter Medium,Tableware,pcs,50,warehouse,200,,
+852,"Cup, Glass Cup Short",Tableware,pcs,150,warehouse,200,,
+853,"Cup, Glass Cup Tall",Tableware,pcs,150,warehouse,200,,
+854,"Cup, Shot Glass",Tableware,pcs,100,warehouse,200,,
+855,"Cup, Wine Glass",Tableware,pcs,100,warehouse,200,,
+856,"Cup, Champagne Glass",Tableware,pcs,80,warehouse,200,,
+857,"Cup, Margarita Glass",Tableware,pcs,60,warehouse,200,,
+858,"Cup, Martini Glass",Tableware,pcs,60,warehouse,200,,
+859,"Cup, Water Goblet",Tableware,pcs,100,warehouse,200,,
+860,"Cup, Whiskey Glass",Tableware,pcs,50,warehouse,200,,
+861,"Cup, Beer Mug",Tableware,pcs,80,warehouse,200,,
+862,"Cup, Punch Bowl Glass",Tableware,pcs,10,warehouse,200,,
+863,"Cup, Tea Cup w/ Saucer",Tableware,set,50,warehouse,200,,
+864,Chafing Dish Oval,Cookware,pcs,25,warehouse,200,,
+865,Chafing Dish Rectangular,Cookware,pcs,25,warehouse,200,,
+866,Chafing Dish Round,Cookware,pcs,15,warehouse,200,,
+867,Soup Warmer Electric,Cookware,pcs,10,warehouse,200,,
+868,Butane Stove,Cookware,pcs,8,warehouse,200,,
+869,Induction,Cookware,pcs,5,warehouse,200,,
+870,Pizza Oven,Cookware,pcs,2,warehouse,200,,
+871,"Griller, Charcoal Griller",Cookware,pcs,5,warehouse,200,,
+872,"Griller, Electric Griller",Cookware,pcs,5,warehouse,200,,
+873,"Fountain, Chocolate Fountain",Cookware,pcs,2,warehouse,200,,
+874,Food Lamp Big,Cookware,pcs,10,warehouse,200,,
+875,Heat Lamp w/ Bulb,Cookware,pcs,15,warehouse,200,,
+876,Butane Canister,Cookware,box,20,warehouse,200,,
+877,"Kettle, Electric Kettle",Cookware,pcs,8,warehouse,200,,
+878,"Mixer, Hand Mixer",Cookware,pcs,10,warehouse,200,,
+879,Blender,Cookware,pcs,5,warehouse,200,,
+880,Rice Cooker,Cookware,pcs,5,warehouse,200,,
+881,Pressure Cooker,Cookware,pcs,3,warehouse,200,,
+882,Frying Pan Non-Stick,Cookware,pcs,10,warehouse,200,,
+883,Sauce Pan Medium,Cookware,pcs,10,warehouse,200,,
+884,"Tray, Stainless Tray",Cookware,pcs,20,warehouse,200,,
+885,Measuring Cup Set,Cookware,set,10,warehouse,200,,
+886,Spatula Stainless,Cookware,pcs,15,warehouse,200,,
+887,Whisk,Cookware,pcs,15,warehouse,200,,
+888,Rolling Pin,Cookware,pcs,10,warehouse,200,,
+889,Colander,Cookware,pcs,10,warehouse,200,,
+890,Cutting Board Plastic,Cookware,pcs,20,warehouse,200,,
+891,"Knife, Chef Knife",Cookware,pcs,15,warehouse,200,,
+892,Apron,Cookware,pcs,50,warehouse,200,,
+893,"Vase, Gold Vase",Decor,pcs,30,warehouse,200,,
+894,"Vase, Iron Vase Big",Decor,pcs,10,warehouse,200,,
+895,"Vase, Mallow Vase (Big)",Decor,pcs,15,warehouse,200,,
+896,Gold Candle Holder Set,Decor,set,25,warehouse,200,,
+897,Silver Sculpture Small,Decor,pcs,20,warehouse,200,,
+898,Buddha,Decor,pcs,5,warehouse,200,,
+899,Hydrangea White Big,Decor,pcs,50,warehouse,200,,
+900,Tulips Red,Decor,pcs,50,warehouse,200,,
+901,Tulips White,Decor,pcs,50,warehouse,200,,
+902,Artificial Green Leaves,Decor,pcs,100,warehouse,200,,
+903,Decorative Pebbles,Decor,bag,30,warehouse,200,,
+904,Fairy Lights String,Decor,pcs,40,warehouse,200,,
+905,Table Runner Gold,Decor,pcs,50,warehouse,200,,
+906,Table Runner White,Decor,pcs,50,warehouse,200,,
+907,Curtain White,Decor,pcs,20,warehouse,200,,
+908,Curtain Gold,Decor,pcs,15,warehouse,200,,
+909,"Frame, Mirror Frame Small",Decor,pcs,20,warehouse,200,,
+910,"Frame, Mirror Frame Large",Decor,pcs,10,warehouse,200,,
+911,"Candle, Pillar Candle",Decor,pcs,60,warehouse,200,,
+912,"Candle, Tea Light",Decor,box,100,warehouse,200,,
+913,Crystal Beads Garland,Decor,roll,25,warehouse,200,,
+914,Carpet Red Runner,Decor,pcs,5,warehouse,200,,
+915,Crates Blue #1680,Containers,pcs,50,warehouse,200,,
+916,Crates Red #2829,Containers,pcs,50,warehouse,200,,
+917,Crates Yellow #1680,Containers,pcs,50,warehouse,200,,
+918,Storage Bin Large,Containers,pcs,30,warehouse,200,,
+919,Storage Bin Small,Containers,pcs,50,warehouse,200,,
+920,Ice Bucket,Containers,pcs,20,warehouse,200,,
+921,Cooler Box Large,Containers,pcs,10,warehouse,200,,
+922,Cooler Box Small,Containers,pcs,20,warehouse,200,,
+923,Basket Wicker Medium,Containers,pcs,15,warehouse,200,,
+924,Basket Wicker Large,Containers,pcs,10,warehouse,200,,
+925,Garbage Bin Black,Containers,pcs,15,warehouse,200,,
+926,Garbage Bin Green,Containers,pcs,15,warehouse,200,,
+927,Laundry Basket,Containers,pcs,10,warehouse,200,,
+928,Tool Box Medium,Containers,pcs,10,warehouse,200,,
+929,Drawer Organizer,Containers,pcs,20,warehouse,200,,
+930,Plastic Tub Medium,Containers,pcs,15,warehouse,200,,
+931,Plastic Tub Large,Containers,pcs,10,warehouse,200,,
+932,Ice Chest with Drain,Containers,pcs,5,warehouse,200,,
+933,"Tray, Oval Bar Tray",Containers,pcs,20,warehouse,200,,
+934,"Tray, Rectangular",Containers,pcs,20,warehouse,200,,
+935,"Tray, Wooden Tray w/ Handle",Containers,pcs,15,warehouse,200,,
+936,Table 4x4,Tables,pcs,15,warehouse,200,,
+937,Table 4x8,Tables,pcs,10,warehouse,200,,
+938,Table Long,Tables,pcs,5,warehouse,200,,
+939,Table Rectangular,Tables,pcs,10,warehouse,200,,
+940,Table Round,Tables,pcs,20,warehouse,200,,
+941,Table Round Big,Tables,pcs,10,warehouse,200,,
+942,Table Half Moon,Tables,pcs,5,warehouse,200,,
+943,Table Square,Tables,pcs,10,warehouse,200,,
+944,Table Cocktail Metal,Tables,pcs,5,warehouse,200,,
+945,Table Cocktail Wood,Tables,pcs,5,warehouse,200,,
+946,Table Kiddie Wooden,Tables,pcs,10,warehouse,200,,
+947,Table Rustic,Tables,pcs,5,warehouse,200,,
+948,Table White Lifetime 6 FT (Plastic),Tables,pcs,15,warehouse,200,,
+949,Table Stand,Tables,pcs,20,warehouse,200,,
+950,Table Stand Kiddie,Tables,pcs,10,warehouse,200,,
+951,Table Stand Long,Tables,pcs,10,warehouse,200,,
+952,Table Stand Low,Tables,pcs,5,warehouse,200,,
+953,Table Stand Regular,Tables,pcs,20,warehouse,200,,
+954,Table Stand Short,Tables,pcs,10,warehouse,200,,
+955,Platform,Staging,pcs,5,warehouse,200,,
+956,Platform 4x4 1 FT,Staging,pcs,10,warehouse,200,,
+957,Platform 4x4 2 FT,Staging,pcs,8,warehouse,200,,
+958,Platform 4x8 1 FT,Staging,pcs,5,warehouse,200,,
+959,Platform 4x8 2 FT,Staging,pcs,3,warehouse,200,,
+960,Platform Square,Staging,pcs,10,warehouse,200,,
+961,Platform Half 2 FT,Staging,pcs,5,warehouse,200,,
+962,Platform Whole 1 FT,Staging,pcs,5,warehouse,200,,
+963,Trolley Blue,Equipment,pcs,5,warehouse,200,,
+964,Trolley Gray,Equipment,pcs,5,warehouse,200,,
+965,Trolley Red,Equipment,pcs,5,warehouse,200,,
+966,Chair Tiffany Gold,Chairs,pcs,50,warehouse,200,,
+967,Chair Tiffany Silver,Chairs,pcs,50,warehouse,200,,
+968,Chair Tiffany White,Chairs,pcs,50,warehouse,200,,
+969,Chair Tiffany Black,Chairs,pcs,50,warehouse,200,,
+970,Chair Monoblock White,Chairs,pcs,100,warehouse,200,,
+971,Chair Monoblock Blue,Chairs,pcs,50,warehouse,200,,
+972,Chair Monoblock Red,Chairs,pcs,50,warehouse,200,,
+973,Chair Monoblock Green,Chairs,pcs,50,warehouse,200,,
+974,Chair Rustic Wood,Chairs,pcs,30,warehouse,200,,
+975,Chair Kiddie Wooden,Chairs,pcs,20,warehouse,200,,
+976,Chair White Lifetime,Chairs,pcs,50,warehouse,200,,
+977,Chair Folding Metal,Chairs,pcs,50,warehouse,200,,
+978,Chair Folding Wood,Chairs,pcs,30,warehouse,200,,
+979,Stool Bar,Chairs,pcs,20,warehouse,200,,
+980,Stool Bar Wooden,Chairs,pcs,10,warehouse,200,,
+981,Bench Wooden,Chairs,pcs,20,warehouse,200,,
+982,Sofa 3 Seater,Chairs,pcs,5,warehouse,200,,
+983,"Speaker 12"" Passive",Audio & Lighting,pcs,10,warehouse,200,,
+984,"Speaker 15"" Passive",Audio & Lighting,pcs,8,warehouse,200,,
+985,"Speaker 12"" Active",Audio & Lighting,pcs,10,warehouse,200,,
+986,"Speaker 15"" Active",Audio & Lighting,pcs,6,warehouse,200,,
+987,"Subwoofer 18""",Audio & Lighting,pcs,4,warehouse,200,,
+988,Mixer 12-Channel,Audio & Lighting,pcs,3,warehouse,200,,
+989,Mixer 16-Channel,Audio & Lighting,pcs,2,warehouse,200,,
+990,Microphone Wired,Audio & Lighting,pcs,15,warehouse,200,,
+991,Microphone Wireless,Audio & Lighting,pcs,10,warehouse,200,,
+992,Microphone Stand,Audio & Lighting,pcs,15,warehouse,200,,
+993,LED Par Light,Audio & Lighting,pcs,20,warehouse,200,,
+994,Moving Head Light,Audio & Lighting,pcs,8,warehouse,200,,
+995,DMX Controller,Audio & Lighting,pcs,3,warehouse,200,,
+996,Fog Machine,Audio & Lighting,pcs,2,warehouse,200,,
+997,Laser Light,Audio & Lighting,pcs,2,warehouse,200,,
+998,PA Stand,Audio & Lighting,pcs,10,warehouse,200,,
+999,Amplifier 500W,Audio & Lighting,pcs,5,warehouse,200,,
+1000,Extension Cord 10m,Audio & Lighting,pcs,50,warehouse,200,,
+1001,Cable XLR 5m,Audio & Lighting,pcs,50,warehouse,200,,
+1002,Cable Speaker 10m,Audio & Lighting,pcs,40,warehouse,200,,
+1003,Cable Power 5m,Audio & Lighting,pcs,50,warehouse,200,,
+1004,Gas Stove 2-Burner,Kitchen & Catering,pcs,5,warehouse,200,,
+1005,Gas Stove 4-Burner,Kitchen & Catering,pcs,3,warehouse,200,,
+1006,Oven Electric,Kitchen & Catering,pcs,4,warehouse,200,,
+1007,Oven Gas,Kitchen & Catering,pcs,2,warehouse,200,,
+1008,Refrigerator 300L,Kitchen & Catering,pcs,5,warehouse,200,,
+1009,Freezer 500L,Kitchen & Catering,pcs,3,warehouse,200,,
+1010,Rice Cooker 10L,Kitchen & Catering,pcs,5,warehouse,200,,
+1011,Rice Cooker 20L,Kitchen & Catering,pcs,3,warehouse,200,,
+1012,Food Warmer,Kitchen & Catering,pcs,5,warehouse,200,,
+1013,Chafing Dish,Kitchen & Catering,pcs,10,warehouse,200,,
+1014,Cutlery Set,Kitchen & Catering,set,20,warehouse,200,,
+1015,Serving Tray,Kitchen & Catering,pcs,25,warehouse,200,,
+1016,Mixing Bowl,Kitchen & Catering,pcs,30,warehouse,200,,
+1017,Blender,Kitchen & Catering,pcs,10,warehouse,200,,
+1018,Food Processor,Kitchen & Catering,pcs,5,warehouse,200,,
+1019,Coffee Maker,Kitchen & Catering,pcs,3,warehouse,200,,
+1020,Kettle Electric,Kitchen & Catering,pcs,5,warehouse,200,,
+1021,Toaster,Kitchen & Catering,pcs,5,warehouse,200,,
+1022,Ice Machine,Kitchen & Catering,pcs,2,warehouse,200,,
+1023,Water Dispenser,Kitchen & Catering,pcs,3,warehouse,200,,
+1024,Broom,Cleaning & Maintenance,pcs,20,warehouse,200,,
+1025,Mop,Cleaning & Maintenance,pcs,15,warehouse,200,,
+1026,Mop Bucket with Wringer,Cleaning & Maintenance,pcs,10,warehouse,200,,
+1027,Dustpan,Cleaning & Maintenance,pcs,20,warehouse,200,,
+1028,Vacuum Cleaner,Cleaning & Maintenance,pcs,5,warehouse,200,,
+1029,Floor Scrubber,Cleaning & Maintenance,pcs,2,warehouse,200,,
+1030,Cleaning Cloth,Cleaning & Maintenance,pcs,100,warehouse,200,,
+1031,Cleaning Brush,Cleaning & Maintenance,pcs,50,warehouse,200,,
+1032,Trash Bin 50L,Cleaning & Maintenance,pcs,20,warehouse,200,,
+1033,Trash Bag 50L,Cleaning & Maintenance,pcs,200,warehouse,200,,
+1034,Disinfectant Spray,Cleaning & Maintenance,pcs,50,warehouse,200,,
+1035,Floor Cleaner,Cleaning & Maintenance,pcs,30,warehouse,200,,
+1036,Window Cleaner,Cleaning & Maintenance,pcs,30,warehouse,200,,
+1037,Ladder 6ft,Cleaning & Maintenance,pcs,5,warehouse,200,,
+1038,Ladder 10ft,Cleaning & Maintenance,pcs,3,warehouse,200,,
+1039,Pressure Washer,Cleaning & Maintenance,pcs,2,warehouse,200,,
+1040,Squeegee,Cleaning & Maintenance,pcs,10,warehouse,200,,
+1041,Gloves Rubber,Cleaning & Maintenance,pcs,50,warehouse,200,,
+1042,Safety Goggles,Cleaning & Maintenance,pcs,30,warehouse,200,,
+1043,Signage “Wet Floor”,Cleaning & Maintenance,pcs,15,warehouse,200,,
+1044,Stapler,Miscellaneous / Office Supplies,pcs,10,warehouse,200,,
+1045,Staples,Miscellaneous / Office Supplies,box,50,warehouse,200,,
+1046,Paper Clips,Miscellaneous / Office Supplies,box,30,warehouse,200,,
+1047,Push Pins,Miscellaneous / Office Supplies,box,30,warehouse,200,,
+1048,Binder Clips,Miscellaneous / Office Supplies,box,20,warehouse,200,,
+1049,Whiteboard Markers,Miscellaneous / Office Supplies,pcs,30,warehouse,200,,
+1050,Eraser,Miscellaneous / Office Supplies,pcs,30,warehouse,200,,
+1051,Notepad,Miscellaneous / Office Supplies,pcs,50,warehouse,200,,
+1052,Sticky Notes,Miscellaneous / Office Supplies,pack,40,warehouse,200,,
+1053,Tape Dispenser,Miscellaneous / Office Supplies,pcs,10,warehouse,200,,
+1054,Scotch Tape,Miscellaneous / Office Supplies,roll,50,warehouse,200,,
+1055,Rubber Bands,Miscellaneous / Office Supplies,pack,40,warehouse,200,,
+1056,Calculator,Miscellaneous / Office Supplies,pcs,10,warehouse,200,,
+1057,Hole Punch,Miscellaneous / Office Supplies,pcs,5,warehouse,200,,
+1058,File Folder,Miscellaneous / Office Supplies,pcs,50,warehouse,200,,
+1059,Document Tray,Miscellaneous / Office Supplies,pcs,20,warehouse,200,,
+1060,Printer Paper,Miscellaneous / Office Supplies,ream,100,warehouse,200,,
+1061,Envelope,Miscellaneous / Office Supplies,pcs,200,warehouse,200,,
+1062,Label Sticker,Miscellaneous / Office Supplies,pack,50,warehouse,200,,
+1063,Whiteboard,Miscellaneous / Office Supplies,pcs,10,warehouse,200,,
+1064,ROMANTIC GARDEN,Theme Setup,,1,linen,15000,,
+1065,MODERN MINIMALIST,Theme Setup,,1,linen,15000,,
+1066,VINTAGE CLASSIC,Theme Setup,,1,linen,15000,,
+1067,BOHEMIAN CHIC,Theme Setup,,1,linen,15000,,
+1068,RUSTIC ELEGANCE,Theme Setup,,1,linen,15000,,
+1069,BEACH/TROPICAL,Theme Setup,,1,linen,15000,,
+1070,WINTER WONDERLAND,Theme Setup,,1,linen,15000,,
+1071,ART DECO,Theme Setup,,1,linen,15000,,
+1072,FAIRYTALE,Theme Setup,,1,linen,15000,,
+1073,INDUSTRIAL,Theme Setup,,1,linen,15000,,
+1074,GOLDEN GLAM,Theme Setup,,1,linen,15000,,
+1075,ROYAL ELEGANCE,Theme Setup,,1,linen,15000,,
+1076,GREENERY GARDEN,Theme Setup,,1,linen,15000,,
+1077,CRYSTAL DREAMS,Theme Setup,,1,linen,15000,,
+1078,ENCHANTED FOREST,Theme Setup,,1,linen,15000,,

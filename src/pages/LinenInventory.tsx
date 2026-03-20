@@ -8,14 +8,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import InventoryPagination from '@/components/InventoryPagination';
+import DepartmentProcurementPanel from '@/components/DepartmentProcurementPanel';
+import { buildGoogleImageSearchUrl } from '@/lib/photoSearch';
 import { toast } from 'sonner';
-import { Plus, Search, Edit2, Trash2, Shirt, AlertTriangle, Package, WashingMachine } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Shirt, AlertTriangle, Package, WashingMachine, ExternalLink } from 'lucide-react';
 
 const categories = ['Tablecloth', 'Napkin', 'Runner', 'Overlay', 'Chair Cover', 'Sash', 'Skirting', 'Other'];
 const sizes = ['small', 'medium', 'large', 'extra_large', 'round_60', 'round_72', 'round_90', 'banquet', 'custom'];
 const materials = ['Polyester', 'Satin', 'Cotton', 'Linen', 'Spandex', 'Taffeta', 'Organza', 'Velvet', 'Other'];
 const statuses = ['available', 'in_use', 'laundry', 'maintenance', 'retired'];
+const ITEMS_PER_PAGE = 12;
 
 interface LinenItem {
   _id: string;
@@ -26,6 +31,7 @@ interface LinenItem {
   material: string;
   color: string;
   images: { url: string; caption: string; isPrimary: boolean }[];
+  referenceUrl?: string;
   quantity: number;
   availableQuantity: number;
   minimumStock: number;
@@ -44,6 +50,7 @@ export default function LinenInventory() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<LinenItem | null>(null);
   const [stats, setStats] = useState({ total: 0, available: 0, inLaundry: 0, lowStock: 0 });
+  const [currentPage, setCurrentPage] = useState(1);
   const [formData, setFormData] = useState({
     name: '',
     category: '',
@@ -215,6 +222,27 @@ export default function LinenInventory() {
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / ITEMS_PER_PAGE));
+  const paginatedItems = filteredItems.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategory]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
+
+  const procurementItems = items.map((item) => ({
+    _id: item._id,
+    itemCode: item.itemCode,
+    name: item.name,
+    category: item.category,
+    quantity: item.quantity,
+    availableQuantity: item.availableQuantity,
+    minimumStock: item.minimumStock,
+    status: item.status,
+  }));
 
   return (
     <Layout>
@@ -345,164 +373,198 @@ export default function LinenInventory() {
           </Dialog>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Items</CardTitle>
-              <Package className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.total}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Available</CardTitle>
-              <Shirt className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{stats.available}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">In Laundry</CardTitle>
-              <WashingMachine className="h-4 w-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{stats.inLaundry}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Low Stock</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-red-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-600">{stats.lowStock}</div>
-            </CardContent>
-          </Card>
-        </div>
+        <Tabs defaultValue="inventory" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="inventory">Inventory</TabsTrigger>
+            <TabsTrigger value="reports">Purchasing Reports</TabsTrigger>
+          </TabsList>
 
-        <div className="flex flex-col gap-4 sm:flex-row">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search items by name, code, or color..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="w-full sm:w-48">
-              <SelectValue placeholder="All Categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {categories.map(cat => (
-                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="min-w-[300px]">Item</TableHead>
-                    <TableHead>Details</TableHead>
-                    <TableHead>Stock</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Price / Item</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredItems.map((item) => (
-                    <TableRow key={item._id}>
-                      <TableCell className="align-top">
-                        <div className="flex min-w-[280px] items-start gap-3">
-                          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md border bg-muted">
-                            {item.images[0]?.url ? (
-                              <img
-                                src={item.images[0].url}
-                                alt={item.name}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center">
-                                <Shirt className="h-5 w-5 text-muted-foreground" />
-                              </div>
-                            )}
-                          </div>
-                          <div className="space-y-1">
-                            <p className="font-medium">{item.name}</p>
-                            <p className="text-sm text-muted-foreground">{item.itemCode}</p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="align-top whitespace-normal">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap gap-2">
-                            <Badge variant="outline">{item.category}</Badge>
-                            <Badge variant="outline">{item.size.replace(/_/g, ' ')}</Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            {item.material} | {item.color}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="align-top">
-                        <div className="space-y-1 text-sm">
-                          <p className={`font-medium ${isLowStock(item) ? 'text-red-600' : ''}`}>
-                            {item.availableQuantity} available
-                          </p>
-                          <p className="text-muted-foreground">{item.quantity} total units</p>
-                          {isLowStock(item) ? (
-                            <div className="flex items-center gap-1 text-xs text-red-700">
-                              <AlertTriangle className="h-3.5 w-3.5" />
-                              Low stock
-                            </div>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                      <TableCell className="align-top">
-                        <Badge className={getStatusColor(item.status)}>
-                          {item.status.replace(/_/g, ' ')}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="align-top text-right font-medium">
-                        {formatCurrency(item.acquisition?.cost)}
-                      </TableCell>
-                      <TableCell className="align-top text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(item)}>
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteItem(item._id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+          <TabsContent value="inventory" className="space-y-6">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Items</CardTitle>
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.total}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Available</CardTitle>
+                  <Shirt className="h-4 w-4 text-green-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">{stats.available}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">In Laundry</CardTitle>
+                  <WashingMachine className="h-4 w-4 text-blue-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-blue-600">{stats.inLaundry}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Low Stock</CardTitle>
+                  <AlertTriangle className="h-4 w-4 text-red-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-red-600">{stats.lowStock}</div>
+                </CardContent>
+              </Card>
             </div>
-          </CardContent>
-        </Card>
 
-        {filteredItems.length === 0 && (
-          <div className="py-12 text-center">
-            <Shirt className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-            <h3 className="text-lg font-medium">No items found</h3>
-            <p className="text-muted-foreground">Try adjusting your search or filters</p>
-          </div>
-        )}
+            <div className="flex flex-col gap-4 sm:flex-row">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search items by name, code, or color..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="w-full sm:w-48">
+                  <SelectValue placeholder="All Categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {categories.map(cat => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Card>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="min-w-[300px]">Item</TableHead>
+                        <TableHead>Details</TableHead>
+                        <TableHead>Stock</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Price / Item</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedItems.map((item) => (
+                        <TableRow key={item._id}>
+                          <TableCell className="align-top">
+                            <div className="flex min-w-[280px] items-start gap-3">
+                              <a
+                                href={item.referenceUrl || buildGoogleImageSearchUrl(item.name, item.category)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-muted shadow-sm transition hover:opacity-95 hover:shadow-md"
+                              >
+                                {item.images[0]?.url ? (
+                                  <img
+                                    src={item.images[0].url}
+                                    alt={item.name}
+                                    className="h-full w-full object-cover object-center"
+                                  />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center">
+                                    <Shirt className="h-5 w-5 text-muted-foreground" />
+                                  </div>
+                                )}
+                              </a>
+                              <div className="space-y-1">
+                                <p className="font-medium">{item.name}</p>
+                                <p className="text-sm text-muted-foreground">{item.itemCode}</p>
+                                <a
+                                  href={item.referenceUrl || buildGoogleImageSearchUrl(item.name, item.category)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                  Photo references
+                                </a>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="align-top whitespace-normal">
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap gap-2">
+                                <Badge variant="outline">{item.category}</Badge>
+                                <Badge variant="outline">{item.size.replace(/_/g, ' ')}</Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {item.material} | {item.color}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="align-top">
+                            <div className="space-y-1 text-sm">
+                              <p className={`font-medium ${isLowStock(item) ? 'text-red-600' : ''}`}>
+                                {item.availableQuantity} available
+                              </p>
+                              <p className="text-muted-foreground">{item.quantity} total units</p>
+                              {isLowStock(item) ? (
+                                <div className="flex items-center gap-1 text-xs text-red-700">
+                                  <AlertTriangle className="h-3.5 w-3.5" />
+                                  Low stock
+                                </div>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell className="align-top">
+                            <Badge className={getStatusColor(item.status)}>
+                              {item.status.replace(/_/g, ' ')}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="align-top text-right font-medium">
+                            {formatCurrency(item.acquisition?.cost)}
+                          </TableCell>
+                          <TableCell className="align-top text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(item)}>
+                                <Edit2 className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteItem(item._id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <InventoryPagination
+                  currentPage={currentPage}
+                  pageSize={ITEMS_PER_PAGE}
+                  totalItems={filteredItems.length}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
+                />
+              </CardContent>
+            </Card>
+
+            {filteredItems.length === 0 && (
+              <div className="py-12 text-center">
+                <Shirt className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+                <h3 className="text-lg font-medium">No items found</h3>
+                <p className="text-muted-foreground">Try adjusting your search or filters</p>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="reports">
+            <DepartmentProcurementPanel department="linen" inventoryItems={procurementItems} />
+          </TabsContent>
+        </Tabs>
 
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">

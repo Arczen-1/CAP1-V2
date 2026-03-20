@@ -10,6 +10,10 @@
     "server:dev": "node --watch server/server.js",
     "seed": "node server/seed.js",
     "seed:demo": "node server/seed2.js",
+    "seed:banquet": "node server/seedBanquetStaff.js",
+    "seed:suppliers": "node server/seedSuppliers.js",
+    "import:legacy": "node server/importLegacyInventory.js",
+    "rebuild:legacy:curated": "node server/rebuildLegacyInventoryCurated.js",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"

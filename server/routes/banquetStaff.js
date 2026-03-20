@@ -37,6 +37,45 @@ router.get('/', auth, requireBanquetAccess, async (req, res) => {
   }
 });
 
+// Get stats
+router.get('/stats/overview', auth, requireBanquetAccess, async (req, res) => {
+  try {
+    const stats = {
+      total: await BanquetStaff.countDocuments(),
+      active: await BanquetStaff.countDocuments({ status: 'active' }),
+      byRole: await BanquetStaff.aggregate([
+        { $group: { _id: '$role', count: { $sum: 1 } } }
+      ]),
+      withAccounts: await BanquetStaff.countDocuments({ hasAccount: true })
+    };
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get roles list
+router.get('/roles/list', auth, requireBanquetAccess, async (req, res) => {
+  try {
+    const roles = [
+      { value: 'waiter', label: 'Waiter' },
+      { value: 'waitress', label: 'Waitress' },
+      { value: 'event_manager', label: 'Event Manager' },
+      { value: 'supervisor', label: 'Supervisor' },
+      { value: 'head_captain', label: 'Head Captain' },
+      { value: 'bartender', label: 'Bartender' },
+      { value: 'food_runner', label: 'Food Runner' },
+      { value: 'busser', label: 'Busser' },
+      { value: 'setup_crew', label: 'Setup Crew' },
+      { value: 'coordinator', label: 'Coordinator' },
+      { value: 'other', label: 'Other' }
+    ];
+    res.json(roles);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // Get single staff
 router.get('/:id', auth, requireBanquetAccess, async (req, res) => {
   try {
@@ -144,45 +183,6 @@ router.post('/:id/create-account', auth, requireRole(['admin']), async (req, res
     await staff.save();
     
     res.json({ message: 'Account created', user, staff });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
-
-// Get roles list
-router.get('/roles/list', auth, requireBanquetAccess, async (req, res) => {
-  try {
-    const roles = [
-      { value: 'waiter', label: 'Waiter' },
-      { value: 'waitress', label: 'Waitress' },
-      { value: 'event_manager', label: 'Event Manager' },
-      { value: 'supervisor', label: 'Supervisor' },
-      { value: 'head_captain', label: 'Head Captain' },
-      { value: 'bartender', label: 'Bartender' },
-      { value: 'food_runner', label: 'Food Runner' },
-      { value: 'busser', label: 'Busser' },
-      { value: 'setup_crew', label: 'Setup Crew' },
-      { value: 'coordinator', label: 'Coordinator' },
-      { value: 'other', label: 'Other' }
-    ];
-    res.json(roles);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
-
-// Get stats
-router.get('/stats/overview', auth, requireBanquetAccess, async (req, res) => {
-  try {
-    const stats = {
-      total: await BanquetStaff.countDocuments(),
-      active: await BanquetStaff.countDocuments({ status: 'active' }),
-      byRole: await BanquetStaff.aggregate([
-        { $group: { _id: '$role', count: { $sum: 1 } } }
-      ]),
-      withAccounts: await BanquetStaff.countDocuments({ hasAccount: true })
-    };
-    res.json(stats);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

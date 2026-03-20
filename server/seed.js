@@ -39,6 +39,7 @@ const demoUsers = [
   { name: 'Banquet Supervisor', email: 'banquet@juancarlos.com', password: 'password123', role: 'banquet_supervisor', department: 'Banquet Operations' },
   { name: 'Kitchen Manager', email: 'kitchen@juancarlos.com', password: 'password123', role: 'kitchen', department: 'Kitchen' },
   { name: 'Purchasing Manager', email: 'purchasing@juancarlos.com', password: 'password123', role: 'purchasing', department: 'Purchasing' },
+  { name: 'Stockroom', email: 'stockroom@juancarlos.com', password: 'password123', role: 'stockroom', department: 'Stockroom' },
   { name: 'Creative Manager', email: 'creative@juancarlos.com', password: 'password123', role: 'creative', department: 'Creative' },
   { name: 'Linen Manager', email: 'linen@juancarlos.com', password: 'password123', role: 'linen', department: 'Linen' },
   { name: 'System Admin', email: 'admin@juancarlos.com', password: 'admin123', role: 'admin', department: 'Admin' }
@@ -652,10 +653,8 @@ async function seedDatabase() {
       console.log(`  âœ… Created kitchen item: ${itemData.itemCode}`);
     }
 
-    console.log('\nDemo login credentials:');
-    console.log('  Sales: sales@juancarlos.com / password123');
-    console.log('  Accounting: accounting@juancarlos.com / password123');
-    console.log('  Admin: admin@juancarlos.com / admin123');
+    console.log('\nInitial work accounts were seeded successfully.');
+    console.log('Share login credentials with the team privately instead of keeping them in the repository.');
     console.log('\nYou can now start the app with: npm run dev');
 
   } catch (error) {

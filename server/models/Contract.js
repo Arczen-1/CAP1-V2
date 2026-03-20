@@ -1,11 +1,15 @@
 const mongoose = require('mongoose');
 
-const SIMPLE_CHECKLIST_STATUSES = ['pending', 'prepared', 'returned'];
+const PRE_EVENT_CHECKLIST_STATUSES = ['pending', 'prepared'];
+const LEGACY_ITEM_STATUSES = ['returned'];
+const ITEM_STATUS_ENUM = [...PRE_EVENT_CHECKLIST_STATUSES, ...LEGACY_ITEM_STATUSES];
+const POST_EVENT_CHECKLIST_STATUSES = ['pending_check', 'checked_ok', 'incident_reported'];
 const LEGACY_CHECKLIST_STATUS_MAP = {
   staged: 'prepared',
   setup: 'prepared',
   loaded: 'prepared',
-  dispatched: 'prepared'
+  dispatched: 'prepared',
+  returned: 'prepared'
 };
 
 const normalizeChecklistStatus = (value) => {
@@ -13,11 +17,23 @@ const normalizeChecklistStatus = (value) => {
     return value;
   }
 
-  if (SIMPLE_CHECKLIST_STATUSES.includes(value)) {
+  if (PRE_EVENT_CHECKLIST_STATUSES.includes(value)) {
     return value;
   }
 
   return LEGACY_CHECKLIST_STATUS_MAP[value] || value;
+};
+
+const normalizePostEventStatus = (value, legacyStatus) => {
+  if (POST_EVENT_CHECKLIST_STATUSES.includes(value)) {
+    return value;
+  }
+
+  if (legacyStatus === 'returned') {
+    return 'checked_ok';
+  }
+
+  return 'pending_check';
 };
 
 const menuItemSchema = new mongoose.Schema({
@@ -98,9 +114,15 @@ const creativeAssetSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: SIMPLE_CHECKLIST_STATUSES,
+    enum: ITEM_STATUS_ENUM,
     default: 'pending'
   },
+  postEventStatus: {
+    type: String,
+    enum: POST_EVENT_CHECKLIST_STATUSES,
+    default: 'pending_check'
+  },
+  postEventNotes: String,
   notes: String,
   cost: Number,
   pricePerItem: Number
@@ -117,9 +139,15 @@ const equipmentChecklistItemSchema = new mongoose.Schema({
   notes: String,
   status: {
     type: String,
-    enum: SIMPLE_CHECKLIST_STATUSES,
+    enum: ITEM_STATUS_ENUM,
     default: 'pending'
-  }
+  },
+  postEventStatus: {
+    type: String,
+    enum: POST_EVENT_CHECKLIST_STATUSES,
+    default: 'pending_check'
+  },
+  postEventNotes: String,
 });
 
 const linenRequirementSchema = new mongoose.Schema({
@@ -136,9 +164,15 @@ const linenRequirementSchema = new mongoose.Schema({
   notes: String,
   status: {
     type: String,
-    enum: SIMPLE_CHECKLIST_STATUSES,
+    enum: ITEM_STATUS_ENUM,
     default: 'pending'
-  }
+  },
+  postEventStatus: {
+    type: String,
+    enum: POST_EVENT_CHECKLIST_STATUSES,
+    default: 'pending_check'
+  },
+  postEventNotes: String,
 });
 
 const logisticsAssignmentSchema = new mongoose.Schema({
@@ -165,6 +199,83 @@ const logisticsAssignmentSchema = new mongoose.Schema({
     default: null
   }
 });
+
+const BANQUET_ASSIGNMENT_ROLES = [
+  'head_captain',
+  'service_staff',
+  'food_runner',
+  'busser',
+  'bartender',
+  'setup_crew'
+];
+
+const banquetStaffingPlanSchema = new mongoose.Schema({
+  head_captain: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  service_staff: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  food_runner: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  busser: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  bartender: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  setup_crew: {
+    type: Number,
+    default: 0,
+    min: 0
+  }
+}, { _id: false });
+
+const banquetTeamAssignmentSchema = new mongoose.Schema({
+  staff: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'BanquetStaff',
+    required: true
+  },
+  assignmentRole: {
+    type: String,
+    enum: BANQUET_ASSIGNMENT_ROLES,
+    required: true
+  }
+}, { _id: false });
+
+const banquetAssignmentSchema = new mongoose.Schema({
+  serviceGuestCount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  staffingPlan: {
+    type: banquetStaffingPlanSchema,
+    default: () => ({})
+  },
+  assignments: {
+    type: [banquetTeamAssignmentSchema],
+    default: []
+  },
+  updatedAt: Date,
+  updatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  }
+}, { _id: false });
 
 // Creative Requirements Schema
 const creativeRequirementsSchema = new mongoose.Schema({
@@ -402,7 +513,7 @@ const contractSchema = new mongoose.Schema({
   linenRequirements: [linenRequirementSchema],
   linenStatus: {
     type: String,
-    enum: SIMPLE_CHECKLIST_STATUSES,
+    enum: ITEM_STATUS_ENUM,
     default: 'pending'
   },
 
@@ -410,6 +521,10 @@ const contractSchema = new mongoose.Schema({
   assignedSupervisor: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
+  },
+  banquetAssignment: {
+    type: banquetAssignmentSchema,
+    default: () => ({})
   },
 
   // SLA Tracking
@@ -457,25 +572,34 @@ const contractSchema = new mongoose.Schema({
 
 contractSchema.pre('validate', function normalizeLegacyChecklistStatuses() {
   this.creativeAssets = (this.creativeAssets || []).map((item) => {
+    const legacyStatus = item?.status;
     if (item?.status) {
       item.status = normalizeChecklistStatus(item.status);
     }
+
+    item.postEventStatus = normalizePostEventStatus(item?.postEventStatus, legacyStatus);
 
     return item;
   });
 
   this.equipmentChecklist = (this.equipmentChecklist || []).map((item) => {
+    const legacyStatus = item?.status;
     if (item?.status) {
       item.status = normalizeChecklistStatus(item.status);
     }
+
+    item.postEventStatus = normalizePostEventStatus(item?.postEventStatus, legacyStatus);
 
     return item;
   });
 
   this.linenRequirements = (this.linenRequirements || []).map((item) => {
+    const legacyStatus = item?.status;
     if (item?.status) {
       item.status = normalizeChecklistStatus(item.status);
     }
+
+    item.postEventStatus = normalizePostEventStatus(item?.postEventStatus, legacyStatus);
 
     return item;
   });

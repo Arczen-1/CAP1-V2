@@ -3,6 +3,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const Incident = require('../models/Incident');
 const { auth, requireRole } = require('../middleware/auth');
+const MAX_INCIDENT_ATTACHMENT_LENGTH = 3_000_000;
 
 // Get all incidents
 router.get('/', auth, async (req, res) => {
@@ -34,12 +35,17 @@ router.get('/contract/:contractId', auth, async (req, res) => {
 // Create incident
 router.post('/', auth, [
   body('contract').notEmpty(),
+  body('department').optional().isIn([
+    'sales', 'accounting', 'logistics', 'banquet', 'kitchen', 'purchasing', 'creative', 'linen', 'all'
+  ]),
   body('incidentType').isIn([
     'burnt_cloth', 'damaged_equipment', 'missing_item', 'food_spoilage',
     'vehicle_breakdown', 'staff_issue', 'client_complaint', 'other'
   ]),
   body('description').notEmpty(),
-  body('eventDate').isISO8601()
+  body('eventDate').isISO8601(),
+  body('affectedQuantity').optional({ values: 'falsy' }).isInt({ min: 1 }),
+  body('attachments').optional().isArray({ max: 3 })
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -47,8 +53,20 @@ router.post('/', auth, [
       return res.status(400).json({ errors: errors.array() });
     }
 
+    const normalizedAttachments = Array.isArray(req.body.attachments)
+      ? req.body.attachments
+        .filter((value) => typeof value === 'string' && value.trim())
+        .map((value) => value.trim())
+      : [];
+
+    if (normalizedAttachments.some((value) => value.length > MAX_INCIDENT_ATTACHMENT_LENGTH)) {
+      return res.status(400).json({ message: 'Damage reference image is too large' });
+    }
+
     const incident = new Incident({
       ...req.body,
+      attachments: normalizedAttachments,
+      department: req.body.department || 'all',
       reportedBy: req.user._id
     });
 

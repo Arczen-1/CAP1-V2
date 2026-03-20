@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type ComponentProps } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Layout from '@/components/Layout';
+import { useRole } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import {
@@ -130,6 +131,9 @@ const MENU_CATEGORIES = {
     ]
   },
 };
+
+const MAIN_MENU_KEYS = ['beef', 'pork', 'chicken', 'fish', 'seafood'] as const;
+const SIDE_MENU_KEYS = ['pasta', 'vegetables', 'rice'] as const;
 
 // ============================================
 // PACKAGES WITH DIFFERENT INCLUSIONS
@@ -288,9 +292,230 @@ interface StockroomItem {
   description?: string;
   quantity: number;
   availableQuantity: number;
+  purchasePrice?: number;
   rentalPricePerDay?: number;
+  pricePerItem?: number;
   images?: Array<{ url: string; caption?: string; isPrimary?: boolean }>;
 }
+
+type SetupSuggestionKey = 'tables' | 'chairs' | 'plates' | 'utensils' | 'glasses' | 'tablecloths';
+
+interface CreativeAssetEntry {
+  itemId: string;
+  itemName: string;
+  category: string;
+  itemCode: string;
+  imageUrl: string;
+  availableQuantity: number;
+  quantity: number;
+  pricePerItem: number;
+  notes: string;
+}
+
+interface LinenRequirementEntry {
+  itemId: string;
+  itemName: string;
+  category: string;
+  itemCode: string;
+  imageUrl: string;
+  availableQuantity: number;
+  size: string;
+  material: string;
+  color: string;
+  quantity: number;
+  pricePerItem: number;
+  notes: string;
+  autoRule?: SetupSuggestionKey;
+}
+
+interface StockroomRequirementEntry {
+  itemId: string;
+  itemName: string;
+  category: string;
+  itemCode: string;
+  imageUrl: string;
+  availableQuantity: number;
+  quantity: number;
+  pricePerItem: number;
+  notes: string;
+  autoRule?: SetupSuggestionKey;
+}
+
+interface SuggestedSetupFeedback {
+  guestCount: number;
+  tableCount: number;
+  matched: Array<{
+    key: SetupSuggestionKey;
+    itemName: string;
+    quantity: number;
+  }>;
+  missing: SetupSuggestionKey[];
+}
+
+type ContractFormTabKey = 'client' | 'event' | 'package' | 'addons' | 'summary';
+
+type FieldLabelProps = ComponentProps<typeof Label> & {
+  required?: boolean;
+  optional?: boolean;
+};
+
+function FieldLabel({ children, required = false, optional = false, className, ...props }: FieldLabelProps) {
+  return (
+    <Label className={cn('flex items-center gap-1', className)} {...props}>
+      <span>{children}</span>
+      {required ? <span className="text-red-500">*</span> : null}
+      {optional ? <span className="text-xs font-normal text-muted-foreground">(optional)</span> : null}
+    </Label>
+  );
+}
+
+const CONTRACT_ERROR_FIELD_ORDER = [
+  'celebratorName',
+  'celebratorMobile',
+  'celebratorEmail',
+  'celebratorAddress',
+  'eventType',
+  'eventDate',
+  'venue',
+  'guests',
+  'package',
+  'menu',
+] as const;
+
+const CONTRACT_ERROR_TAB_BY_FIELD: Record<string, ContractFormTabKey> = {
+  celebratorName: 'client',
+  celebratorMobile: 'client',
+  celebratorEmail: 'client',
+  celebratorAddress: 'client',
+  eventType: 'event',
+  eventDate: 'event',
+  venue: 'event',
+  guests: 'event',
+  package: 'package',
+  menu: 'package',
+  addons: 'addons',
+};
+
+const BACKEND_CONTRACT_ERROR_FIELD_MAP: Record<string, string> = {
+  clientName: 'celebratorName',
+  clientContact: 'celebratorMobile',
+  clientEmail: 'celebratorEmail',
+  clientType: 'eventType',
+  eventDate: 'eventDate',
+  'venue.name': 'venue',
+  totalPacks: 'guests',
+  packageSelected: 'package',
+  menuDetails: 'menu',
+};
+
+const inferFieldFromContractIssue = (message?: string) => {
+  const normalizedMessage = String(message || '').toLowerCase();
+
+  if (!normalizedMessage) {
+    return '';
+  }
+
+  if (
+    normalizedMessage.includes('main dish')
+    || normalizedMessage.includes('side dish')
+    || normalizedMessage.includes('dessert')
+    || normalizedMessage.includes('drink')
+    || normalizedMessage.includes('package')
+    || normalizedMessage.includes('menu')
+  ) {
+    return normalizedMessage.includes('package') && !normalizedMessage.includes('dish') && !normalizedMessage.includes('dessert') && !normalizedMessage.includes('drink')
+      ? 'package'
+      : 'menu';
+  }
+
+  if (normalizedMessage.includes('venue') || normalizedMessage.includes('hall')) {
+    return 'venue';
+  }
+
+  if (normalizedMessage.includes('event date') || normalizedMessage.includes('date before saving')) {
+    return 'eventDate';
+  }
+
+  if (
+    normalizedMessage.includes('guest')
+    || normalizedMessage.includes('capacity')
+    || normalizedMessage.includes('minimum 75')
+    || normalizedMessage.includes('pax')
+  ) {
+    return 'guests';
+  }
+
+  if (
+    normalizedMessage.includes('inventory')
+    || normalizedMessage.includes('purchasing')
+    || normalizedMessage.includes('rental')
+    || normalizedMessage.includes('short by')
+    || normalizedMessage.includes('available on')
+    || normalizedMessage.includes('same-day stock')
+    || normalizedMessage.includes('same day')
+  ) {
+    return 'addons';
+  }
+
+  return '';
+};
+
+interface InventoryMatchRule {
+  category?: string;
+  keywords: string[];
+  preferredKeywords?: string[];
+  excludedKeywords?: string[];
+}
+
+const GUESTS_PER_TABLE = 10;
+const AUTO_SETUP_LABELS: Record<SetupSuggestionKey, string> = {
+  tables: 'Tables',
+  chairs: 'Chairs',
+  plates: 'Plates',
+  utensils: 'Utensils',
+  glasses: 'Glasses',
+  tablecloths: 'Tablecloths',
+};
+
+const STOCKROOM_SETUP_RULES: Record<Exclude<SetupSuggestionKey, 'tablecloths'>, InventoryMatchRule> = {
+  tables: {
+    category: 'Table',
+    keywords: ['table'],
+    preferredKeywords: ['table round', 'round table', 'table'],
+    excludedKeywords: ['stand', 'plate', 'bowl'],
+  },
+  chairs: {
+    category: 'Chair',
+    keywords: ['chair'],
+    preferredKeywords: ['chair tiffany', 'tiffany chair', 'chair'],
+  },
+  plates: {
+    category: 'Table',
+    keywords: ['plate'],
+    preferredKeywords: ['dinner plate', 'plate'],
+    excludedKeywords: ['salad', 'bowl'],
+  },
+  utensils: {
+    category: 'Tool',
+    keywords: ['utensil', 'cutlery', 'flatware', 'fork', 'spoon', 'knife'],
+    preferredKeywords: ['utensil', 'cutlery', 'flatware', 'fork', 'spoon', 'knife'],
+    excludedKeywords: ['cleaning'],
+  },
+  glasses: {
+    category: 'Table',
+    keywords: ['glass', 'goblet', 'wine glass', 'champagne'],
+    preferredKeywords: ['wine glass', 'glass goblet', 'goblet', 'glass'],
+  },
+};
+
+const LINEN_SETUP_RULES: Record<'tablecloths', InventoryMatchRule> = {
+  tablecloths: {
+    category: 'Tablecloth',
+    keywords: ['tablecloth', 'cloth', 'rtc'],
+    preferredKeywords: ['tablecloth', 'rtc', 'cloth'],
+    excludedKeywords: ['napkin', 'runner', 'sash', 'chair', 'couch'],
+  },
+};
 
 const pesoFormatter = new Intl.NumberFormat('en-PH', {
   style: 'currency',
@@ -301,6 +526,158 @@ const pesoFormatter = new Intl.NumberFormat('en-PH', {
 
 const formatCurrency = (amount: number) => pesoFormatter.format(amount || 0);
 const getMinimumContractEventDate = () => startOfDay(addMonths(new Date(), 6));
+
+const normalizeMatchText = (value?: string) => String(value || '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
+
+const buildStableFallbackPrice = (seed: string, min: number, max: number) => {
+  const normalized = normalizeMatchText(seed) || 'fallback-price';
+  let hash = 0;
+
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash = ((hash << 5) - hash) + normalized.charCodeAt(index);
+    hash |= 0;
+  }
+
+  const range = max - min + 1;
+  return min + (Math.abs(hash) % range);
+};
+
+const scoreInventoryMatch = (text: string, category: string, availableQuantity: number, rule: InventoryMatchRule) => {
+  let score = 0;
+
+  if (rule.category && category === rule.category) {
+    score += 60;
+  }
+
+  (rule.keywords || []).forEach((keyword) => {
+    if (text.includes(normalizeMatchText(keyword))) {
+      score += 80;
+    }
+  });
+
+  (rule.preferredKeywords || []).forEach((keyword) => {
+    if (text.includes(normalizeMatchText(keyword))) {
+      score += 120;
+    }
+  });
+
+  (rule.excludedKeywords || []).forEach((keyword) => {
+    if (text.includes(normalizeMatchText(keyword))) {
+      score -= 180;
+    }
+  });
+
+  return score + Math.min(availableQuantity || 0, 999) / 100;
+};
+
+const findBestStockroomMatch = (
+  items: StockroomItem[],
+  key: Exclude<SetupSuggestionKey, 'tablecloths'>,
+): StockroomItem | null => {
+  const rule = STOCKROOM_SETUP_RULES[key];
+  let bestItem: StockroomItem | null = null;
+  let bestScore = 0;
+
+  for (const item of items) {
+    const score = scoreInventoryMatch(
+      normalizeMatchText(`${item.name} ${item.category} ${item.description || ''}`),
+      item.category,
+      item.availableQuantity || 0,
+      rule,
+    );
+
+    if (score > bestScore) {
+      bestItem = item;
+      bestScore = score;
+    }
+  }
+
+  return bestItem;
+};
+
+const findBestLinenMatch = (items: LinenItem[], key: 'tablecloths'): LinenItem | null => {
+  const rule = LINEN_SETUP_RULES[key];
+  let bestItem: LinenItem | null = null;
+  let bestScore = 0;
+
+  for (const item of items) {
+    const score = scoreInventoryMatch(
+      normalizeMatchText(`${item.name} ${item.category} ${item.color || ''} ${item.material || ''}`),
+      item.category,
+      item.availableQuantity || 0,
+      rule,
+    );
+
+    if (score > bestScore) {
+      bestItem = item;
+      bestScore = score;
+    }
+  }
+
+  return bestItem;
+};
+
+const buildAutoSetupNote = (key: SetupSuggestionKey, guestCount: number, tableCount: number) => {
+  const detailByKey: Record<SetupSuggestionKey, string> = {
+    tables: `1 table per ${GUESTS_PER_TABLE} seated guests.`,
+    chairs: '1 chair per seated guest.',
+    plates: '1 plate per seated guest.',
+    utensils: '1 utensil setting per seated guest.',
+    glasses: '1 glass per seated guest.',
+    tablecloths: '1 tablecloth per suggested table.',
+  };
+
+  const countLabel = key === 'tables' || key === 'tablecloths'
+    ? `${tableCount} table${tableCount === 1 ? '' : 's'}`
+    : `${guestCount} guest${guestCount === 1 ? '' : 's'}`;
+
+  return `Auto-filled from ${countLabel}. ${detailByKey[key]}`;
+};
+
+const mergeSuggestedEntries = <T extends { itemId: string; itemName: string; quantity: number; notes: string; autoRule?: SetupSuggestionKey }>(
+  existing: T[],
+  suggestions: T[],
+) => {
+  const next = [...existing];
+
+  suggestions.forEach((suggestion) => {
+    const autoRuleIndex = next.findIndex((entry) => entry.autoRule && suggestion.autoRule && entry.autoRule === suggestion.autoRule);
+    if (autoRuleIndex >= 0) {
+      const previous = next[autoRuleIndex];
+      next[autoRuleIndex] = previous.itemId
+        ? {
+            ...previous,
+            quantity: suggestion.quantity,
+            autoRule: suggestion.autoRule,
+            notes: previous.notes || suggestion.notes,
+          }
+        : {
+            ...previous,
+            ...suggestion,
+            notes: previous.notes || suggestion.notes,
+          };
+      return;
+    }
+
+    const sameItemIndex = next.findIndex((entry) => entry.itemId && suggestion.itemId && entry.itemId === suggestion.itemId);
+    if (sameItemIndex >= 0) {
+      const previous = next[sameItemIndex];
+      next[sameItemIndex] = {
+        ...previous,
+        ...suggestion,
+        notes: previous.notes || suggestion.notes,
+      };
+      return;
+    }
+
+    next.push(suggestion);
+  });
+
+  return next;
+};
 
 interface InventoryPickerProps<T extends { _id: string }> {
   value: string;
@@ -395,9 +772,14 @@ export default function NewContract() {
   const { id: editingContractId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { isSales, isAdmin, isCreative, isLinen, isPurchasing } = useRole();
   const editorTab = searchParams.get('tab');
   const tastingId = searchParams.get('tasting');
   const isEditMode = Boolean(editingContractId);
+  const isCreativeInventoryEditor = isEditMode && isCreative() && !isSales() && !isAdmin();
+  const isLinenInventoryEditor = isEditMode && isLinen() && !isSales() && !isAdmin();
+  const isStockroomInventoryEditor = isEditMode && isPurchasing() && !isSales() && !isAdmin();
+  const isInventoryDraftEditor = isCreativeInventoryEditor || isLinenInventoryEditor || isStockroomInventoryEditor;
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState('client');
@@ -444,44 +826,11 @@ export default function NewContract() {
   const [menuSelections, setMenuSelections] = useState<Record<string, string[]>>({});
 
   // Creative & Linen with pricing
-  const [creativeAssets, setCreativeAssets] = useState<Array<{
-    itemId: string;
-    itemName: string;
-    category: string;
-    itemCode: string;
-    imageUrl: string;
-    availableQuantity: number;
-    quantity: number;
-    pricePerItem: number;
-    notes: string;
-  }>>([]);
-  
-  const [linenRequirements, setLinenRequirements] = useState<Array<{
-    itemId: string;
-    itemName: string;
-    category: string;
-    itemCode: string;
-    imageUrl: string;
-    availableQuantity: number;
-    size: string;
-    material: string;
-    color: string;
-    quantity: number;
-    pricePerItem: number;
-    notes: string;
-  }>>([]);
-
-  const [stockroomRequirements, setStockroomRequirements] = useState<Array<{
-    itemId: string;
-    itemName: string;
-    category: string;
-    itemCode: string;
-    imageUrl: string;
-    availableQuantity: number;
-    quantity: number;
-    pricePerItem: number;
-    notes: string;
-  }>>([]);
+  const [creativeAssets, setCreativeAssets] = useState<CreativeAssetEntry[]>([]);
+  const [linenRequirements, setLinenRequirements] = useState<LinenRequirementEntry[]>([]);
+  const [stockroomRequirements, setStockroomRequirements] = useState<StockroomRequirementEntry[]>([]);
+  const [suggestedSetupFeedback, setSuggestedSetupFeedback] = useState<SuggestedSetupFeedback | null>(null);
+  const [isApplyingSuggestedSetup, setIsApplyingSuggestedSetup] = useState(false);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -498,6 +847,11 @@ export default function NewContract() {
   }, [isEditMode, editingContractId, tastingId]);
 
   useEffect(() => {
+    if (isInventoryDraftEditor) {
+      setActiveTab('addons');
+      return;
+    }
+
     if (!editorTab) {
       return;
     }
@@ -506,26 +860,44 @@ export default function NewContract() {
     if (validTabs.includes(editorTab)) {
       setActiveTab(editorTab);
     }
-  }, [editorTab]);
+  }, [editorTab, isInventoryDraftEditor]);
+
+  const showCreativeEditorSection = !isInventoryDraftEditor || isCreativeInventoryEditor;
+  const showLinenEditorSection = !isInventoryDraftEditor || isLinenInventoryEditor;
+  const showStockroomEditorSection = !isInventoryDraftEditor || isStockroomInventoryEditor;
+  const inventoryEditorTitle = isCreativeInventoryEditor
+    ? 'Creative Inventory Draft Review'
+    : isLinenInventoryEditor
+      ? 'Linen Inventory Draft Review'
+      : 'Stockroom Inventory Draft Review';
+  const inventoryEditorDescription = isCreativeInventoryEditor
+    ? 'Review the saved creative items for this draft contract, add missing decor assets, then save your validation back to the contract.'
+    : isLinenInventoryEditor
+      ? 'Review the saved linen items for this draft contract, add any missing pieces, then save your validation back to the contract.'
+      : 'Review the saved stockroom items for this draft contract, add missing equipment, then save your validation back to the contract.';
 
   const mapCreativeItemsWithPrice = (items: CreativeItem[]) => {
     return items.map(item => ({
       ...item,
-      pricePerItem: item.pricePerItem ?? Math.floor(Math.random() * 500) + 100,
+      pricePerItem: item.pricePerItem ?? buildStableFallbackPrice(`${item.itemCode} ${item.name} ${item.category}`, 100, 600),
     }));
   };
 
   const mapLinenItemsWithPrice = (items: LinenItem[]) => {
     return items.map(item => ({
       ...item,
-      pricePerItem: item.pricePerItem ?? Math.floor(Math.random() * 50) + 20,
+      pricePerItem: item.pricePerItem ?? buildStableFallbackPrice(`${item.itemCode} ${item.name} ${item.color} ${item.material}`, 20, 70),
     }));
   };
 
   const mapStockroomItemsWithPrice = (items: StockroomItem[]) => {
     return items.map(item => ({
       ...item,
-      rentalPricePerDay: item.rentalPricePerDay ?? Math.floor(Math.random() * 700) + 150,
+      pricePerItem: [
+        item.pricePerItem,
+        item.rentalPricePerDay,
+        item.purchasePrice,
+      ].find((value) => Number(value) > 0) ?? buildStableFallbackPrice(`${item.itemCode} ${item.name} ${item.category}`, 150, 850),
     }));
   };
 
@@ -614,7 +986,7 @@ export default function NewContract() {
         coordinatorName: parsedNotes.coordinatorName,
         coordinatorMobile: parsedNotes.coordinatorMobile || contract.venue?.contact || '',
         eventType: contract.clientType || '',
-        occasion: contract.eventType || parsedNotes.occasion,
+        occasion: '',
         venue: parsedVenue.venue,
         hall: parsedVenue.hall,
         venueAddress: contract.venue?.address || '',
@@ -623,7 +995,7 @@ export default function NewContract() {
         servingTime: parsedNotes.servingTime,
         vipGuests: '',
         regularGuests: guestCount > 0 ? String(guestCount) : '',
-        themeSetup: contract.backdropRequirements || contract.creativeRequirements?.theme || '',
+        themeSetup: '',
         colorMotif: contract.preferredColor || '',
       }));
       setEventDate(loadedEventDate);
@@ -868,15 +1240,157 @@ export default function NewContract() {
             itemCode: item.itemCode || '',
             imageUrl: getPrimaryImage(item.images),
             availableQuantity: item.availableQuantity || 0,
-            pricePerItem: item.rentalPricePerDay || 0,
+            pricePerItem: item.pricePerItem || 0,
           }
         : entry
     ));
   };
 
+  const loadSuggestedSetupInventory = async () => {
+    const [linenRes, stockroomRes] = await Promise.all([
+      api.request('/linen-inventory?limit=100'),
+      api.request('/stockroom-inventory?limit=100'),
+    ]);
+
+    const nextLinenItems = mapLinenItemsWithPrice((linenRes as LinenItem[]) || []);
+    const nextStockroomItems = mapStockroomItemsWithPrice((stockroomRes as StockroomItem[]) || []);
+
+    setLinenItems(nextLinenItems);
+    setStockroomItems(nextStockroomItems);
+
+    return {
+      nextLinenItems,
+      nextStockroomItems,
+    };
+  };
+
+  const handleApplySuggestedSetup = async () => {
+    if (seatedGuestCount <= 0) {
+      toast.error('Enter the seated guest count first.');
+      return;
+    }
+
+    setIsApplyingSuggestedSetup(true);
+
+    try {
+      const { nextLinenItems, nextStockroomItems } = await loadSuggestedSetupInventory();
+      const matched: SuggestedSetupFeedback['matched'] = [];
+      const missing: SetupSuggestionKey[] = [];
+      const nextStockroomSuggestions: StockroomRequirementEntry[] = [];
+      const nextLinenSuggestions: LinenRequirementEntry[] = [];
+
+      const addStockroomSuggestion = (key: Exclude<SetupSuggestionKey, 'tablecloths'>, quantity: number) => {
+        if (quantity <= 0) {
+          return;
+        }
+
+        const matchedItem = findBestStockroomMatch(nextStockroomItems, key);
+        if (!matchedItem) {
+          missing.push(key);
+          return;
+        }
+
+        matched.push({
+          key,
+          itemName: matchedItem.name,
+          quantity,
+        });
+
+        nextStockroomSuggestions.push({
+          itemId: matchedItem._id,
+          itemName: matchedItem.name,
+          category: matchedItem.category || '',
+          itemCode: matchedItem.itemCode || '',
+          imageUrl: getPrimaryImage(matchedItem.images),
+          availableQuantity: matchedItem.availableQuantity || 0,
+          quantity,
+          pricePerItem: matchedItem.pricePerItem || 0,
+          notes: buildAutoSetupNote(key, seatedGuestCount, suggestedTableCount),
+          autoRule: key,
+        });
+      };
+
+      const addLinenSuggestion = (key: 'tablecloths', quantity: number) => {
+        if (quantity <= 0) {
+          return;
+        }
+
+        const matchedItem = findBestLinenMatch(nextLinenItems, key);
+        if (!matchedItem) {
+          missing.push(key);
+          return;
+        }
+
+        matched.push({
+          key,
+          itemName: matchedItem.name,
+          quantity,
+        });
+
+        nextLinenSuggestions.push({
+          itemId: matchedItem._id,
+          itemName: matchedItem.name,
+          category: matchedItem.category || '',
+          itemCode: matchedItem.itemCode || '',
+          imageUrl: getPrimaryImage(matchedItem.images),
+          availableQuantity: matchedItem.availableQuantity || 0,
+          size: matchedItem.size || '',
+          material: matchedItem.material || '',
+          color: matchedItem.color || '',
+          quantity,
+          pricePerItem: matchedItem.pricePerItem || 0,
+          notes: buildAutoSetupNote(key, seatedGuestCount, suggestedTableCount),
+          autoRule: key,
+        });
+      };
+
+      addStockroomSuggestion('tables', suggestedTableCount);
+      addStockroomSuggestion('chairs', seatedGuestCount);
+      addStockroomSuggestion('plates', seatedGuestCount);
+      addStockroomSuggestion('utensils', seatedGuestCount);
+      addStockroomSuggestion('glasses', seatedGuestCount);
+      addLinenSuggestion('tablecloths', suggestedTableCount);
+
+      if (!nextStockroomSuggestions.length && !nextLinenSuggestions.length) {
+        toast.error('No matching inventory items were found for the suggested setup.');
+        setSuggestedSetupFeedback({
+          guestCount: seatedGuestCount,
+          tableCount: suggestedTableCount,
+          matched,
+          missing,
+        });
+        return;
+      }
+
+      if (nextStockroomSuggestions.length) {
+        setStockroomRequirements((prev) => mergeSuggestedEntries(prev, nextStockroomSuggestions));
+      }
+
+      if (nextLinenSuggestions.length) {
+        setLinenRequirements((prev) => mergeSuggestedEntries(prev, nextLinenSuggestions));
+      }
+
+      setSuggestedSetupFeedback({
+        guestCount: seatedGuestCount,
+        tableCount: suggestedTableCount,
+        matched,
+        missing,
+      });
+
+      if (missing.length > 0) {
+        toast.warning(`Suggested setup applied. Still missing inventory matches for: ${missing.map((key) => AUTO_SETUP_LABELS[key]).join(', ')}.`);
+      } else {
+        toast.success('Suggested setup applied to the contract.');
+      }
+    } catch (error) {
+      toast.error('Failed to build the guest-based setup.');
+    } finally {
+      setIsApplyingSuggestedSetup(false);
+    }
+  };
+
   const buildClientNotes = () => {
     const notes = [
-      clientInfo.occasion ? `Occasion: ${clientInfo.occasion}` : '',
       clientInfo.representativeName
         ? `Representative: ${clientInfo.representativeName}${clientInfo.representativeRelationship ? ` (${clientInfo.representativeRelationship})` : ''}${clientInfo.representativeMobile ? ` - ${clientInfo.representativeMobile}` : ''}`
         : '',
@@ -896,12 +1410,20 @@ export default function NewContract() {
 
   const pkg = selectedPackage ? PACKAGES[selectedPackage] : null;
 
-  // Total guests = VIP + Regular + 25 extra buffer
-  const totalGuests = useMemo(() => {
+  const seatedGuestCount = useMemo(() => {
     const vip = parseInt(clientInfo.vipGuests) || 0;
     const regular = parseInt(clientInfo.regularGuests) || 0;
-    return vip + regular + 25;
+    return vip + regular;
   }, [clientInfo.vipGuests, clientInfo.regularGuests]);
+
+  // Total guests = VIP + Regular + 25 extra buffer
+  const totalGuests = useMemo(() => {
+    return seatedGuestCount + 25;
+  }, [seatedGuestCount]);
+
+  const suggestedTableCount = useMemo(() => {
+    return seatedGuestCount > 0 ? Math.ceil(seatedGuestCount / GUESTS_PER_TABLE) : 0;
+  }, [seatedGuestCount]);
 
   // Base menu cost
   const baseMenuCost = useMemo(() => {
@@ -997,50 +1519,72 @@ export default function NewContract() {
   const handleMenuSelection = (category: string, itemName: string) => {
     if (!pkg) return;
 
-    const current = menuSelections[category] || [];
-    const exists = current.includes(itemName);
-    
-    // Get the limit for this category
-    let limit = 1;
-    const categoryType = getCategoryType(category);
-    
-    if (categoryType === 'main') {
-      limit = pkg.inclusions.mains;
-    } else if (categoryType === 'side') {
-      limit = pkg.inclusions.sides;
-    } else if (category === 'dessert') {
-      limit = pkg.inclusions.desserts;
-    } else if (category === 'drinks') {
-      limit = pkg.inclusions.drinks;
-    }
-
     setMenuSelections(prev => {
+      const currentSelections = prev[category] || [];
+      const exists = currentSelections.includes(itemName);
+
       if (exists) {
-        return { ...prev, [category]: current.filter(i => i !== itemName) };
-      } else {
-        if (current.length >= limit) {
-          toast.warning(`Package allows only ${limit} selection(s) for ${MENU_CATEGORIES[category as keyof typeof MENU_CATEGORIES]?.name}`);
+        return { ...prev, [category]: currentSelections.filter(i => i !== itemName) };
+      }
+
+      const categoryType = getCategoryType(category);
+      const nextSelectionCountForCategory = currentSelections.length + 1;
+
+      if (categoryType === 'main') {
+        const totalSelectedMains = MAIN_MENU_KEYS.reduce((count, key) => count + (prev[key]?.length || 0), 0);
+        if (totalSelectedMains >= pkg.inclusions.mains) {
+          toast.warning(`Package allows only ${pkg.inclusions.mains} main dish selection(s) total.`);
           return prev;
         }
-        return { ...prev, [category]: [...current, itemName] };
+      } else if (categoryType === 'side') {
+        const totalSelectedSides = SIDE_MENU_KEYS.reduce((count, key) => count + (prev[key]?.length || 0), 0);
+        if (totalSelectedSides >= pkg.inclusions.sides) {
+          toast.warning(`Package allows only ${pkg.inclusions.sides} side dish selection(s) total.`);
+          return prev;
+        }
+      } else if (category === 'dessert' && nextSelectionCountForCategory > pkg.inclusions.desserts) {
+        toast.warning(`Package allows only ${pkg.inclusions.desserts} dessert selection(s).`);
+        return prev;
+      } else if (category === 'drinks' && nextSelectionCountForCategory > pkg.inclusions.drinks) {
+        toast.warning(`Package allows only ${pkg.inclusions.drinks} drink selection(s).`);
+        return prev;
       }
+
+      return { ...prev, [category]: [...currentSelections, itemName] };
     });
   };
 
+  const getOrderedValidationEntries = (validationErrors: Record<string, string>) => {
+    const knownEntries = CONTRACT_ERROR_FIELD_ORDER
+      .filter((field) => validationErrors[field])
+      .map((field) => [field, validationErrors[field]] as [string, string]);
+    const knownFields = new Set(knownEntries.map(([field]) => field));
+    const remainingEntries = Object.entries(validationErrors).filter(([field]) => !knownFields.has(field));
+
+    return [...knownEntries, ...remainingEntries];
+  };
+
+  const focusTabForErrorField = (field?: string) => {
+    const nextTab = field ? CONTRACT_ERROR_TAB_BY_FIELD[field] : undefined;
+    if (nextTab) {
+      setActiveTab(nextTab);
+    }
+  };
+
   const getCategoryType = (category: string): 'main' | 'side' | 'other' => {
-    if (['beef', 'pork', 'chicken', 'fish', 'seafood'].includes(category)) return 'main';
-    if (['pasta', 'vegetables', 'rice'].includes(category)) return 'side';
+    if (MAIN_MENU_KEYS.includes(category as typeof MAIN_MENU_KEYS[number])) return 'main';
+    if (SIDE_MENU_KEYS.includes(category as typeof SIDE_MENU_KEYS[number])) return 'side';
     return 'other';
   };
 
   const getSelectedMainsCount = () => {
-    return ['beef', 'pork', 'chicken', 'fish', 'seafood'].reduce((count, cat) => {
+    return MAIN_MENU_KEYS.reduce((count, cat) => {
       return count + (menuSelections[cat]?.length || 0);
     }, 0);
   };
 
   const getSelectedSidesCount = () => {
-    return ['pasta', 'vegetables', 'rice'].reduce((count, cat) => {
+    return SIDE_MENU_KEYS.reduce((count, cat) => {
       return count + (menuSelections[cat]?.length || 0);
     }, 0);
   };
@@ -1087,17 +1631,30 @@ export default function NewContract() {
     if (pkg) {
       const mainsCount = getSelectedMainsCount();
       const sidesCount = getSelectedSidesCount();
-      
-      if (mainsCount < pkg.inclusions.mains) {
-        newErrors.menu = `Please select ${pkg.inclusions.mains} main dish(es) (${mainsCount} selected)`;
+      const dessertCount = menuSelections.dessert?.length || 0;
+      const drinksCount = menuSelections.drinks?.length || 0;
+      const menuIssues: string[] = [];
+
+      if (mainsCount !== pkg.inclusions.mains) {
+        menuIssues.push(`Select exactly ${pkg.inclusions.mains} main dish(es) (${mainsCount} selected).`);
       }
-      if (sidesCount < pkg.inclusions.sides) {
-        newErrors.menu = `Please select ${pkg.inclusions.sides} side dish(es) (${sidesCount} selected)`;
+      if (sidesCount !== pkg.inclusions.sides) {
+        menuIssues.push(`Select exactly ${pkg.inclusions.sides} side dish(es) (${sidesCount} selected).`);
+      }
+      if (dessertCount !== pkg.inclusions.desserts) {
+        menuIssues.push(`Select exactly ${pkg.inclusions.desserts} dessert(s) (${dessertCount} selected).`);
+      }
+      if (drinksCount !== pkg.inclusions.drinks) {
+        menuIssues.push(`Select exactly ${pkg.inclusions.drinks} drink(s) (${drinksCount} selected).`);
+      }
+
+      if (menuIssues.length > 0) {
+        newErrors.menu = menuIssues.join(' ');
       }
     }
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return newErrors;
   };
 
   // ============================================
@@ -1105,8 +1662,94 @@ export default function NewContract() {
   // ============================================
 
   const handleSubmit = async () => {
-    if (!validateForm()) {
-      toast.error('Please fix the errors in the form');
+    if (isInventoryDraftEditor) {
+      if (!editingContractId) {
+        toast.error('Draft inventory validation is only available while editing an existing contract.');
+        return;
+      }
+
+      setIsSubmitting(true);
+
+      try {
+        const inventoryPayload = isCreativeInventoryEditor
+          ? {
+              creativeAssets: selectedCreativeAssets.map(asset => ({
+                itemId: asset.itemId,
+                item: asset.itemName,
+                itemCode: asset.itemCode,
+                category: asset.category || 'Other',
+                imageUrl: asset.imageUrl,
+                quantity: asset.quantity,
+                notes: asset.notes,
+                cost: asset.pricePerItem * asset.quantity,
+                pricePerItem: asset.pricePerItem,
+              })),
+            }
+          : isLinenInventoryEditor
+            ? {
+                linenRequirements: selectedLinenRequirements.map(item => ({
+                  itemId: item.itemId,
+                  type: item.color ? `${item.itemName} (${item.color})` : item.itemName,
+                  itemCode: item.itemCode,
+                  category: item.category,
+                  imageUrl: item.imageUrl,
+                  size: item.size,
+                  material: item.material,
+                  color: item.color,
+                  quantity: item.quantity,
+                  unitPrice: item.pricePerItem,
+                  notes: item.notes,
+                })),
+              }
+            : {
+                equipmentChecklist: selectedStockroomRequirements.map(item => ({
+                  itemId: item.itemId,
+                  item: item.itemName,
+                  itemCode: item.itemCode,
+                  category: item.category,
+                  imageUrl: item.imageUrl,
+                  quantity: item.quantity,
+                  unitPrice: item.pricePerItem,
+                  notes: item.notes,
+                  status: 'pending',
+                })),
+              };
+
+        await api.updateContract(editingContractId, inventoryPayload);
+        toast.success(
+          isCreativeInventoryEditor
+            ? 'Creative draft items updated.'
+            : isLinenInventoryEditor
+              ? 'Linen draft items updated.'
+              : 'Stockroom draft items updated.'
+        );
+        navigate(`/contracts/${editingContractId}?tab=inventory`);
+      } catch (error: any) {
+        const firstBackendValidation = Array.isArray(error?.errors) && error.errors.length > 0 ? error.errors[0] : null;
+        const primaryMessage = Array.isArray(error?.issues) && error.issues.length > 0
+          ? error.issues[0]
+          : firstBackendValidation?.msg || firstBackendValidation?.message || error?.detail || error?.message || 'Failed to save draft inventory';
+        toast.error(primaryMessage);
+        if (Array.isArray(error?.issues) && error.issues.length > 1) {
+          toast.info(`There ${error.issues.length - 1 === 1 ? 'is' : 'are'} ${error.issues.length - 1} more inventory issue(s) to review.`);
+        }
+      } finally {
+        setIsSubmitting(false);
+      }
+
+      return;
+    }
+
+    const validationErrors = validateForm();
+    const orderedValidationEntries = getOrderedValidationEntries(validationErrors);
+
+    if (orderedValidationEntries.length > 0) {
+      const [firstField, firstMessage] = orderedValidationEntries[0];
+      focusTabForErrorField(firstField);
+      toast.error(firstMessage);
+      if (orderedValidationEntries.length > 1) {
+        toast.info(`There ${orderedValidationEntries.length - 1 === 1 ? 'is' : 'are'} ${orderedValidationEntries.length - 1} more field(s) to review.`);
+      }
       return;
     }
 
@@ -1125,15 +1768,13 @@ export default function NewContract() {
           contact: clientInfo.coordinatorMobile || clientInfo.representativeMobile || '',
           notes: buildClientNotes(),
         },
-        eventType: clientInfo.occasion || clientInfo.eventType,
+        eventType: clientInfo.eventType,
         packageSelected: selectedPackage,
         totalPacks: totalGuests,
         menuDetails: buildMenuDetails(),
         preferredColor: clientInfo.colorMotif,
-        backdropRequirements: clientInfo.themeSetup,
         specialRequests: buildClientNotes(),
         creativeRequirements: {
-          theme: clientInfo.themeSetup || undefined,
           colorPalette: clientInfo.colorMotif
             ? clientInfo.colorMotif.split(/[,&/]/).map(item => item.trim()).filter(Boolean)
             : [],
@@ -1200,8 +1841,24 @@ export default function NewContract() {
         navigate('/contracts');
       }
     } catch (error: any) {
-      toast.error(error.message || (isEditMode ? 'Failed to update contract' : 'Failed to create contract'));
-  } finally {
+      const firstBackendValidation = Array.isArray(error?.errors) && error.errors.length > 0 ? error.errors[0] : null;
+      const primaryMessage = Array.isArray(error?.issues) && error.issues.length > 0
+        ? error.issues[0]
+        : firstBackendValidation?.msg || firstBackendValidation?.message || error?.detail || error?.message || '';
+      const backendField = BACKEND_CONTRACT_ERROR_FIELD_MAP[firstBackendValidation?.path || firstBackendValidation?.param || '']
+        || firstBackendValidation?.path
+        || firstBackendValidation?.param
+        || inferFieldFromContractIssue(primaryMessage)
+        || '';
+
+      focusTabForErrorField(backendField);
+      toast.error(primaryMessage || (isEditMode ? 'Failed to update contract' : 'Failed to create contract'));
+      if (Array.isArray(error?.issues) && error.issues.length > 1) {
+        toast.info(`There ${error.issues.length - 1 === 1 ? 'is' : 'are'} ${error.issues.length - 1} more contract issue(s) to fix before saving.`);
+      } else if (Array.isArray(error?.errors) && error.errors.length > 1) {
+        toast.info(`There ${error.errors.length - 1 === 1 ? 'is' : 'are'} ${error.errors.length - 1} more contract validation issue(s) to fix.`);
+      }
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -1216,22 +1873,36 @@ export default function NewContract() {
           </Button>
           <div>
             <h1 className="text-3xl font-bold tracking-tight">
-              {isEditMode ? 'Edit Contract' : tastingId ? 'Create Contract from Tasting' : 'New Contract'}
+              {isInventoryDraftEditor
+                ? inventoryEditorTitle
+                : isEditMode
+                  ? 'Edit Contract'
+                  : tastingId
+                    ? 'Create Contract from Tasting'
+                    : 'New Contract'}
             </h1>
             <p className="text-muted-foreground">
-              All pricing is calculated automatically based on your selections.
+              {isInventoryDraftEditor
+                ? inventoryEditorDescription
+                : 'All pricing is calculated automatically based on your selections.'}
             </p>
           </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="client">Client Info</TabsTrigger>
-            <TabsTrigger value="event">Event Details</TabsTrigger>
-            <TabsTrigger value="package">Package & Menu</TabsTrigger>
-            <TabsTrigger value="addons">Add-ons</TabsTrigger>
-            <TabsTrigger value="summary">Summary</TabsTrigger>
-          </TabsList>
+          {isInventoryDraftEditor ? (
+            <TabsList className="grid w-full grid-cols-1">
+              <TabsTrigger value="addons">Draft Inventory Review</TabsTrigger>
+            </TabsList>
+          ) : (
+            <TabsList className="grid w-full grid-cols-5">
+              <TabsTrigger value="client">Client Info</TabsTrigger>
+              <TabsTrigger value="event">Event Details</TabsTrigger>
+              <TabsTrigger value="package">Package & Menu</TabsTrigger>
+              <TabsTrigger value="addons">Add-ons</TabsTrigger>
+              <TabsTrigger value="summary">Summary</TabsTrigger>
+            </TabsList>
+          )}
 
           {/* CLIENT INFO TAB */}
           <TabsContent value="client" className="space-y-4">
@@ -1245,7 +1916,7 @@ export default function NewContract() {
               <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Full Name *</Label>
+                    <FieldLabel required>Full Name</FieldLabel>
                     <Input
                       value={clientInfo.celebratorName}
                       onChange={(e) => setClientInfo(prev => ({ ...prev, celebratorName: e.target.value }))}
@@ -1255,7 +1926,7 @@ export default function NewContract() {
                     {errors.celebratorName && <p className="text-sm text-red-500">{errors.celebratorName}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label>Mobile Number (11 digits) *</Label>
+                    <FieldLabel required>Mobile Number (11 digits)</FieldLabel>
                     <Input
                       value={clientInfo.celebratorMobile}
                       onChange={(e) => setClientInfo(prev => ({ ...prev, celebratorMobile: e.target.value.replace(/\D/g, '').slice(0, 11) }))}
@@ -1267,7 +1938,7 @@ export default function NewContract() {
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Email Address *</Label>
+                    <FieldLabel required>Email Address</FieldLabel>
                     <Input
                       type="email"
                       value={clientInfo.celebratorEmail}
@@ -1278,11 +1949,11 @@ export default function NewContract() {
                     {errors.celebratorEmail && <p className="text-sm text-red-500">{errors.celebratorEmail}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label>Complete Address</Label>
+                    <FieldLabel required>Complete Address</FieldLabel>
                     <Input
                       value={clientInfo.celebratorAddress}
                       onChange={(e) => setClientInfo(prev => ({ ...prev, celebratorAddress: e.target.value }))}
-                      placeholder="Street, City, Province"
+                      placeholder="Street, City, Province ZIP"
                       className={errors.celebratorAddress ? 'border-red-500' : ''}
                     />
                     {errors.celebratorAddress && <p className="text-sm text-red-500">{errors.celebratorAddress}</p>}
@@ -1293,12 +1964,12 @@ export default function NewContract() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Representative Information (if applicable)</CardTitle>
+                <CardTitle>Representative Information (optional)</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Representative Name</Label>
+                    <FieldLabel optional>Representative Name</FieldLabel>
                     <Input
                       value={clientInfo.representativeName}
                       onChange={(e) => setClientInfo(prev => ({ ...prev, representativeName: e.target.value }))}
@@ -1306,7 +1977,7 @@ export default function NewContract() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Relationship</Label>
+                    <FieldLabel optional>Relationship</FieldLabel>
                     <Input
                       value={clientInfo.representativeRelationship}
                       onChange={(e) => setClientInfo(prev => ({ ...prev, representativeRelationship: e.target.value }))}
@@ -1315,7 +1986,7 @@ export default function NewContract() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Mobile Number</Label>
+                  <FieldLabel optional>Mobile Number</FieldLabel>
                   <Input
                     value={clientInfo.representativeMobile}
                     onChange={(e) => setClientInfo(prev => ({ ...prev, representativeMobile: e.target.value.replace(/\D/g, '').slice(0, 11) }))}
@@ -1327,12 +1998,12 @@ export default function NewContract() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Coordinator Information</CardTitle>
+                <CardTitle>Coordinator Information (optional)</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Coordinator Name</Label>
+                    <FieldLabel optional>Coordinator Name</FieldLabel>
                     <Input
                       value={clientInfo.coordinatorName}
                       onChange={(e) => setClientInfo(prev => ({ ...prev, coordinatorName: e.target.value }))}
@@ -1340,7 +2011,7 @@ export default function NewContract() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Mobile Number</Label>
+                    <FieldLabel optional>Mobile Number</FieldLabel>
                     <Input
                       value={clientInfo.coordinatorMobile}
                       onChange={(e) => setClientInfo(prev => ({ ...prev, coordinatorMobile: e.target.value.replace(/\D/g, '').slice(0, 11) }))}
@@ -1368,40 +2039,30 @@ export default function NewContract() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Event Type *</Label>
-                    <Select
-                      value={clientInfo.eventType}
-                      onValueChange={(value) => setClientInfo(prev => ({ ...prev, eventType: value }))}
-                    >
-                      <SelectTrigger className={errors.eventType ? 'border-red-500' : ''}>
-                        <SelectValue placeholder="Select event type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="wedding">Wedding</SelectItem>
-                        <SelectItem value="corporate">Corporate</SelectItem>
-                        <SelectItem value="birthday">Birthday</SelectItem>
-                        <SelectItem value="debut">Debut</SelectItem>
-                        <SelectItem value="anniversary">Anniversary</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {errors.eventType && <p className="text-sm text-red-500">{errors.eventType}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Occasion/Theme</Label>
-                    <Input
-                      value={clientInfo.occasion}
-                      onChange={(e) => setClientInfo(prev => ({ ...prev, occasion: e.target.value }))}
-                      placeholder="e.g., 50th Birthday Celebration"
-                    />
-                  </div>
+                <div className="space-y-2 md:max-w-md">
+                  <FieldLabel required>Event Type</FieldLabel>
+                  <Select
+                    value={clientInfo.eventType}
+                    onValueChange={(value) => setClientInfo(prev => ({ ...prev, eventType: value }))}
+                  >
+                    <SelectTrigger className={errors.eventType ? 'border-red-500' : ''}>
+                      <SelectValue placeholder="Select event type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="wedding">Wedding</SelectItem>
+                      <SelectItem value="corporate">Corporate</SelectItem>
+                      <SelectItem value="birthday">Birthday</SelectItem>
+                      <SelectItem value="debut">Debut</SelectItem>
+                      <SelectItem value="anniversary">Anniversary</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {errors.eventType && <p className="text-sm text-red-500">{errors.eventType}</p>}
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Event Date *</Label>
+                    <FieldLabel required>Event Date</FieldLabel>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button
@@ -1425,7 +2086,7 @@ export default function NewContract() {
                     {errors.eventDate && <p className="text-sm text-red-500">{errors.eventDate}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label>Arrival of Guests</Label>
+                    <FieldLabel optional>Arrival of Guests</FieldLabel>
                     <Input
                       type="time"
                       value={clientInfo.arrivalOfGuests}
@@ -1436,7 +2097,7 @@ export default function NewContract() {
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Venue *</Label>
+                    <FieldLabel required>Venue</FieldLabel>
                     <Select
                       value={clientInfo.venue}
                       onValueChange={(value) => {
@@ -1461,7 +2122,7 @@ export default function NewContract() {
                   </div>
                   {clientInfo.venue && VENUES[clientInfo.venue]?.halls && Object.keys(VENUES[clientInfo.venue].halls).length > 0 && (
                     <div className="space-y-2">
-                      <Label>Hall/Function Room</Label>
+                      <FieldLabel optional>Hall / Function Room</FieldLabel>
                       <Select
                         value={clientInfo.hall}
                         onValueChange={(value) => setClientInfo(prev => ({ ...prev, hall: value }))}
@@ -1483,7 +2144,7 @@ export default function NewContract() {
 
                 {clientInfo.venueAddress && (
                   <div className="space-y-2">
-                    <Label>Venue Address</Label>
+                    <FieldLabel optional>Venue Address</FieldLabel>
                     <Input value={clientInfo.venueAddress} disabled />
                   </div>
                 )}
@@ -1493,7 +2154,7 @@ export default function NewContract() {
                   <h4 className="font-medium mb-3">Guest Count</h4>
                   <div className="grid gap-4 md:grid-cols-3">
                     <div className="space-y-2">
-                      <Label>VIP Guests</Label>
+                      <FieldLabel optional>VIP Guests</FieldLabel>
                       <Input
                         type="number"
                         min={0}
@@ -1503,7 +2164,7 @@ export default function NewContract() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Regular Guests</Label>
+                      <FieldLabel required>Regular Guests</FieldLabel>
                       <Input
                         type="number"
                         min={0}
@@ -1523,23 +2184,13 @@ export default function NewContract() {
                   {errors.guests && <p className="text-sm text-red-500 mt-2">{errors.guests}</p>}
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Theme Setup</Label>
-                    <Input
-                      value={clientInfo.themeSetup}
-                      onChange={(e) => setClientInfo(prev => ({ ...prev, themeSetup: e.target.value }))}
-                      placeholder="e.g., Romantic Garden"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Color Motif</Label>
-                    <Input
-                      value={clientInfo.colorMotif}
-                      onChange={(e) => setClientInfo(prev => ({ ...prev, colorMotif: e.target.value }))}
-                      placeholder="e.g., Blush Pink & Gold"
-                    />
-                  </div>
+                <div className="space-y-2 md:max-w-md">
+                  <FieldLabel optional>Color Motif</FieldLabel>
+                  <Input
+                    value={clientInfo.colorMotif}
+                    onChange={(e) => setClientInfo(prev => ({ ...prev, colorMotif: e.target.value }))}
+                    placeholder="e.g., Blush Pink & Gold"
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -1559,7 +2210,7 @@ export default function NewContract() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Utensils className="h-5 w-5" />
-                  Select Package
+                  Select Package *
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -1609,7 +2260,7 @@ export default function NewContract() {
             {selectedPackage && pkg && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Menu Selection</CardTitle>
+                  <CardTitle>Menu Selection *</CardTitle>
                   <p className="text-sm text-muted-foreground">
                     Select {pkg.inclusions.mains} main dishes, {pkg.inclusions.sides} side dishes, {pkg.inclusions.desserts} dessert(s), and {pkg.inclusions.drinks} drink(s).
                   </p>
@@ -1792,17 +2443,126 @@ export default function NewContract() {
 
           {/* ADD-ONS TAB */}
           <TabsContent value="addons" className="space-y-4">
+            {isInventoryDraftEditor ? (
+              <Card className="border-primary/20 bg-primary/5">
+                <CardHeader>
+                  <CardTitle>Draft Contract Context</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Client</p>
+                    <p className="mt-2 font-medium">{clientInfo.celebratorName || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Event Date</p>
+                    <p className="mt-2 font-medium">{eventDate ? format(eventDate, 'PPP') : '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Venue</p>
+                    <p className="mt-2 font-medium">{clientInfo.venue ? `${clientInfo.venue}${clientInfo.hall ? ` - ${clientInfo.hall}` : ''}` : '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Guest Count</p>
+                    <p className="mt-2 font-medium">{totalGuests.toLocaleString()} total ({seatedGuestCount.toLocaleString()} seated)</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {!isInventoryDraftEditor ? (
+              <Card className="border-primary/20 bg-primary/5">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calculator className="h-5 w-5" />
+                    Guest-Based Setup
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Based on {seatedGuestCount.toLocaleString()} seated guests. Food still uses the separate +25 buffer, while the setup below focuses on actual guest seating. You can apply this once, then still edit every row manually.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {[
+                      { key: 'tables', value: suggestedTableCount, note: `1 per ${GUESTS_PER_TABLE} guests` },
+                      { key: 'chairs', value: seatedGuestCount, note: '1 per guest' },
+                      { key: 'plates', value: seatedGuestCount, note: '1 per guest' },
+                      { key: 'utensils', value: seatedGuestCount, note: '1 set per guest' },
+                      { key: 'glasses', value: seatedGuestCount, note: '1 per guest' },
+                      { key: 'tablecloths', value: suggestedTableCount, note: 'Matches table count' },
+                    ].map((item) => (
+                      <div key={item.key} className="rounded-lg border bg-background/80 p-3 shadow-sm">
+                        <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                          {AUTO_SETUP_LABELS[item.key as SetupSuggestionKey]}
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-foreground">{item.value.toLocaleString()}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{item.note}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-col gap-3 rounded-lg border bg-background/80 p-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="space-y-1 text-sm">
+                      <p className="font-medium">Core dining setup only</p>
+                      <p className="text-muted-foreground">
+                        This updates the core stockroom and linen rows with guest-based quantities. Manual extras stay untouched, and you can still swap items, change quantities, or remove rows afterward.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={handleApplySuggestedSetup}
+                      disabled={isApplyingSuggestedSetup || seatedGuestCount <= 0}
+                    >
+                      <Calculator className="mr-2 h-4 w-4" />
+                      {isApplyingSuggestedSetup ? 'Applying Setup...' : 'Apply Suggested Setup'}
+                    </Button>
+                  </div>
+
+                  {suggestedSetupFeedback ? (
+                    <div className="rounded-lg border bg-background/70 p-4">
+                      <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                        <p className="font-medium">Latest applied setup</p>
+                        <p className="text-xs text-muted-foreground">
+                          {suggestedSetupFeedback.guestCount.toLocaleString()} seated guests | {suggestedSetupFeedback.tableCount.toLocaleString()} suggested tables
+                        </p>
+                      </div>
+
+                      {suggestedSetupFeedback.matched.length > 0 ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {suggestedSetupFeedback.matched.map((item) => (
+                            <Badge key={`${item.key}-${item.itemName}`} variant="outline" className="bg-background">
+                              {AUTO_SETUP_LABELS[item.key]}: {item.itemName} x{item.quantity}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {suggestedSetupFeedback.missing.length > 0 ? (
+                        <p className="mt-3 text-sm text-amber-700">
+                          Still needs a manual inventory match for: {suggestedSetupFeedback.missing.map((key) => AUTO_SETUP_LABELS[key]).join(', ')}.
+                        </p>
+                      ) : (
+                        <p className="mt-3 text-sm text-green-700">
+                          All core setup items found matching inventory rows.
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {showCreativeEditorSection ? (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Palette className="h-5 w-5" />
-                  Creative / Decor Items
+                  Creative / Decor Items (optional)
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <Label>Selected Creative Items</Label>
+                    <FieldLabel optional>Selected Creative Items</FieldLabel>
                   </div>
                   <Button type="button" variant="outline" size="sm" onClick={() => setCreativeAssets(prev => [...prev, createEmptyCreativeAsset()])}>
                     <Plus className="mr-2 h-4 w-4" />
@@ -1879,18 +2639,20 @@ export default function NewContract() {
                 )}
               </CardContent>
             </Card>
+            ) : null}
 
+            {showLinenEditorSection ? (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Shirt className="h-5 w-5" />
-                  Linen Items
+                  Linen Items (optional)
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <Label>Selected Linen Items</Label>
+                    <FieldLabel optional>Selected Linen Items</FieldLabel>
                   </div>
                   <Button type="button" variant="outline" size="sm" onClick={() => setLinenRequirements(prev => [...prev, createEmptyLinenRequirement()])}>
                     <Plus className="mr-2 h-4 w-4" />
@@ -1930,7 +2692,14 @@ export default function NewContract() {
                           />
                           {item.itemId ? (
                             <div className="text-xs text-muted-foreground">
-                              <div>{item.itemCode || 'No code'} | {item.material || 'No material'} | {item.color || 'No color'}</div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {item.autoRule ? (
+                                  <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary">
+                                    Auto setup
+                                  </Badge>
+                                ) : null}
+                                <span>{item.itemCode || 'No code'} | {item.material || 'No material'} | {item.color || 'No color'}</span>
+                              </div>
                               <div>{item.availableQuantity} available</div>
                             </div>
                           ) : (
@@ -1967,18 +2736,20 @@ export default function NewContract() {
                 )}
               </CardContent>
             </Card>
+            ) : null}
 
+            {showStockroomEditorSection ? (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Box className="h-5 w-5" />
-                  Stockroom Items
+                  Stockroom Items (optional)
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <Label>Selected Stockroom Items</Label>
+                    <FieldLabel optional>Selected Stockroom Items</FieldLabel>
                   </div>
                   <Button type="button" variant="outline" size="sm" onClick={() => setStockroomRequirements(prev => [...prev, createEmptyStockroomRequirement()])}>
                     <Plus className="mr-2 h-4 w-4" />
@@ -2014,11 +2785,18 @@ export default function NewContract() {
                             onSearch={loadStockroomItems}
                             onSelect={(stockroomItem) => applyStockroomItemToRequirement(index, stockroomItem)}
                             getItemLabel={(stockroomItem) => stockroomItem.name}
-                            getItemSummary={(stockroomItem) => `${stockroomItem.itemCode || 'No code'} | ${stockroomItem.category || 'No category'} | ${stockroomItem.availableQuantity} available | ${formatCurrency(stockroomItem.rentalPricePerDay || 0)}`}
+                                getItemSummary={(stockroomItem) => `${stockroomItem.itemCode || 'No code'} | ${stockroomItem.category || 'No category'} | ${stockroomItem.availableQuantity} available | ${formatCurrency(stockroomItem.pricePerItem || 0)}`}
                           />
                           {item.itemId ? (
                             <div className="text-xs text-muted-foreground">
-                              <div>{item.itemCode || 'No code'} | {item.category || 'No category'}</div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {item.autoRule ? (
+                                  <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary">
+                                    Auto setup
+                                  </Badge>
+                                ) : null}
+                                <span>{item.itemCode || 'No code'} | {item.category || 'No category'}</span>
+                              </div>
                               <div>{item.availableQuantity} available</div>
                             </div>
                           ) : (
@@ -2055,16 +2833,30 @@ export default function NewContract() {
                 )}
               </CardContent>
             </Card>
+            ) : null}
 
-            <div className="flex justify-between">
-              <Button variant="outline" onClick={() => setActiveTab('package')}>Back</Button>
-              <Button onClick={() => setActiveTab('summary')}>
-                Next: Summary <ChevronRight className="ml-2 h-4 w-4" />
-              </Button>
-            </div>
+            {isInventoryDraftEditor ? (
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={() => navigate(`/contracts/${editingContractId}?tab=inventory`)}>
+                  Back To Contract
+                </Button>
+                <Button onClick={handleSubmit} disabled={isSubmitting}>
+                  <Save className="mr-2 h-4 w-4" />
+                  {isSubmitting ? 'Saving Inventory...' : 'Save Inventory Draft'}
+                </Button>
+              </div>
+            ) : (
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={() => setActiveTab('package')}>Back</Button>
+                <Button onClick={() => setActiveTab('summary')}>
+                  Next: Summary <ChevronRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </TabsContent>
 
           {/* SUMMARY TAB */}
+          {!isInventoryDraftEditor ? (
           <TabsContent value="summary" className="space-y-4">
             <Card>
               <CardHeader>
@@ -2252,6 +3044,7 @@ export default function NewContract() {
               </Button>
             </div>
           </TabsContent>
+          ) : null}
         </Tabs>
 
         <Dialog open={Boolean(previewImage)} onOpenChange={(open) => !open && setPreviewImage(null)}>

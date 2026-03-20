@@ -51,6 +51,7 @@ const linenInventorySchema = new mongoose.Schema({
       default: false
     }
   }],
+  referenceUrl: String,
   // Inventory tracking
   quantity: {
     type: Number,

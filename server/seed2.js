@@ -125,9 +125,10 @@ async function seedDemoData() {
   const demoUsers = [
     { name: 'Sales Manager', email: 'sales@juancarlos.com', password: 'password123', role: 'sales', department: 'Sales' },
     { name: 'Accounting Manager', email: 'accounting@juancarlos.com', password: 'password123', role: 'accounting', department: 'Accounting' },
-    { name: 'Logistics Manager', email: 'logistics@juancarlos.com', password: 'password123', role: 'logistics', department: 'Logistics' },
-    { name: 'Kitchen Manager', email: 'kitchen@juancarlos.com', password: 'password123', role: 'kitchen', department: 'Kitchen' },
-    { name: 'Creative Manager', email: 'creative@juancarlos.com', password: 'password123', role: 'creative', department: 'Creative' },
+  { name: 'Logistics Manager', email: 'logistics@juancarlos.com', password: 'password123', role: 'logistics', department: 'Logistics' },
+  { name: 'Kitchen Manager', email: 'kitchen@juancarlos.com', password: 'password123', role: 'kitchen', department: 'Kitchen' },
+  { name: 'Stockroom', email: 'stockroom@juancarlos.com', password: 'password123', role: 'stockroom', department: 'Stockroom' },
+  { name: 'Creative Manager', email: 'creative@juancarlos.com', password: 'password123', role: 'creative', department: 'Creative' },
     { name: 'Linen Manager', email: 'linen@juancarlos.com', password: 'password123', role: 'linen', department: 'Linen' },
     { name: 'System Admin', email: 'admin@juancarlos.com', password: 'admin123', role: 'admin', department: 'Admin' },
   ];

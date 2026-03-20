@@ -67,6 +67,46 @@ function SalesOrAdminRoute({ children }: { children: React.ReactNode }) {
     : <Navigate to="/contracts" replace />;
 }
 
+function ContractEditorRoute({ children }: { children: React.ReactNode }) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" />;
+  }
+
+  return ['sales', 'admin', 'creative', 'linen', 'purchasing', 'stockroom'].includes(user.role)
+    ? <>{children}</>
+    : <Navigate to="/contracts" replace />;
+}
+
+function RoleRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles: string[] }) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" />;
+  }
+
+  return allowedRoles.includes(user.role)
+    ? <>{children}</>
+    : <Navigate to="/" replace />;
+}
+
 function AppRoutes() {
   const { user } = useAuth();
 
@@ -93,9 +133,9 @@ function AppRoutes() {
       } />
 
       <Route path="/contracts/edit/:id" element={
-        <SalesOrAdminRoute>
+        <ContractEditorRoute>
           <NewContract />
-        </SalesOrAdminRoute>
+        </ContractEditorRoute>
       } />
       
       <Route path="/contracts/:id" element={
@@ -129,94 +169,94 @@ function AppRoutes() {
       } />
       
       <Route path="/sales" element={
-        <PrivateRoute>
+        <RoleRoute allowedRoles={['sales', 'admin']}>
           <SalesDashboard />
-        </PrivateRoute>
+        </RoleRoute>
       } />
       
       <Route path="/accounting" element={
-        <PrivateRoute>
+        <RoleRoute allowedRoles={['accounting', 'admin']}>
           <AccountingDashboard />
-        </PrivateRoute>
+        </RoleRoute>
       } />
       
       <Route path="/logistics" element={
-        <PrivateRoute>
+        <RoleRoute allowedRoles={['logistics', 'admin']}>
           <LogisticsDashboard />
-        </PrivateRoute>
+        </RoleRoute>
       } />
       
       <Route path="/banquet" element={
-        <PrivateRoute>
+        <RoleRoute allowedRoles={['banquet_supervisor', 'admin']}>
           <BanquetDashboard />
-        </PrivateRoute>
+        </RoleRoute>
       } />
       
       <Route path="/kitchen" element={
-        <PrivateRoute>
+        <RoleRoute allowedRoles={['kitchen', 'admin']}>
           <KitchenDashboard />
-        </PrivateRoute>
+        </RoleRoute>
       } />
       
       <Route path="/purchasing" element={
-        <PrivateRoute>
+        <RoleRoute allowedRoles={['purchasing', 'admin']}>
           <PurchasingDashboard />
-        </PrivateRoute>
+        </RoleRoute>
       } />
       
       <Route path="/creative" element={
-        <PrivateRoute>
+        <RoleRoute allowedRoles={['creative', 'admin']}>
           <CreativeDashboard />
-        </PrivateRoute>
+        </RoleRoute>
       } />
       
       <Route path="/linen" element={
-        <PrivateRoute>
+        <RoleRoute allowedRoles={['linen', 'admin']}>
           <LinenDashboard />
-        </PrivateRoute>
+        </RoleRoute>
       } />
       
       {/* Department Management Modules */}
       <Route path="/creative/inventory" element={
-        <PrivateRoute>
+        <RoleRoute allowedRoles={['creative', 'admin']}>
           <CreativeInventory />
-        </PrivateRoute>
+        </RoleRoute>
       } />
       
       <Route path="/banquet/staff" element={
-        <PrivateRoute>
+        <RoleRoute allowedRoles={['banquet_supervisor', 'admin']}>
           <BanquetStaff />
-        </PrivateRoute>
+        </RoleRoute>
       } />
       
       <Route path="/logistics/management" element={
-        <PrivateRoute>
+        <RoleRoute allowedRoles={['logistics', 'admin']}>
           <LogisticsManagement />
-        </PrivateRoute>
+        </RoleRoute>
       } />
       
       <Route path="/linen/inventory" element={
-        <PrivateRoute>
+        <RoleRoute allowedRoles={['linen', 'admin']}>
           <LinenInventory />
-        </PrivateRoute>
+        </RoleRoute>
       } />
       
       <Route path="/stockroom/inventory" element={
-        <PrivateRoute>
+        <RoleRoute allowedRoles={['logistics', 'stockroom', 'admin']}>
           <StockroomInventory />
-        </PrivateRoute>
+        </RoleRoute>
       } />
       
       <Route path="/kitchen/inventory" element={
-        <PrivateRoute>
+        <RoleRoute allowedRoles={['kitchen', 'admin']}>
           <KitchenInventory />
-        </PrivateRoute>
+        </RoleRoute>
       } />
       
       <Route path="/admin/management" element={
-        <PrivateRoute>
+        <RoleRoute allowedRoles={['admin']}>
           <AdminManagement />
-        </PrivateRoute>
+        </RoleRoute>
       } />
       
       <Route path="/settings" element={

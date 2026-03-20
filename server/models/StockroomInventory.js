@@ -37,6 +37,7 @@ const stockroomInventorySchema = new mongoose.Schema({
       default: false
     }
   }],
+  referenceUrl: String,
   
   // Quantity Management
   quantity: {
@@ -135,6 +136,10 @@ const stockroomInventorySchema = new mongoose.Schema({
 
 // Generate item code before saving
 stockroomInventorySchema.pre('save', async function() {
+  if (this.isNew || this.isModified('quantity') || this.isModified('reservedQuantity')) {
+    this.updateAvailable();
+  }
+
   if (!this.itemCode) {
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);

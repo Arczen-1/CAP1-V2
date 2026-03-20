@@ -9,6 +9,7 @@ export type UserRole =
   | 'banquet_supervisor' 
   | 'kitchen' 
   | 'purchasing' 
+  | 'stockroom'
   | 'creative' 
   | 'linen' 
   | 'admin';
@@ -227,6 +228,7 @@ export function useRole() {
   const isBanquet = () => user?.role === 'banquet_supervisor' || user?.role === 'admin';
   const isKitchen = () => user?.role === 'kitchen' || user?.role === 'admin';
   const isPurchasing = () => user?.role === 'purchasing' || user?.role === 'admin';
+  const isStockroom = () => user?.role === 'stockroom' || user?.role === 'admin';
   const isCreative = () => user?.role === 'creative' || user?.role === 'admin';
   const isLinen = () => user?.role === 'linen' || user?.role === 'admin';
   const isAdmin = () => user?.role === 'admin';
@@ -239,6 +241,7 @@ export function useRole() {
     isBanquet,
     isKitchen,
     isPurchasing,
+    isStockroom,
     isCreative,
     isLinen,
     isAdmin,

@@ -61,6 +61,6 @@ echo This will start both the backend and frontend.
 echo.
 echo Then open: http://localhost:5173
 echo.
-echo Default login: sales@juancarlos.com / password123
+echo Use the work account credentials shared privately by your project administrator.
 echo.
 pause

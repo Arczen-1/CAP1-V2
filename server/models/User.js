@@ -26,6 +26,7 @@ const userSchema = new mongoose.Schema({
       'banquet_supervisor',
       'kitchen',
       'purchasing',
+      'stockroom',
       'creative',
       'linen',
       'admin'
@@ -41,6 +42,7 @@ const userSchema = new mongoose.Schema({
       'Banquet Operations',
       'Kitchen',
       'Purchasing',
+      'Stockroom',
       'Creative',
       'Linen',
       'Admin'

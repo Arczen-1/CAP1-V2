@@ -100,9 +100,14 @@ const toRow = (contract: Contract): WorklistRow => {
     nextStepNote: nextStep.note,
     nextStepClassName: nextStep.className,
     primaryAction: {
-      label: 'View Contract',
-      href: `/contracts/${contract._id}`,
+      label: 'Open Banquet Plan',
+      href: `/contracts/${contract._id}?tab=banquet`,
       variant: 'outline',
+    },
+    secondaryAction: {
+      label: 'View Event Details',
+      href: `/contracts/${contract._id}`,
+      variant: 'default',
     },
     rowClassName: needsUrgentAttention ? 'bg-red-50/20' : undefined,
     searchText: `${contract.venue?.name || ''} ${contract.currentDepartment} ${contract.clientType}`,
@@ -129,15 +134,15 @@ export default function BanquetDashboard() {
     }
   };
 
-  const assignedContracts = contracts.filter((contract) =>
+  const visibleContracts = contracts.filter((contract) =>
     contract.assignedSupervisor?._id === user?.id || contract.status === 'approved'
   );
-  const upcomingEvents = assignedContracts.filter((contract) => {
+  const upcomingEvents = visibleContracts.filter((contract) => {
     const daysUntil = getDaysUntilDate(contract.eventDate);
     return daysUntil >= 0 && daysUntil <= 7;
   });
-  const pendingTasks = assignedContracts.filter((contract) => contract.progress < 100);
-  const completedEvents = assignedContracts.filter((contract) => contract.progress >= 100 || contract.status === 'completed');
+  const pendingTasks = visibleContracts.filter((contract) => contract.progress < 100);
+  const completedEvents = visibleContracts.filter((contract) => contract.progress >= 100 || contract.status === 'completed');
 
   if (isLoading) {
     return (
@@ -162,9 +167,9 @@ export default function BanquetDashboard() {
         <DepartmentWorklist
           summaryCards={[
             {
-              title: 'Assigned Events',
-              value: assignedContracts.length,
-              note: 'Contracts currently under banquet visibility',
+              title: 'Banquet Queue',
+              value: visibleContracts.length,
+              note: 'Approved or assigned events currently visible to banquet',
               icon: Users,
             },
             {
@@ -196,10 +201,10 @@ export default function BanquetDashboard() {
             },
             {
               value: 'assigned',
-              label: `Assigned (${assignedContracts.length})`,
-              emptyTitle: 'No banquet assignments yet',
+              label: `All Visible (${visibleContracts.length})`,
+              emptyTitle: 'No banquet events available',
               emptyMessage: 'Approved or assigned contracts will show up here for banquet oversight.',
-              rows: assignedContracts.map(toRow),
+              rows: visibleContracts.map(toRow),
             },
             {
               value: 'pending',

@@ -6,6 +6,11 @@ const incidentSchema = new mongoose.Schema({
     ref: 'Contract',
     required: true
   },
+  department: {
+    type: String,
+    enum: ['sales', 'accounting', 'logistics', 'banquet', 'kitchen', 'purchasing', 'creative', 'linen', 'all'],
+    default: 'all'
+  },
   incidentType: {
     type: String,
     enum: [
@@ -23,6 +28,13 @@ const incidentSchema = new mongoose.Schema({
   description: {
     type: String,
     required: true
+  },
+  sourceSection: String,
+  inventoryItemName: String,
+  inventoryItemCode: String,
+  affectedQuantity: {
+    type: Number,
+    min: 1
   },
   eventDate: {
     type: Date,

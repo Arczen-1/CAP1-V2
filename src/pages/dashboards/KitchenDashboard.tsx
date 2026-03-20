@@ -5,9 +5,10 @@ import { api } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ChefHat, Calendar, AlertTriangle, CheckCircle, Package, Flame } from 'lucide-react';
+import { ChefHat, Calendar, AlertTriangle, CheckCircle, Flame } from 'lucide-react';
 import { getSortTimestamp } from '@/lib/worklist';
 import { toast } from 'sonner';
 
@@ -58,26 +59,28 @@ export default function KitchenDashboard() {
     return diffDays;
   };
 
-  const handleUpdateMenuItem = async (contractId: string, itemIndex: number, confirmed: boolean) => {
-    try {
-      const contract = contracts.find(c => c._id === contractId);
-      if (!contract) return;
+  const getEventDistanceLabel = (eventDate: string) => {
+    const daysAway = getEventDaysAway(eventDate);
 
-      const updatedMenu = [...contract.menuDetails];
-      updatedMenu[itemIndex] = { ...updatedMenu[itemIndex], confirmed };
-
-      await api.updateContract(contractId, { menuDetails: updatedMenu });
-      toast.success('Menu item updated!');
-      fetchData();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update');
+    if (daysAway < 0) {
+      return `${Math.abs(daysAway)} days ago`;
     }
+
+    if (daysAway === 0) {
+      return 'Today';
+    }
+
+    if (daysAway === 1) {
+      return '1 day';
+    }
+
+    return `${daysAway} days`;
   };
 
-  const handleUpdateCookingLocation = async (contractId: string, location: string) => {
+  const handleUpdateMenuItem = async (contractId: string, itemIndex: number, confirmed: boolean) => {
     try {
-      await api.updateContract(contractId, { cookingLocation: location });
-      toast.success('Cooking location updated!');
+      await api.updateKitchenMenuItem(contractId, { index: itemIndex, confirmed });
+      toast.success('Menu item updated!');
       fetchData();
     } catch (error: any) {
       toast.error(error.message || 'Failed to update');
@@ -86,7 +89,7 @@ export default function KitchenDashboard() {
 
   const handleUpdateIngredientStatus = async (contractId: string, status: string) => {
     try {
-      await api.updateContract(contractId, { ingredientStatus: status });
+      await api.updateKitchenIngredientStatus(contractId, { status: status as 'pending' | 'procured' | 'prepared' });
       toast.success('Ingredient status updated!');
       fetchData();
     } catch (error: any) {
@@ -97,21 +100,174 @@ export default function KitchenDashboard() {
   const approvedContracts = [...contracts]
     .filter(c => c.status === 'approved')
     .sort((left, right) => getSortTimestamp(right.createdAt, right.eventDate) - getSortTimestamp(left.createdAt, left.eventDate));
-  
-  const thisWeekContracts = approvedContracts.filter(c => {
+
+  const sortByUpcomingDate = (items: Contract[]) => [...items].sort(
+    (left, right) => new Date(left.eventDate).getTime() - new Date(right.eventDate).getTime()
+  );
+
+  const getChecklistSummary = (contract: Contract) => {
+    const totalItems = contract.menuDetails?.length || 0;
+    const confirmedItems = contract.menuDetails?.filter(item => item.confirmed).length || 0;
+
+    return {
+      totalItems,
+      confirmedItems,
+      isComplete: totalItems === 0 || confirmedItems === totalItems,
+    };
+  };
+
+  const thisWeekContracts = sortByUpcomingDate(approvedContracts.filter(c => {
     const days = getEventDaysAway(c.eventDate);
     return days <= 7 && days >= 0;
-  });
+  }));
 
-  const pendingPrep = approvedContracts.filter(c => 
-    c.ingredientStatus !== 'prepared'
-  );
+  const renderKitchenWorkflowCard = (contract: Contract) => {
+    const daysAway = getEventDaysAway(contract.eventDate);
+    const { totalItems, confirmedItems, isComplete } = getChecklistSummary(contract);
+    const isPrepared = contract.ingredientStatus === 'prepared';
+    const needsUrgentPrep = !isPrepared && daysAway <= 2 && daysAway >= 0;
+
+    return (
+      <Card key={contract._id} className={needsUrgentPrep ? 'border-red-300' : ''}>
+        <CardContent className="p-6">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold">{contract.contractNumber}</span>
+                <Badge className={daysAway <= 2 && daysAway >= 0 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}>
+                  {getEventDistanceLabel(contract.eventDate)}
+                </Badge>
+                {contract.slaWarning && (
+                  <Badge variant="destructive">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    SLA
+                  </Badge>
+                )}
+              </div>
+              <h3 className="text-lg font-medium">{contract.clientName}</h3>
+              <p className="text-sm text-muted-foreground">
+                {new Date(contract.eventDate).toLocaleDateString()} | {contract.totalPacks} packs
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="capitalize">
+                  <Flame className="h-3 w-3 mr-1" />
+                  {contract.cookingLocation === 'on_site' ? 'On-site' : 'Commissary'}
+                </Badge>
+                <Badge variant="outline" className="capitalize">
+                  {contract.ingredientStatus || 'pending'}
+                </Badge>
+                <Badge variant="outline">
+                  {totalItems > 0 ? `Checklist ${confirmedItems}/${totalItems}` : 'No checklist'}
+                </Badge>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row xl:flex-col">
+              {isPrepared ? (
+                <Badge className="justify-center bg-green-100 text-green-800 hover:bg-green-100">
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                  Kitchen Ready
+                </Badge>
+              ) : (
+                <Button
+                  size="sm"
+                  disabled={!isComplete}
+                  onClick={() => handleUpdateIngredientStatus(contract._id, 'prepared')}
+                >
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                  Mark Ready
+                </Button>
+              )}
+
+              <Button variant="outline" size="sm" asChild>
+                <Link to={`/contracts/${contract._id}`}>View Contract</Link>
+              </Button>
+            </div>
+          </div>
+
+          <Accordion type="single" collapsible className="mt-4">
+            <AccordionItem value="preparation-checklist" className="overflow-hidden rounded-xl border bg-slate-50/50 px-4">
+              <AccordionTrigger className="py-3 hover:no-underline">
+                <div className="flex flex-1 flex-col gap-2 text-left sm:flex-row sm:items-center sm:justify-between">
+                  <p className="font-medium text-foreground">Preparation Checklist</p>
+                  <Badge variant="outline" className="w-fit">
+                    {totalItems > 0 ? `${confirmedItems}/${totalItems} confirmed` : 'No checklist'}
+                  </Badge>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="pb-4">
+                {contract.menuDetails && contract.menuDetails.length > 0 ? (
+                  <div className="space-y-2">
+                    {contract.menuDetails.map((item, index) => (
+                      <div key={index} className="flex items-center gap-3">
+                        <Checkbox
+                          checked={item.confirmed}
+                          onCheckedChange={(checked) =>
+                            handleUpdateMenuItem(contract._id, index, Boolean(checked))
+                          }
+                        />
+                        <span className={item.confirmed ? 'line-through text-muted-foreground' : ''}>
+                          {item.item} ({item.category}) x {item.quantity}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No menu checklist saved for this contract.</p>
+                )}
+
+                {!isPrepared && !isComplete && totalItems > 0 ? (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Complete the checklist before marking this event ready.
+                  </p>
+                ) : null}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderKitchenOverviewCard = (contract: Contract) => {
+    const { totalItems, confirmedItems } = getChecklistSummary(contract);
+
+    return (
+      <Card key={contract._id}>
+        <CardContent className="p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold">{contract.contractNumber}</span>
+                <Badge variant="outline" className="capitalize">
+                  {contract.ingredientStatus || 'pending'}
+                </Badge>
+                <Badge variant="outline" className="capitalize">
+                  {contract.cookingLocation === 'on_site' ? 'On-site' : 'Commissary'}
+                </Badge>
+                <Badge variant="outline">
+                  {totalItems > 0 ? `Checklist ${confirmedItems}/${totalItems}` : 'No checklist'}
+                </Badge>
+              </div>
+              <h3 className="text-lg font-medium">{contract.clientName}</h3>
+              <p className="text-sm text-muted-foreground">
+                {new Date(contract.eventDate).toLocaleDateString()} | {contract.totalPacks} packs | {getEventDistanceLabel(contract.eventDate)}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link to={`/contracts/${contract._id}`}>View Contract</Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
 
   if (isLoading) {
     return (
       <Layout>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="flex h-64 items-center justify-center">
+          <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-primary"></div>
         </div>
       </Layout>
     );
@@ -120,7 +276,6 @@ export default function KitchenDashboard() {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Header */}
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Kitchen Dashboard</h1>
           <p className="text-muted-foreground">
@@ -128,8 +283,7 @@ export default function KitchenDashboard() {
           </p>
         </div>
 
-        {/* Stats */}
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Events</CardTitle>
@@ -154,17 +308,6 @@ export default function KitchenDashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Pending Prep</CardTitle>
-              <Package className="h-4 w-4 text-yellow-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">{pendingPrep.length}</div>
-              <p className="text-xs text-muted-foreground">Need preparation</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Ready</CardTitle>
               <CheckCircle className="h-4 w-4 text-green-600" />
             </CardHeader>
@@ -177,17 +320,13 @@ export default function KitchenDashboard() {
           </Card>
         </div>
 
-        {/* Events Tabs */}
         <Tabs defaultValue="thisweek" className="space-y-4">
-          <TabsList>
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="thisweek">
               This Week ({thisWeekContracts.length})
             </TabsTrigger>
             <TabsTrigger value="all">
               All Events ({approvedContracts.length})
-            </TabsTrigger>
-            <TabsTrigger value="pending">
-              Pending Prep ({pendingPrep.length})
             </TabsTrigger>
           </TabsList>
 
@@ -199,73 +338,7 @@ export default function KitchenDashboard() {
                 </CardContent>
               </Card>
             ) : (
-              thisWeekContracts.map((contract) => {
-                const daysAway = getEventDaysAway(contract.eventDate);
-                
-                return (
-                  <Card key={contract._id} className={daysAway <= 2 ? 'border-red-300' : ''}>
-                    <CardContent className="p-6">
-                      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold">{contract.contractNumber}</span>
-                            <Badge className={daysAway <= 2 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}>
-                              {daysAway === 0 ? 'Today' : `${daysAway} days`}
-                            </Badge>
-                            {contract.slaWarning && (
-                              <Badge variant="destructive">
-                                <AlertTriangle className="h-3 w-3 mr-1" />
-                                SLA
-                              </Badge>
-                            )}
-                          </div>
-                          <h3 className="text-lg font-medium">{contract.clientName}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(contract.eventDate).toLocaleDateString()} • {contract.totalPacks} packs
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="capitalize">
-                              <Flame className="h-3 w-3 mr-1" />
-                              {contract.cookingLocation === 'on_site' ? 'On-site' : 'Commissary'}
-                            </Badge>
-                            <Badge variant="outline" className="capitalize">
-                              {contract.ingredientStatus || 'pending'}
-                            </Badge>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Button variant="outline" size="sm" asChild>
-                            <Link to={`/contracts/${contract._id}`}>View Contract</Link>
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Menu Items */}
-                      {contract.menuDetails && contract.menuDetails.length > 0 && (
-                        <div className="mt-4 pt-4 border-t">
-                          <p className="font-medium mb-2">Menu Items:</p>
-                          <div className="space-y-2">
-                            {contract.menuDetails.map((item, index) => (
-                              <div key={index} className="flex items-center gap-3">
-                                <Checkbox
-                                  checked={item.confirmed}
-                                  onCheckedChange={(checked) => 
-                                    handleUpdateMenuItem(contract._id, index, checked as boolean)
-                                  }
-                                />
-                                <span className={item.confirmed ? 'line-through text-muted-foreground' : ''}>
-                                  {item.item} ({item.category}) × {item.quantity}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })
+              thisWeekContracts.map((contract) => renderKitchenWorkflowCard(contract))
             )}
           </TabsContent>
 
@@ -277,90 +350,10 @@ export default function KitchenDashboard() {
                 </CardContent>
               </Card>
             ) : (
-              approvedContracts.map((contract) => (
-                <Card key={contract._id}>
-                  <CardContent className="p-6">
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold">{contract.contractNumber}</span>
-                          <Badge variant="outline" className="capitalize">
-                            {contract.ingredientStatus || 'pending'}
-                          </Badge>
-                        </div>
-                        <h3 className="text-lg font-medium">{contract.clientName}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(contract.eventDate).toLocaleDateString()} • {contract.totalPacks} packs
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <select
-                          className="border rounded px-2 py-1 text-sm"
-                          value={contract.ingredientStatus || 'pending'}
-                          onChange={(e) => handleUpdateIngredientStatus(contract._id, e.target.value)}
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="procured">Procured</option>
-                          <option value="prepared">Prepared</option>
-                        </select>
-                        <Button variant="outline" size="sm" asChild>
-                          <Link to={`/contracts/${contract._id}`}>View</Link>
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
+              approvedContracts.map((contract) => renderKitchenOverviewCard(contract))
             )}
           </TabsContent>
 
-          <TabsContent value="pending" className="space-y-4">
-            {pendingPrep.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <p className="text-muted-foreground">All preparations complete!</p>
-                </CardContent>
-              </Card>
-            ) : (
-              pendingPrep.map((contract) => (
-                <Card key={contract._id}>
-                  <CardContent className="p-6">
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold">{contract.contractNumber}</span>
-                          <Badge variant="outline" className="capitalize">
-                            {contract.ingredientStatus || 'pending'}
-                          </Badge>
-                        </div>
-                        <h3 className="text-lg font-medium">{contract.clientName}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(contract.eventDate).toLocaleDateString()} • {contract.totalPacks} packs
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <select
-                          className="border rounded px-2 py-1 text-sm"
-                          value={contract.cookingLocation || 'commissary'}
-                          onChange={(e) => handleUpdateCookingLocation(contract._id, e.target.value)}
-                        >
-                          <option value="commissary">Commissary</option>
-                          <option value="on_site">On-site</option>
-                        </select>
-                        <Button 
-                          size="sm"
-                          onClick={() => handleUpdateIngredientStatus(contract._id, 'prepared')}
-                        >
-                          <CheckCircle className="mr-2 h-4 w-4" />
-                          Mark Ready
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </TabsContent>
         </Tabs>
       </div>
     </Layout>

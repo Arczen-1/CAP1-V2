@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import { api } from '@/services/api';
 import { Button } from '@/components/ui/button';
@@ -8,13 +9,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import InventoryPagination from '@/components/InventoryPagination';
+import DepartmentProcurementPanel from '@/components/DepartmentProcurementPanel';
+import { buildGoogleImageSearchUrl } from '@/lib/photoSearch';
 import { toast } from 'sonner';
-import { Plus, Search, Edit2, Trash2, Image as ImageIcon, Package, Wrench } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Image as ImageIcon, Package, Wrench, ExternalLink, ClipboardCheck, FilePenLine } from 'lucide-react';
 
 const categories = ['Backdrop', 'Table Decor', 'Lighting', 'Floral', 'Signage', 'Props', 'Drapery', 'Centerpiece', 'Other'];
 const conditions = ['excellent', 'good', 'fair', 'needs_repair', 'damaged'];
 const statuses = ['available', 'in_use', 'maintenance', 'retired'];
+const ITEMS_PER_PAGE = 12;
 
 interface CreativeItem {
   _id: string;
@@ -22,6 +28,7 @@ interface CreativeItem {
   name: string;
   category: string;
   images: { url: string; caption: string; isPrimary: boolean }[];
+  referenceUrl?: string;
   quantity: number;
   availableQuantity: number;
   condition: string;
@@ -32,14 +39,79 @@ interface CreativeItem {
   dimensions?: { length?: number; width?: number; height?: number; weight?: number };
 }
 
+interface CreativeContract {
+  _id: string;
+  contractNumber: string;
+  createdAt?: string;
+  clientName: string;
+  eventDate: string;
+  status: string;
+  preferredColor?: string;
+  backdropRequirements?: string;
+  tableSetup?: string;
+  venue?: { name?: string; address?: string };
+  creativeAssets?: Array<{
+    item: string;
+    quantity: number;
+    status?: string;
+  }>;
+  sectionConfirmations?: {
+    creative?: {
+      confirmed?: boolean;
+      confirmedAt?: string;
+      confirmedBy?: string;
+    };
+  };
+}
+
+const CREATIVE_PRE_SIGNATURE_STATUSES = [
+  'draft',
+  'pending_client_signature',
+  'submitted',
+  'accounting_review',
+] as const;
+
+const isCreativeDraftWorkflowStatus = (status: string) =>
+  CREATIVE_PRE_SIGNATURE_STATUSES.includes(status as (typeof CREATIVE_PRE_SIGNATURE_STATUSES)[number]);
+
+const formatStatusLabel = (value?: string) => {
+  if (!value) {
+    return 'Not set';
+  }
+
+  return value
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+};
+
+const formatShortDate = (value?: string) => {
+  if (!value) {
+    return 'No date';
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+};
+
 export default function CreativeInventory() {
   const [items, setItems] = useState<CreativeItem[]>([]);
+  const [contracts, setContracts] = useState<CreativeContract[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<CreativeItem | null>(null);
   const [stats, setStats] = useState({ total: 0, available: 0, inUse: 0, maintenance: 0 });
+  const [currentPage, setCurrentPage] = useState(1);
   const [formData, setFormData] = useState({
     name: '',
     category: '',
@@ -56,6 +128,7 @@ export default function CreativeInventory() {
   useEffect(() => {
     fetchItems();
     fetchStats();
+    fetchContracts();
   }, []);
 
   const fetchItems = async () => {
@@ -78,6 +151,15 @@ export default function CreativeInventory() {
       });
     } catch (error) {
       console.error('Failed to fetch stats');
+    }
+  };
+
+  const fetchContracts = async () => {
+    try {
+      const data = await api.getContracts();
+      setContracts(data as CreativeContract[]);
+    } catch (error) {
+      toast.error('Failed to fetch draft contracts');
     }
   };
 
@@ -218,6 +300,43 @@ export default function CreativeInventory() {
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / ITEMS_PER_PAGE));
+  const paginatedItems = filteredItems.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategory]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
+
+  const procurementItems = items.map((item) => ({
+    _id: item._id,
+    itemCode: item.itemCode,
+    name: item.name,
+    category: item.category,
+    quantity: item.quantity,
+    availableQuantity: item.availableQuantity,
+    status: item.status,
+  }));
+
+  const draftContracts = [...contracts]
+    .filter((contract) => isCreativeDraftWorkflowStatus(contract.status))
+    .sort((left, right) => {
+      const leftTime = new Date(left.createdAt || left.eventDate).getTime();
+      const rightTime = new Date(right.createdAt || right.eventDate).getTime();
+      return rightTime - leftTime;
+    });
+  const contractsNeedingConfirmation = draftContracts.filter(
+    (contract) => !contract.sectionConfirmations?.creative?.confirmed,
+  );
+  const confirmedContracts = draftContracts.filter(
+    (contract) => contract.sectionConfirmations?.creative?.confirmed,
+  );
+  const totalCreativeUnitsRequested = draftContracts.reduce((sum, contract) => (
+    sum + (contract.creativeAssets?.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0) || 0)
+  ), 0);
 
   return (
     <Layout>
@@ -340,158 +459,332 @@ export default function CreativeInventory() {
           </Dialog>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Items</CardTitle>
-              <Package className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.total}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Available</CardTitle>
-              <Package className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{stats.available}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">In Use</CardTitle>
-              <Package className="h-4 w-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{stats.inUse}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Maintenance</CardTitle>
-              <Wrench className="h-4 w-4 text-yellow-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">{stats.maintenance}</div>
-            </CardContent>
-          </Card>
-        </div>
+        <Tabs defaultValue="inventory" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="inventory">Inventory</TabsTrigger>
+            <TabsTrigger value="contracts">Draft Contracts</TabsTrigger>
+            <TabsTrigger value="reports">Purchasing Reports</TabsTrigger>
+          </TabsList>
 
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search items by name or code..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="w-full sm:w-48">
-              <SelectValue placeholder="All Categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {categories.map(cat => (
-                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Items Table */}
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="min-w-[280px]">Item</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Stock</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Price / Item</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredItems.map((item) => (
-                    <TableRow key={item._id}>
-                      <TableCell className="align-top">
-                        <div className="flex min-w-[260px] items-start gap-3">
-                          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md border bg-muted">
-                            {item.images[0]?.url ? (
-                              <img
-                                src={item.images[0].url}
-                                alt={item.name}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center">
-                                <ImageIcon className="h-5 w-5 text-muted-foreground" />
-                              </div>
-                            )}
-                          </div>
-                          <div className="space-y-1">
-                            <p className="font-medium">{item.name}</p>
-                            <p className="text-sm text-muted-foreground">{item.itemCode}</p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="align-top whitespace-normal">
-                        <div className="space-y-2">
-                          <Badge variant="outline">{item.category}</Badge>
-                          <div>
-                            <Badge className={getConditionColor(item.condition)}>
-                              {item.condition.replace(/_/g, ' ')}
-                            </Badge>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="align-top">
-                        <div className="space-y-1 text-sm">
-                          <p className="font-medium">{item.availableQuantity} available</p>
-                          <p className="text-muted-foreground">{item.quantity} total units</p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="align-top">
-                        <Badge className={getStatusColor(item.status)}>
-                          {item.status.replace(/_/g, ' ')}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="align-top text-right font-medium">
-                        {formatCurrency(item.acquisition?.cost)}
-                      </TableCell>
-                      <TableCell className="align-top text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(item)}>
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteItem(item._id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+          <TabsContent value="inventory" className="space-y-6">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Items</CardTitle>
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.total}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Available</CardTitle>
+                  <Package className="h-4 w-4 text-green-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">{stats.available}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">In Use</CardTitle>
+                  <Package className="h-4 w-4 text-blue-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-blue-600">{stats.inUse}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Maintenance</CardTitle>
+                  <Wrench className="h-4 w-4 text-yellow-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-yellow-600">{stats.maintenance}</div>
+                </CardContent>
+              </Card>
             </div>
-          </CardContent>
-        </Card>
 
-        {filteredItems.length === 0 && (
-          <div className="text-center py-12">
-            <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium">No items found</h3>
-            <p className="text-muted-foreground">Try adjusting your search or filters</p>
-          </div>
-        )}
+            <div className="flex flex-col gap-4 sm:flex-row">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search items by name or code..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="w-full sm:w-48">
+                  <SelectValue placeholder="All Categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {categories.map(cat => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Card>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="min-w-[280px]">Item</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Stock</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Price / Item</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedItems.map((item) => (
+                        <TableRow key={item._id}>
+                          <TableCell className="align-top">
+                            <div className="flex min-w-[260px] items-start gap-3">
+                              <a
+                                href={item.referenceUrl || buildGoogleImageSearchUrl(item.name, item.category)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-muted shadow-sm transition hover:opacity-95 hover:shadow-md"
+                              >
+                                {item.images[0]?.url ? (
+                                  <img
+                                    src={item.images[0].url}
+                                    alt={item.name}
+                                    className="h-full w-full object-cover object-center"
+                                  />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center">
+                                    <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                                  </div>
+                                )}
+                              </a>
+                              <div className="space-y-1">
+                                <p className="font-medium">{item.name}</p>
+                                <p className="text-sm text-muted-foreground">{item.itemCode}</p>
+                                <a
+                                  href={item.referenceUrl || buildGoogleImageSearchUrl(item.name, item.category)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                  Photo references
+                                </a>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="align-top whitespace-normal">
+                            <div className="space-y-2">
+                              <Badge variant="outline">{item.category}</Badge>
+                              <div>
+                                <Badge className={getConditionColor(item.condition)}>
+                                  {item.condition.replace(/_/g, ' ')}
+                                </Badge>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="align-top">
+                            <div className="space-y-1 text-sm">
+                              <p className="font-medium">{item.availableQuantity} available</p>
+                              <p className="text-muted-foreground">{item.quantity} total units</p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="align-top">
+                            <Badge className={getStatusColor(item.status)}>
+                              {item.status.replace(/_/g, ' ')}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="align-top text-right font-medium">
+                            {formatCurrency(item.acquisition?.cost)}
+                          </TableCell>
+                          <TableCell className="align-top text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(item)}>
+                                <Edit2 className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteItem(item._id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <InventoryPagination
+                  currentPage={currentPage}
+                  pageSize={ITEMS_PER_PAGE}
+                  totalItems={filteredItems.length}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
+                />
+              </CardContent>
+            </Card>
+
+            {filteredItems.length === 0 && (
+              <div className="py-12 text-center">
+                <Package className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+                <h3 className="text-lg font-medium">No items found</h3>
+                <p className="text-muted-foreground">Try adjusting your search or filters</p>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="contracts" className="space-y-6">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Draft Contracts</CardTitle>
+                  <FilePenLine className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{draftContracts.length}</div>
+                  <p className="text-xs text-muted-foreground">Creative can review and edit these before signature</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Needs Confirmation</CardTitle>
+                  <ClipboardCheck className="h-4 w-4 text-amber-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-amber-600">{contractsNeedingConfirmation.length}</div>
+                  <p className="text-xs text-muted-foreground">Drafts still waiting on creative inventory confirmation</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Confirmed</CardTitle>
+                  <ClipboardCheck className="h-4 w-4 text-green-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">{confirmedContracts.length}</div>
+                  <p className="text-xs text-muted-foreground">Drafts already confirmed by the creative department</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Requested Units</CardTitle>
+                  <Package className="h-4 w-4 text-sky-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-sky-600">{totalCreativeUnitsRequested}</div>
+                  <p className="text-xs text-muted-foreground">Total creative item quantity currently requested in drafts</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Draft Contract Validation</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Review draft contracts here, add or adjust creative items, then confirm the creative section from the contract inventory tab.
+                </p>
+              </CardHeader>
+              <CardContent className="p-0">
+                {draftContracts.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <ClipboardCheck className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+                    <h3 className="text-lg font-medium">No draft contracts for creative right now</h3>
+                    <p className="text-muted-foreground">
+                      Draft contracts assigned to the creative workflow will appear here automatically.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="min-w-[220px]">Contract</TableHead>
+                          <TableHead className="min-w-[180px]">Event</TableHead>
+                          <TableHead className="min-w-[220px]">Creative Plan</TableHead>
+                          <TableHead>Confirmation</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {draftContracts.map((contract) => {
+                          const creativeItemCount = contract.creativeAssets?.length || 0;
+                          const creativeQuantity = contract.creativeAssets?.reduce(
+                            (sum, item) => sum + (item.quantity || 0),
+                            0,
+                          ) || 0;
+                          const isConfirmed = Boolean(contract.sectionConfirmations?.creative?.confirmed);
+
+                          return (
+                            <TableRow key={contract._id}>
+                              <TableCell className="align-top">
+                                <div className="space-y-1">
+                                  <p className="font-medium">{contract.contractNumber}</p>
+                                  <p className="text-sm text-muted-foreground">{contract.clientName}</p>
+                                  <div className="flex flex-wrap gap-2">
+                                    <Badge variant="outline">{formatStatusLabel(contract.status)}</Badge>
+                                    {contract.venue?.name ? (
+                                      <Badge variant="secondary">{contract.venue.name}</Badge>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="align-top">
+                                <div className="space-y-1 text-sm">
+                                  <p className="font-medium">{formatShortDate(contract.eventDate)}</p>
+                                  <p className="text-muted-foreground">Created {formatShortDate(contract.createdAt)}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="align-top">
+                                <div className="space-y-1 text-sm">
+                                  <p className="font-medium">{creativeItemCount} item(s) | {creativeQuantity} unit(s)</p>
+                                  <p className="text-muted-foreground">Color: {contract.preferredColor || 'Not set'}</p>
+                                  <p className="text-muted-foreground">Setup: {contract.tableSetup || 'Not set'}</p>
+                                  <p className="text-muted-foreground">Backdrop: {contract.backdropRequirements || 'Not specified'}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="align-top">
+                                <div className="space-y-2">
+                                  <Badge className={isConfirmed ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-900'}>
+                                    {isConfirmed ? 'Confirmed' : 'Pending confirmation'}
+                                  </Badge>
+                                  <p className="text-xs text-muted-foreground">
+                                    {isConfirmed
+                                      ? 'Creative already validated this draft.'
+                                      : 'Creative still needs to review items before sales can send it forward.'}
+                                  </p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="align-top text-right">
+                                <div className="flex justify-end gap-2">
+                                  <Button asChild variant="outline" size="sm">
+                                    <Link to={`/contracts/${contract._id}?tab=inventory`}>Open Inventory</Link>
+                                  </Button>
+                                  <Button asChild size="sm">
+                                    <Link to={`/contracts/edit/${contract._id}`}>Update Draft</Link>
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="reports">
+            <DepartmentProcurementPanel department="creative" inventoryItems={procurementItems} />
+          </TabsContent>
+        </Tabs>
 
         {/* Edit Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>

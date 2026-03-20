@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { mockApi } from '@/services/mockApi';
+import { api } from '@/services/api';
 import { toast } from 'sonner';
 import { Plus, Search, Edit2, Trash2, User, Briefcase, UserPlus } from 'lucide-react';
 
@@ -81,10 +81,8 @@ export default function BanquetStaff() {
 
   const fetchStaff = async () => {
     try {
-      const response = await mockApi.get('/banquet-staff');
-      if (response.data) {
-        setStaff(response.data as BanquetStaffMember[]);
-      }
+      const response = await api.request('/banquet-staff');
+      setStaff(response as BanquetStaffMember[]);
     } catch (error) {
       toast.error('Failed to fetch staff members');
     }
@@ -92,10 +90,8 @@ export default function BanquetStaff() {
 
   const fetchStats = async () => {
     try {
-      const response = await mockApi.get('/banquet-staff/stats/overview');
-      if (response.data) {
-        setStats(response.data as { total: number; byRole: any[] });
-      }
+      const response = await api.request('/banquet-staff/stats/overview');
+      setStats(response as { total: number; byRole: any[] });
     } catch (error) {
       console.error('Failed to fetch stats');
     }
@@ -103,7 +99,9 @@ export default function BanquetStaff() {
 
   const handleAddStaff = async () => {
     try {
-      await mockApi.post('/banquet-staff', {
+      await api.request('/banquet-staff', {
+        method: 'POST',
+        body: JSON.stringify({
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,
@@ -112,6 +110,7 @@ export default function BanquetStaff() {
         employmentType: formData.employmentType,
         ratePerDay: parseFloat(formData.ratePerDay) || 0,
         ratePerHour: parseFloat(formData.ratePerHour) || 0
+      }),
       });
       toast.success('Staff member added successfully');
       setIsAddDialogOpen(false);
@@ -126,7 +125,9 @@ export default function BanquetStaff() {
   const handleEditStaff = async () => {
     if (!selectedStaff) return;
     try {
-      await mockApi.put(`/banquet-staff/${selectedStaff._id}`, {
+      await api.request(`/banquet-staff/${selectedStaff._id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,
@@ -135,6 +136,7 @@ export default function BanquetStaff() {
         employmentType: formData.employmentType,
         ratePerDay: parseFloat(formData.ratePerDay) || 0,
         ratePerHour: parseFloat(formData.ratePerHour) || 0
+      }),
       });
       toast.success('Staff member updated successfully');
       setIsEditDialogOpen(false);
@@ -150,7 +152,7 @@ export default function BanquetStaff() {
   const handleDeleteStaff = async (staffId: string) => {
     if (!confirm('Are you sure you want to delete this staff member?')) return;
     try {
-      await mockApi.delete(`/banquet-staff/${staffId}`);
+      await api.request(`/banquet-staff/${staffId}`, { method: 'DELETE' });
       toast.success('Staff member deleted successfully');
       fetchStaff();
       fetchStats();
@@ -162,9 +164,12 @@ export default function BanquetStaff() {
   const handleCreateAccount = async () => {
     if (!selectedStaff) return;
     try {
-      await mockApi.post(`/banquet-staff/${selectedStaff._id}/create-account`, {
-        password: accountData.password,
-        department: accountData.department
+      await api.request(`/banquet-staff/${selectedStaff._id}/create-account`, {
+        method: 'POST',
+        body: JSON.stringify({
+          password: accountData.password,
+          department: accountData.department
+        })
       });
       toast.success('Account created successfully');
       setIsAccountDialogOpen(false);

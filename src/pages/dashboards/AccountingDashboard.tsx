@@ -3,6 +3,7 @@ import type { ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import { api } from '@/services/api';
+import AccountingProcurementQueue from '@/components/AccountingProcurementQueue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -656,6 +657,7 @@ export default function AccountingDashboard() {
         <Tabs defaultValue="list" className="space-y-4">
           <TabsList>
             <TabsTrigger value="list">List View</TabsTrigger>
+            <TabsTrigger value="procurement">Procurement Approval</TabsTrigger>
             <TabsTrigger value="reports">Monthly Reports</TabsTrigger>
           </TabsList>
 
@@ -876,6 +878,21 @@ export default function AccountingDashboard() {
                 </div>
               </>
             )}
+          </TabsContent>
+
+          <TabsContent value="procurement" className="space-y-4">
+            <Card>
+              <CardContent className="flex flex-col gap-2 p-4 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-1">
+                  <h2 className="text-lg font-semibold">Procurement Approval Queue</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Review the purchasing report, approve it for acquisition, or return it so purchasing can revise the quote.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <AccountingProcurementQueue />
           </TabsContent>
 
           <TabsContent value="reports" className="space-y-4">

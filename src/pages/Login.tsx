@@ -215,13 +215,8 @@ export default function Login() {
             </Button>
           </form>
 
-          <div className="mt-6 p-4 bg-muted rounded-lg text-sm">
-            <p className="font-medium mb-2">Demo Accounts:</p>
-            <div className="space-y-1 text-muted-foreground">
-              <p>sales@juancarlos.com / password123</p>
-              <p>accounting@juancarlos.com / password123</p>
-              <p>admin@juancarlos.com / admin123</p>
-            </div>
+          <div className="mt-6 rounded-lg bg-muted p-4 text-sm text-muted-foreground">
+            Sign in using your assigned work account. If you need access, contact the project administrator for your login details.
           </div>
         </CardContent>
       </Card>

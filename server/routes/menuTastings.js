@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
+const Contract = require('../models/Contract');
 const MenuTasting = require('../models/MenuTasting');
 const { auth, requireRole } = require('../middleware/auth');
 
@@ -53,6 +54,71 @@ const tastingValidation = [
     .withMessage('Tasting pax must be between 1 and 10')
 ];
 
+const getLinkedContractId = (tasting) => {
+  if (!tasting?.contract) {
+    return '';
+  }
+
+  if (typeof tasting.contract === 'object' && tasting.contract._id) {
+    return String(tasting.contract._id);
+  }
+
+  return String(tasting.contract);
+};
+
+const clearStaleContractLink = async (tasting) => {
+  tasting.contract = null;
+  tasting.contractCreated = false;
+  await tasting.save();
+  return tasting;
+};
+
+const repairPopulatedTastingContractLinks = async (tastings = []) => {
+  const staleIds = tastings
+    .filter((tasting) => tasting?.contractCreated && !getLinkedContractId(tasting))
+    .map((tasting) => tasting._id);
+
+  if (!staleIds.length) {
+    return tastings;
+  }
+
+  await MenuTasting.updateMany({
+    _id: { $in: staleIds }
+  }, {
+    $set: {
+      contract: null,
+      contractCreated: false
+    }
+  });
+
+  tastings.forEach((tasting) => {
+    if (staleIds.some((id) => String(id) === String(tasting._id))) {
+      tasting.contract = null;
+      tasting.contractCreated = false;
+    }
+  });
+
+  return tastings;
+};
+
+const ensureTastingContractLinkIsValid = async (tasting) => {
+  if (!tasting?.contractCreated) {
+    return tasting;
+  }
+
+  const linkedContractId = getLinkedContractId(tasting);
+  if (!linkedContractId) {
+    return clearStaleContractLink(tasting);
+  }
+
+  const contractExists = await Contract.exists({ _id: linkedContractId });
+  if (!contractExists) {
+    return clearStaleContractLink(tasting);
+  }
+
+  return tasting;
+};
+
 // Get all menu tastings
 router.get('/', auth, async (req, res) => {
   try {
@@ -70,6 +136,8 @@ router.get('/', auth, async (req, res) => {
       .populate('contract', 'contractNumber status')
       .populate('assignedStaff', 'name')
       .sort({ tastingDate: 1, tastingTime: 1 });
+
+    await repairPopulatedTastingContractLinks(tastings);
     
     res.json(tastings);
   } catch (error) {
@@ -87,6 +155,8 @@ router.get('/:id', auth, async (req, res) => {
     if (!tasting) {
       return res.status(404).json({ message: 'Menu tasting not found' });
     }
+
+    await ensureTastingContractLinkIsValid(tasting);
     
     res.json(tasting);
   } catch (error) {
@@ -144,6 +214,8 @@ router.put('/:id', auth, requireRole(['sales', 'admin']), async (req, res) => {
     if (!tasting) {
       return res.status(404).json({ message: 'Menu tasting not found' });
     }
+
+    await ensureTastingContractLinkIsValid(tasting);
     
     // Don't allow updates if contract already created
     if (tasting.contractCreated) {
@@ -184,6 +256,11 @@ router.post('/:id/feedback', auth, async (req, res) => {
 router.post('/:id/link-contract', auth, requireRole(['sales', 'admin']), async (req, res) => {
   try {
     const { contractId } = req.body;
+
+    const linkedContract = await Contract.findById(contractId).select('_id');
+    if (!linkedContract) {
+      return res.status(404).json({ message: 'Linked contract not found' });
+    }
     
     const tasting = await MenuTasting.findById(req.params.id);
     if (!tasting) {
@@ -276,6 +353,8 @@ router.delete('/:id', auth, requireRole(['sales', 'admin']), async (req, res) =>
     if (!tasting) {
       return res.status(404).json({ message: 'Menu tasting not found' });
     }
+
+    await ensureTastingContractLinkIsValid(tasting);
     
     if (tasting.contractCreated) {
       return res.status(400).json({

@@ -48,7 +48,11 @@ interface MenuTasting {
   }>;
   status: string;
   contractCreated: boolean;
-  contract?: string;
+  contract?: {
+    _id: string;
+    contractNumber?: string;
+    status?: string;
+  } | null;
   clientNotes?: string;
   internalNotes?: string;
   feedback?: {
@@ -101,6 +105,7 @@ export default function MenuTastingDetail() {
   const canManageTasting = isSales() || isAdmin();
   const canCancelBooking = canManageTasting && !!tasting && !tasting.contractCreated && ['booked', 'confirmed'].includes(tasting.status);
   const canDeleteBooking = canManageTasting && !!tasting && !tasting.contractCreated;
+  const linkedContractId = tasting?.contract?._id || '';
 
   const handleCancelBooking = async () => {
     if (!tasting) return;
@@ -332,11 +337,13 @@ export default function MenuTastingDetail() {
               {tasting.contractCreated ? (
                 <div className="space-y-4">
                   <Badge className="bg-green-100 text-green-800">Contract Created</Badge>
-                  <div>
-                    <Link to={`/contracts/${tasting.contract}`}>
-                      <Button variant="outline">View Contract</Button>
-                    </Link>
-                  </div>
+                  {linkedContractId ? (
+                    <div>
+                      <Link to={`/contracts/${linkedContractId}`}>
+                        <Button variant="outline">View Contract</Button>
+                      </Link>
+                    </div>
+                  ) : null}
                 </div>
               ) : tasting.status === 'cancelled' ? (
                 <div className="space-y-4">
