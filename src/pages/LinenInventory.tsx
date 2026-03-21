@@ -37,6 +37,7 @@ interface LinenItem {
   minimumStock: number;
   washCount: number;
   status: string;
+  pricePerItem?: number;
   acquisition?: {
     cost?: number;
   };
@@ -59,6 +60,7 @@ export default function LinenInventory() {
     color: '',
     quantity: 1,
     minimumStock: 10,
+    pricePerItem: '',
     status: 'available',
     imageUrl: ''
   });
@@ -92,6 +94,12 @@ export default function LinenInventory() {
   };
 
   const handleAddItem = async () => {
+    const pricePerItem = parseFloat(formData.pricePerItem);
+    if (!Number.isFinite(pricePerItem) || pricePerItem <= 0) {
+      toast.error('Set a price per item before adding this item');
+      return;
+    }
+
     try {
       await api.request('/linen-inventory', {
         method: 'POST',
@@ -103,6 +111,7 @@ export default function LinenInventory() {
           color: formData.color,
           quantity: parseInt(formData.quantity.toString(), 10),
           minimumStock: parseInt(formData.minimumStock.toString(), 10),
+          pricePerItem,
           status: formData.status,
           images: formData.imageUrl ? [{ url: formData.imageUrl, caption: 'Primary image', isPrimary: true }] : []
         })
@@ -112,13 +121,19 @@ export default function LinenInventory() {
       resetForm();
       fetchItems();
       fetchStats();
-    } catch (error) {
-      toast.error('Failed to add item');
+    } catch (error: any) {
+      toast.error(error?.errors?.[0]?.msg || error?.errors?.[0]?.message || error.message || 'Failed to add item');
     }
   };
 
   const handleEditItem = async () => {
     if (!selectedItem) return;
+
+    const pricePerItem = parseFloat(formData.pricePerItem);
+    if (!Number.isFinite(pricePerItem) || pricePerItem <= 0) {
+      toast.error('Set a price per item before saving');
+      return;
+    }
 
     try {
       await api.request(`/linen-inventory/${selectedItem._id}`, {
@@ -131,6 +146,7 @@ export default function LinenInventory() {
           color: formData.color,
           quantity: parseInt(formData.quantity.toString(), 10),
           minimumStock: parseInt(formData.minimumStock.toString(), 10),
+          pricePerItem,
           status: formData.status,
           images: formData.imageUrl ? [{ url: formData.imageUrl, caption: 'Primary image', isPrimary: true }] : selectedItem.images
         })
@@ -141,10 +157,12 @@ export default function LinenInventory() {
       resetForm();
       fetchItems();
       fetchStats();
-    } catch (error) {
-      toast.error('Failed to update item');
+    } catch (error: any) {
+      toast.error(error?.errors?.[0]?.msg || error?.errors?.[0]?.message || error.message || 'Failed to update item');
     }
   };
+
+  const getLinenItemPrice = (item: LinenItem) => item.pricePerItem ?? item.acquisition?.cost;
 
   const handleDeleteItem = async (itemId: string) => {
     if (!confirm('Are you sure you want to delete this item?')) return;
@@ -169,6 +187,7 @@ export default function LinenInventory() {
       color: item.color,
       quantity: item.quantity,
       minimumStock: item.minimumStock,
+      pricePerItem: getLinenItemPrice(item)?.toString() || '',
       status: item.status,
       imageUrl: item.images[0]?.url || ''
     });
@@ -184,6 +203,7 @@ export default function LinenInventory() {
       color: '',
       quantity: 1,
       minimumStock: 10,
+      pricePerItem: '',
       status: 'available',
       imageUrl: ''
     });
@@ -342,6 +362,17 @@ export default function LinenInventory() {
                       onChange={(e) => setFormData({ ...formData, minimumStock: parseInt(e.target.value, 10) || 10 })}
                     />
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Price Per Item (PHP) *</Label>
+                  <Input
+                    type="number"
+                    min={0.01}
+                    step="0.01"
+                    value={formData.pricePerItem}
+                    onChange={(e) => setFormData({ ...formData, pricePerItem: e.target.value })}
+                    placeholder="0.00"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Status</Label>
@@ -525,7 +556,7 @@ export default function LinenInventory() {
                             </Badge>
                           </TableCell>
                           <TableCell className="align-top text-right font-medium">
-                            {formatCurrency(item.acquisition?.cost)}
+                            {formatCurrency(getLinenItemPrice(item))}
                           </TableCell>
                           <TableCell className="align-top text-right">
                             <div className="flex justify-end gap-1">
@@ -632,6 +663,17 @@ export default function LinenInventory() {
                   <Label>Minimum Stock</Label>
                   <Input type="number" min={1} value={formData.minimumStock} onChange={(e) => setFormData({ ...formData, minimumStock: parseInt(e.target.value, 10) || 10 })} />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Price Per Item (PHP) *</Label>
+                <Input
+                  type="number"
+                  min={0.01}
+                  step="0.01"
+                  value={formData.pricePerItem}
+                  onChange={(e) => setFormData({ ...formData, pricePerItem: e.target.value })}
+                  placeholder="0.00"
+                />
               </div>
               <div className="space-y-2">
                 <Label>Status</Label>

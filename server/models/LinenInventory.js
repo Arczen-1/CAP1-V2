@@ -59,6 +59,10 @@ const linenInventorySchema = new mongoose.Schema({
     min: 0,
     default: 1
   },
+  pricePerItem: {
+    type: Number,
+    min: 0
+  },
   availableQuantity: {
     type: Number,
     default: function() { return this.quantity; },
@@ -119,8 +123,12 @@ const linenInventorySchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Generate item code before saving
-linenInventorySchema.pre('save', async function() {
+// Generate required defaults before validation so new items can be created without manual item codes.
+linenInventorySchema.pre('validate', async function() {
+  if ((this.availableQuantity === undefined || this.availableQuantity === null) && typeof this.quantity === 'number') {
+    this.availableQuantity = this.quantity;
+  }
+
   if (!this.itemCode) {
     const prefix = 'LN';
     const categoryCode = this.category.substring(0, 3).toUpperCase();

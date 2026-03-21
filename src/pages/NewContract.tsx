@@ -267,6 +267,9 @@ interface CreativeItem {
   quantity: number;
   availableQuantity: number;
   pricePerItem?: number;
+  acquisition?: {
+    cost?: number;
+  };
   images?: Array<{ url: string; caption?: string; isPrimary?: boolean }>;
 }
 
@@ -281,6 +284,9 @@ interface LinenItem {
   quantity: number;
   availableQuantity: number;
   pricePerItem?: number;
+  acquisition?: {
+    cost?: number;
+  };
   images?: Array<{ url: string; caption?: string; isPrimary?: boolean }>;
 }
 
@@ -879,14 +885,14 @@ export default function NewContract() {
   const mapCreativeItemsWithPrice = (items: CreativeItem[]) => {
     return items.map(item => ({
       ...item,
-      pricePerItem: item.pricePerItem ?? buildStableFallbackPrice(`${item.itemCode} ${item.name} ${item.category}`, 100, 600),
+      pricePerItem: [item.pricePerItem, item.acquisition?.cost].find((value) => Number(value) > 0) ?? buildStableFallbackPrice(`${item.itemCode} ${item.name} ${item.category}`, 100, 600),
     }));
   };
 
   const mapLinenItemsWithPrice = (items: LinenItem[]) => {
     return items.map(item => ({
       ...item,
-      pricePerItem: item.pricePerItem ?? buildStableFallbackPrice(`${item.itemCode} ${item.name} ${item.color} ${item.material}`, 20, 70),
+      pricePerItem: [item.pricePerItem, item.acquisition?.cost].find((value) => Number(value) > 0) ?? buildStableFallbackPrice(`${item.itemCode} ${item.name} ${item.color} ${item.material}`, 20, 70),
     }));
   };
 

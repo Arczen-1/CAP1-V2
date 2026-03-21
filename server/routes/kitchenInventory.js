@@ -47,7 +47,8 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/', auth, requireRole(['kitchen', 'purchasing', 'admin']), [
   body('name').trim().notEmpty().withMessage('Item name is required'),
   body('category').isIn(['Utensil', 'Cookware', 'Serveware', 'Appliance', 'Tool', 'Container', 'Ingredient', 'Other']).withMessage('Invalid category'),
-  body('quantity').isInt({ min: 0 }).withMessage('Quantity must be a positive number')
+  body('quantity').isInt({ min: 0 }).withMessage('Quantity must be a positive number'),
+  body('purchasePrice').isFloat({ gt: 0 }).withMessage('Price per unit is required')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -75,6 +76,14 @@ router.put('/:id', auth, requireRole(['kitchen', 'purchasing', 'admin']), async 
     const item = await KitchenInventory.findById(req.params.id);
     if (!item) {
       return res.status(404).json({ message: 'Item not found' });
+    }
+
+    const purchasePrice = req.body?.purchasePrice !== undefined
+      ? Number(req.body.purchasePrice || 0)
+      : Number(item.purchasePrice || 0);
+
+    if (purchasePrice <= 0) {
+      return res.status(400).json({ message: 'Price per unit is required' });
     }
     
     Object.assign(item, req.body);

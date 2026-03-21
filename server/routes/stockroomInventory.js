@@ -49,7 +49,17 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/', auth, requireRole(['logistics', 'stockroom', 'admin']), [
   body('name').trim().notEmpty().withMessage('Item name is required'),
   body('category').isIn(['Chair', 'Table', 'Tent', 'Equipment', 'Tool', 'Decor', 'Other']).withMessage('Invalid category'),
-  body('quantity').isInt({ min: 0 }).withMessage('Quantity must be a positive number')
+  body('quantity').isInt({ min: 0 }).withMessage('Quantity must be a positive number'),
+  body().custom((_, { req }) => {
+    const rentalPrice = Number(req.body?.rentalPricePerDay || 0);
+    const purchasePrice = Number(req.body?.purchasePrice || 0);
+
+    if (rentalPrice <= 0 && purchasePrice <= 0) {
+      throw new Error('Set a rental price per day or purchase price');
+    }
+
+    return true;
+  })
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -80,6 +90,17 @@ router.put('/:id', auth, requireRole(['logistics', 'stockroom', 'admin']), async
       return res.status(404).json({ message: 'Item not found' });
     }
     
+    const rentalPrice = req.body?.rentalPricePerDay !== undefined
+      ? Number(req.body.rentalPricePerDay || 0)
+      : Number(item.rentalPricePerDay || 0);
+    const purchasePrice = req.body?.purchasePrice !== undefined
+      ? Number(req.body.purchasePrice || 0)
+      : Number(item.purchasePrice || 0);
+
+    if (rentalPrice <= 0 && purchasePrice <= 0) {
+      return res.status(400).json({ message: 'Set a rental price per day or purchase price' });
+    }
+
     Object.assign(item, req.body);
     item.updateAvailable();
     await item.save();

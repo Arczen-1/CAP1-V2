@@ -41,6 +41,10 @@ const creativeInventorySchema = new mongoose.Schema({
     min: 0,
     default: 1
   },
+  pricePerItem: {
+    type: Number,
+    min: 0
+  },
   availableQuantity: {
     type: Number,
     default: function() { return this.quantity; },
@@ -102,8 +106,12 @@ const creativeInventorySchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Generate item code before saving
-creativeInventorySchema.pre('save', async function() {
+// Generate required defaults before validation so new items can be created without manual item codes.
+creativeInventorySchema.pre('validate', async function() {
+  if ((this.availableQuantity === undefined || this.availableQuantity === null) && typeof this.quantity === 'number') {
+    this.availableQuantity = this.quantity;
+  }
+
   if (!this.itemCode) {
     const prefix = 'CR';
     const categoryCode = this.category.substring(0, 3).toUpperCase();

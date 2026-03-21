@@ -41,6 +41,7 @@ interface KitchenItem {
   brand?: string;
   model?: string;
   expiryDate?: string;
+  purchasePrice?: number;
   images?: Array<{ url: string; caption: string; isPrimary: boolean }>;
   notes?: string;
 }
@@ -72,6 +73,7 @@ export default function KitchenInventory() {
     brand: '',
     model: '',
     expiryDate: '',
+    purchasePrice: 0,
     notes: ''
   });
 
@@ -104,6 +106,11 @@ export default function KitchenInventory() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (Number(formData.purchasePrice) <= 0) {
+      toast.error('Set a price per unit before saving');
+      return;
+    }
+
     try {
       const dataToSend: any = { ...formData };
       if (!dataToSend.expiryDate) delete dataToSend.expiryDate;
@@ -156,6 +163,7 @@ export default function KitchenInventory() {
       brand: '',
       model: '',
       expiryDate: '',
+      purchasePrice: 0,
       notes: ''
     });
   };
@@ -174,9 +182,22 @@ export default function KitchenInventory() {
       brand: item.brand || '',
       model: item.model || '',
       expiryDate: item.expiryDate ? item.expiryDate.split('T')[0] : '',
+      purchasePrice: item.purchasePrice || 0,
       notes: item.notes || ''
     });
     setIsDialogOpen(true);
+  };
+
+  const formatCurrency = (value?: number) => {
+    if (typeof value !== 'number' || Number.isNaN(value) || value <= 0) {
+      return 'Not set';
+    }
+
+    return new Intl.NumberFormat('en-PH', {
+      style: 'currency',
+      currency: 'PHP',
+      maximumFractionDigits: 0,
+    }).format(value);
   };
 
   const filteredItems = items.filter(item => {
@@ -314,8 +335,20 @@ export default function KitchenInventory() {
                           <SelectItem key={u} value={u}>{u}</SelectItem>
                         ))}
                       </SelectContent>
-                    </Select>
+                      </Select>
+                    </div>
                   </div>
+                <div>
+                  <Label>Price Per Unit (PHP) *</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.purchasePrice}
+                    onChange={(e) => setFormData({ ...formData, purchasePrice: parseFloat(e.target.value) || 0 })}
+                    placeholder="0"
+                    required
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -508,6 +541,10 @@ export default function KitchenInventory() {
                     <span className={`font-medium ${item.availableQuantity <= item.minimumStock ? 'text-orange-600' : ''}`}>
                       {item.availableQuantity} {item.unit}
                     </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Price / Unit</span>
+                    <span className="font-medium">{formatCurrency(item.purchasePrice)}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Condition</span>

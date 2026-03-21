@@ -61,7 +61,8 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/', auth, requireCreativeAccess, [
   body('name').notEmpty().trim().withMessage('Name is required'),
   body('category').isIn(['Backdrop', 'Table Decor', 'Lighting', 'Floral', 'Signage', 'Props', 'Drapery', 'Centerpiece', 'Other']),
-  body('quantity').isInt({ min: 0 })
+  body('quantity').isInt({ min: 0 }),
+  body('pricePerItem').isFloat({ gt: 0 }).withMessage('Price per item is required')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -69,10 +70,17 @@ router.post('/', auth, requireCreativeAccess, [
       return res.status(400).json({ errors: errors.array() });
     }
     
-    const item = new CreativeInventory({
+    const payload = {
       ...req.body,
+      pricePerItem: Number(req.body.pricePerItem) || 0,
+      acquisition: {
+        ...(req.body.acquisition || {}),
+        cost: Number(req.body.pricePerItem) || 0
+      },
       createdBy: req.user._id
-    });
+    };
+
+    const item = new CreativeInventory(payload);
     
     await item.save();
     res.status(201).json(item);
@@ -90,7 +98,21 @@ router.put('/:id', auth, requireCreativeAccess, async (req, res) => {
       return res.status(404).json({ message: 'Item not found' });
     }
     
-    Object.assign(item, req.body, { updatedBy: req.user._id });
+    const payload = {
+      ...req.body,
+      updatedBy: req.user._id
+    };
+
+    if (req.body.pricePerItem !== undefined) {
+      payload.pricePerItem = Number(req.body.pricePerItem) || 0;
+      payload.acquisition = {
+        ...(item.acquisition?.toObject?.() || item.acquisition || {}),
+        ...(req.body.acquisition || {}),
+        cost: Number(req.body.pricePerItem) || 0
+      };
+    }
+
+    Object.assign(item, payload);
     await item.save();
     
     res.json(item);

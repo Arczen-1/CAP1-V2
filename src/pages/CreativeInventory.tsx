@@ -31,6 +31,7 @@ interface CreativeItem {
   referenceUrl?: string;
   quantity: number;
   availableQuantity: number;
+  pricePerItem?: number;
   condition: string;
   status: string;
   acquisition?: {
@@ -116,6 +117,7 @@ export default function CreativeInventory() {
     name: '',
     category: '',
     quantity: 1,
+    pricePerItem: '',
     condition: 'good',
     status: 'available',
     imageUrl: '',
@@ -164,6 +166,12 @@ export default function CreativeInventory() {
   };
 
   const handleAddItem = async () => {
+    const pricePerItem = parseFloat(formData.pricePerItem);
+    if (!Number.isFinite(pricePerItem) || pricePerItem <= 0) {
+      toast.error('Set a price per item before adding this item');
+      return;
+    }
+
     try {
       await api.request('/creative-inventory', {
         method: 'POST',
@@ -171,6 +179,7 @@ export default function CreativeInventory() {
         name: formData.name,
         category: formData.category,
         quantity: parseInt(formData.quantity.toString()),
+        pricePerItem,
         condition: formData.condition,
         status: formData.status,
         images: formData.imageUrl ? [{ url: formData.imageUrl, caption: 'Primary image', isPrimary: true }] : [],
@@ -187,13 +196,20 @@ export default function CreativeInventory() {
       resetForm();
       fetchItems();
       fetchStats();
-    } catch (error) {
-      toast.error('Failed to add item');
+    } catch (error: any) {
+      toast.error(error?.errors?.[0]?.msg || error?.errors?.[0]?.message || error.message || 'Failed to add item');
     }
   };
 
   const handleEditItem = async () => {
     if (!selectedItem) return;
+
+    const pricePerItem = parseFloat(formData.pricePerItem);
+    if (!Number.isFinite(pricePerItem) || pricePerItem <= 0) {
+      toast.error('Set a price per item before saving');
+      return;
+    }
+
     try {
       await api.request(`/creative-inventory/${selectedItem._id}`, {
         method: 'PUT',
@@ -201,6 +217,7 @@ export default function CreativeInventory() {
         name: formData.name,
         category: formData.category,
         quantity: parseInt(formData.quantity.toString()),
+        pricePerItem,
         condition: formData.condition,
         status: formData.status,
         images: formData.imageUrl ? [{ url: formData.imageUrl, caption: 'Primary image', isPrimary: true }] : selectedItem.images
@@ -212,10 +229,12 @@ export default function CreativeInventory() {
       resetForm();
       fetchItems();
       fetchStats();
-    } catch (error) {
-      toast.error('Failed to update item');
+    } catch (error: any) {
+      toast.error(error?.errors?.[0]?.msg || error?.errors?.[0]?.message || error.message || 'Failed to update item');
     }
   };
+
+  const getCreativeItemPrice = (item: CreativeItem) => item.pricePerItem ?? item.acquisition?.cost;
 
   const handleDeleteItem = async (itemId: string) => {
     if (!confirm('Are you sure you want to delete this item?')) return;
@@ -235,6 +254,7 @@ export default function CreativeInventory() {
       name: item.name,
       category: item.category,
       quantity: item.quantity,
+      pricePerItem: getCreativeItemPrice(item)?.toString() || '',
       condition: item.condition,
       status: item.status,
       imageUrl: item.images[0]?.url || '',
@@ -251,6 +271,7 @@ export default function CreativeInventory() {
       name: '',
       category: '',
       quantity: 1,
+      pricePerItem: '',
       condition: 'good',
       status: 'available',
       imageUrl: '',
@@ -387,6 +408,17 @@ export default function CreativeInventory() {
                     min={1}
                     value={formData.quantity}
                     onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Price Per Item (PHP) *</Label>
+                  <Input
+                    type="number"
+                    min={0.01}
+                    step="0.01"
+                    value={formData.pricePerItem}
+                    onChange={(e) => setFormData({ ...formData, pricePerItem: e.target.value })}
+                    placeholder="0.00"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -603,7 +635,7 @@ export default function CreativeInventory() {
                             </Badge>
                           </TableCell>
                           <TableCell className="align-top text-right font-medium">
-                            {formatCurrency(item.acquisition?.cost)}
+                            {formatCurrency(getCreativeItemPrice(item))}
                           </TableCell>
                           <TableCell className="align-top text-right">
                             <div className="flex justify-end gap-1">
@@ -820,6 +852,17 @@ export default function CreativeInventory() {
                   min={1}
                   value={formData.quantity}
                   onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Price Per Item (PHP) *</Label>
+                <Input
+                  type="number"
+                  min={0.01}
+                  step="0.01"
+                  value={formData.pricePerItem}
+                  onChange={(e) => setFormData({ ...formData, pricePerItem: e.target.value })}
+                  placeholder="0.00"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">

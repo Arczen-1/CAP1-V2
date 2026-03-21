@@ -64,6 +64,7 @@ export default function StockroomInventory() {
     minimumStock: 10,
     condition: 'good',
     status: 'available',
+    purchasePrice: 0,
     rentalPricePerDay: 0,
     notes: ''
   });
@@ -96,6 +97,11 @@ export default function StockroomInventory() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (Number(formData.purchasePrice) <= 0 && Number(formData.rentalPricePerDay) <= 0) {
+      toast.error('Set a purchase price or a rental price per day before saving');
+      return;
+    }
+
     try {
       if (editingItem) {
         await api.request(`/stockroom-inventory/${editingItem._id}`, {
@@ -143,6 +149,7 @@ export default function StockroomInventory() {
       minimumStock: 10,
       condition: 'good',
       status: 'available',
+      purchasePrice: 0,
       rentalPricePerDay: 0,
       notes: ''
     });
@@ -158,6 +165,7 @@ export default function StockroomInventory() {
       minimumStock: item.minimumStock,
       condition: item.condition,
       status: item.status,
+      purchasePrice: item.purchasePrice || 0,
       rentalPricePerDay: item.rentalPricePerDay || 0,
       notes: item.notes || ''
     });
@@ -339,16 +347,31 @@ export default function StockroomInventory() {
                     </Select>
                   </div>
                 </div>
-                <div>
-                  <Label>Rental Price Per Day (PHP)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={formData.rentalPricePerDay}
-                    onChange={(e) => setFormData({ ...formData, rentalPricePerDay: parseFloat(e.target.value) || 0 })}
-                    placeholder="0"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Purchase Price (PHP)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.purchasePrice}
+                      onChange={(e) => setFormData({ ...formData, purchasePrice: parseFloat(e.target.value) || 0 })}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <Label>Rental Price Per Day (PHP)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.rentalPricePerDay}
+                      onChange={(e) => setFormData({ ...formData, rentalPricePerDay: parseFloat(e.target.value) || 0 })}
+                      placeholder="0"
+                    />
+                  </div>
                 </div>
+                <p className="text-xs text-muted-foreground">Set at least one price so contracts and purchasing can use this item properly.</p>
                 <div>
                   <Label>Notes</Label>
                   <Input
@@ -531,7 +554,7 @@ export default function StockroomInventory() {
                               </Badge>
                             </TableCell>
                             <TableCell className="align-top text-right font-medium">
-                              {formatCurrency(item.rentalPricePerDay || item.purchasePrice)}
+                              {formatCurrency([item.rentalPricePerDay, item.purchasePrice].find((value) => Number(value) > 0))}
                             </TableCell>
                             <TableCell className="align-top text-right">
                               <div className="flex justify-end gap-1">

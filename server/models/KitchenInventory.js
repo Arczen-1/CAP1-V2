@@ -134,8 +134,12 @@ const kitchenInventorySchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Generate item code before saving
-kitchenInventorySchema.pre('save', async function() {
+// Generate required defaults before validation so new items can be created without manual item codes.
+kitchenInventorySchema.pre('validate', async function() {
+  if (this.isNew || this.isModified('quantity') || this.isModified('reservedQuantity')) {
+    this.updateAvailable();
+  }
+
   if (!this.itemCode) {
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);

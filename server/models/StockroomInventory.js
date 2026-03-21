@@ -134,8 +134,8 @@ const stockroomInventorySchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Generate item code before saving
-stockroomInventorySchema.pre('save', async function() {
+// Generate required defaults before validation so new items can be created without manual item codes.
+stockroomInventorySchema.pre('validate', async function() {
   if (this.isNew || this.isModified('quantity') || this.isModified('reservedQuantity')) {
     this.updateAvailable();
   }
