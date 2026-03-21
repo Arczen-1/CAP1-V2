@@ -36,6 +36,36 @@ const normalizePostEventStatus = (value, legacyStatus) => {
   return 'pending_check';
 };
 
+const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const buildNextContractNumber = async (date = new Date()) => {
+  const year = date.getFullYear().toString().slice(-2);
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const prefix = `JC-${year}${month}`;
+  const contractModel = mongoose.model('Contract');
+  const prefixPattern = new RegExp(`^${escapeRegExp(prefix)}-\\d{4}$`);
+  const latestContract = await contractModel.findOne({
+    contractNumber: prefixPattern
+  })
+    .sort({ contractNumber: -1 })
+    .select('contractNumber')
+    .lean();
+
+  const latestSequence = latestContract?.contractNumber
+    ? parseInt(String(latestContract.contractNumber).split('-').pop(), 10) || 0
+    : 0;
+
+  let nextSequence = latestSequence + 1;
+  let candidate = `${prefix}-${String(nextSequence).padStart(4, '0')}`;
+
+  while (await contractModel.exists({ contractNumber: candidate })) {
+    nextSequence += 1;
+    candidate = `${prefix}-${String(nextSequence).padStart(4, '0')}`;
+  }
+
+  return candidate;
+};
+
 const menuItemSchema = new mongoose.Schema({
   category: String,
   item: String,
@@ -612,11 +642,7 @@ contractSchema.pre('validate', function normalizeLegacyChecklistStatuses() {
 // Generate contract number before saving
 contractSchema.pre('save', async function() {
   if (!this.contractNumber) {
-    const date = new Date();
-    const year = date.getFullYear().toString().slice(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const count = await mongoose.model('Contract').countDocuments();
-    this.contractNumber = `JC-${year}${month}-${(count + 1).toString().padStart(4, '0')}`;
+    this.contractNumber = await buildNextContractNumber();
   }
   
   // Calculate deadlines

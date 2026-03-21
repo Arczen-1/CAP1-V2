@@ -1320,6 +1320,12 @@ router.get('/', auth, async (req, res) => {
 
     res.json(contracts);
   } catch (error) {
+    if (error?.code === 11000 && error?.keyPattern?.contractNumber) {
+      return res.status(409).json({
+        message: 'A new contract number was being generated at the same time as another contract. Please try saving the contract again.'
+      });
+    }
+
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

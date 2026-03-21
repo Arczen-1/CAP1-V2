@@ -2966,7 +2966,6 @@ export default function ContractDetail() {
     ...item,
     sectionKey: 'equipmentChecklist' as const,
   }));
-  const allInventoryItems = [...creativeItems, ...linenItems, ...stockroomItems];
   const canViewCreativeInventorySection = isAdmin() || isCreative() || isSales() || isPurchasing();
   const canViewLinenInventorySection = isAdmin() || isLinen() || isSales() || isPurchasing();
   const canViewStockroomInventorySection = isAdmin() || isLogistics() || isSales() || isPurchasing() || isStockroom();
@@ -3285,91 +3284,6 @@ export default function ContractDetail() {
     };
   })();
 
-  const inventoryReadiness: DepartmentReadiness = (() => {
-    if (!savedInventoryItemCount) {
-      return {
-        key: 'inventory',
-        label: 'Inventory',
-        status: 'ready',
-        detail: 'No inventory items are required for this contract.',
-      };
-    }
-
-    if (isOperationsLoading) {
-      return {
-        key: 'inventory',
-        label: 'Inventory',
-        status: 'in_progress',
-        detail: 'Loading same-day stock reservations and dispatch readiness...',
-      };
-    }
-
-    if (!operationsSummary) {
-      return {
-        key: 'inventory',
-        label: 'Inventory',
-        status: 'in_progress',
-        detail: `Saved ${savedInventoryItemCount} inventory ${pluralize(savedInventoryItemCount, 'item')}. Automated reservation checks are unavailable right now.`,
-      };
-    }
-
-    if (!allInventoryItems.length) {
-      return {
-        key: 'inventory',
-        label: 'Inventory',
-        status: 'ready',
-        detail: 'No inventory items are required for this contract.',
-      };
-    }
-
-    const inventorySummary = operationsSummary.inventory;
-    const readyCount = allInventoryItems.filter(item => item.readyForDispatch).length;
-    const blockerCount = allInventoryItems.filter(item => item.blockers.length > 0).length;
-    const shortageCount = inventorySummary.shortages.length;
-
-    if (inventorySummary.allItemsReady) {
-      return {
-        key: 'inventory',
-        label: 'Inventory',
-        status: 'ready',
-        detail: `All ${allInventoryItems.length} inventory ${pluralize(allInventoryItems.length, 'item')} are stocked and dispatch-ready.`,
-      };
-    }
-
-    if (shortageCount > 0 || blockerCount > 0) {
-      const issueParts = [];
-      if (shortageCount > 0) {
-        issueParts.push(`${shortageCount} same-day ${pluralize(shortageCount, 'shortage')}`);
-      }
-      if (blockerCount > 0) {
-        issueParts.push(`${blockerCount} readiness ${pluralize(blockerCount, 'issue')}`);
-      }
-
-      return {
-        key: 'inventory',
-        label: 'Inventory',
-        status: 'blocked',
-        detail: `${issueParts.join(' and ')} are blocking release.`,
-      };
-    }
-
-    if (readyCount > 0) {
-      return {
-        key: 'inventory',
-        label: 'Inventory',
-        status: 'in_progress',
-        detail: `${readyCount} of ${allInventoryItems.length} inventory ${pluralize(allInventoryItems.length, 'item')} are dispatch-ready.`,
-      };
-    }
-
-    return {
-      key: 'inventory',
-      label: 'Inventory',
-      status: 'not_started',
-      detail: `${allInventoryItems.length} inventory ${pluralize(allInventoryItems.length, 'item')} are saved but still pending prep updates.`,
-    };
-  })();
-
   const logisticsReadiness: DepartmentReadiness = (() => {
     const savedTruck = contract.logisticsAssignment?.truck;
     const savedDriver = contract.logisticsAssignment?.driver;
@@ -3538,6 +3452,17 @@ export default function ContractDetail() {
     contract.departmentProgress?.linen || 0,
     'No linen items are required for this contract.'
   );
+  const stockroomReadiness = buildInventoryReadiness(
+    'stockroom',
+    'Stockroom',
+    stockroomItems,
+    contract.equipmentChecklist?.length || 0,
+    0,
+    'No stockroom items are required for this contract.'
+  );
+  const hasCreativeReadinessItems = (contract.creativeAssets?.length || 0) > 0;
+  const hasLinenReadinessItems = (contract.linenRequirements?.length || 0) > 0;
+  const hasStockroomReadinessItems = (contract.equipmentChecklist?.length || 0) > 0;
 
   const creativePostEventItems = creativeItems.length > 0
     ? creativeItems.map((item) => ({ postEventStatus: item.postEventStatus, itemStatus: item.itemStatus }))
@@ -3610,10 +3535,10 @@ export default function ContractDetail() {
   const preparationReadinessItems: DepartmentReadiness[] = [
     kitchenReadiness,
     banquetReadiness,
-    inventoryReadiness,
     logisticsReadiness,
-    creativeReadiness,
-    linenReadiness,
+    ...(hasCreativeReadinessItems ? [creativeReadiness] : []),
+    ...(hasLinenReadinessItems ? [linenReadiness] : []),
+    ...(hasStockroomReadinessItems ? [stockroomReadiness] : []),
   ];
   const postEventProgressItems: DepartmentReadiness[] = [
     postEventLogisticsReadiness,
@@ -4178,7 +4103,7 @@ export default function ContractDetail() {
                   <div className="text-xs text-muted-foreground">
                     {showPostEventProgress
                       ? 'Incident-reported items count as checked here, while the issue itself stays visible in the Incidents page for follow-up.'
-                      : 'Inventory and logistics already include same-day stock reservations plus driver and truck conflict checks.'}
+                      : 'Creative, linen, stockroom, and logistics already include same-day stock reservations plus driver and truck conflict checks.'}
                   </div>
                 </>
               ) : (
