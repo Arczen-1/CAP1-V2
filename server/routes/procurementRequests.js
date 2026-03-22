@@ -131,6 +131,18 @@ const normalizeReviewChecklist = (value = {}) => ({
   timelineConfirmed: Boolean(value.timelineConfirmed)
 });
 
+const normalizeAttachmentList = (value) => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry) => typeof entry === 'string')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.startsWith('data:image/') || entry.startsWith('data:application/pdf'))
+    .slice(0, 1);
+};
+
 const getScopedRequestQuery = (req) => {
   const query = {};
   const requestedDepartment = String(req.query.department || '').trim();
@@ -408,9 +420,6 @@ router.put('/:id/quote', auth, requireRole(['purchasing', 'admin']), async (req,
       supplierContact,
       supplierEmail,
       quotedUnitPrice,
-      quotedTotal,
-      leadTimeDays,
-      quoteReference,
       expectedFulfillmentDate,
       rentalStartDate,
       rentalEndDate,
@@ -431,10 +440,9 @@ router.put('/:id/quote', auth, requireRole(['purchasing', 'admin']), async (req,
     }
 
     const parsedUnitPrice = Number(quotedUnitPrice);
-    const parsedQuotedTotal = Number(quotedTotal);
 
-    if ((!Number.isFinite(parsedUnitPrice) || parsedUnitPrice < 0) && (!Number.isFinite(parsedQuotedTotal) || parsedQuotedTotal <= 0)) {
-      return res.status(400).json({ message: 'Enter a quoted unit price or total amount' });
+    if (!Number.isFinite(parsedUnitPrice) || parsedUnitPrice <= 0) {
+      return res.status(400).json({ message: 'Enter a supplier unit price greater than 0' });
     }
 
     if (request.requestType === 'rental' && rentalEndDate && !isValidDate(rentalEndDate)) {
@@ -453,12 +461,8 @@ router.put('/:id/quote', auth, requireRole(['purchasing', 'admin']), async (req,
         || ''
       ).trim(),
       supplierEmail: String(supplier?.email || supplierEmail || '').trim(),
-      quotedUnitPrice: Number.isFinite(parsedUnitPrice) && parsedUnitPrice >= 0 ? parsedUnitPrice : undefined,
-      quotedTotal: Number.isFinite(parsedQuotedTotal) && parsedQuotedTotal > 0
-        ? parsedQuotedTotal
-        : Math.max(0, parsedUnitPrice || 0) * (request.requestedQuantity || 0),
-      leadTimeDays: Number.isFinite(Number(leadTimeDays)) && Number(leadTimeDays) >= 0 ? Number(leadTimeDays) : undefined,
-      quoteReference: String(quoteReference || '').trim(),
+      quotedUnitPrice: parsedUnitPrice,
+      quotedTotal: parsedUnitPrice * (request.requestedQuantity || 0),
       expectedFulfillmentDate: isValidDate(expectedFulfillmentDate) ? new Date(expectedFulfillmentDate) : undefined,
       rentalStartDate: isValidDate(rentalStartDate) ? new Date(rentalStartDate) : undefined,
       rentalEndDate: isValidDate(rentalEndDate) ? new Date(rentalEndDate) : undefined,
@@ -617,6 +621,7 @@ router.post('/:id/fulfill', auth, requireRole(['purchasing', 'admin']), async (r
       rentalStartDate,
       rentalEndDate,
       notes: String(req.body?.notes || '').trim(),
+      attachments: normalizeAttachmentList(req.body?.attachments),
       fulfilledAt: new Date(),
       fulfilledBy: req.user._id,
       inventoryUpdated: false,

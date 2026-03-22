@@ -108,6 +108,7 @@ export interface ProcurementRequest {
     rentalStartDate?: string;
     rentalEndDate?: string;
     notes?: string;
+    attachments?: string[];
     fulfilledAt?: string;
     fulfilledBy?: ProcurementUserSummary | null;
     inventoryUpdated?: boolean;

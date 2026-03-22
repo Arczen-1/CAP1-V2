@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import { api } from '@/services/api';
@@ -44,9 +44,6 @@ const buildEmptyQuoteForm = () => ({
   supplierContact: '',
   supplierEmail: '',
   quotedUnitPrice: '',
-  quotedTotal: '',
-  leadTimeDays: '',
-  quoteReference: '',
   expectedFulfillmentDate: '',
   rentalStartDate: '',
   rentalEndDate: '',
@@ -63,6 +60,7 @@ const buildEmptyFulfillmentForm = () => ({
   rentalStartDate: '',
   rentalEndDate: '',
   notes: '',
+  attachmentUrl: '',
 });
 
 export default function PurchasingDashboard() {
@@ -163,9 +161,6 @@ export default function PurchasingDashboard() {
       supplierContact: request.quote?.supplierContact || getSupplierContactLine(matchedSupplier),
       supplierEmail: request.quote?.supplierEmail || matchedSupplier?.email || '',
       quotedUnitPrice: request.quote?.quotedUnitPrice ? String(request.quote.quotedUnitPrice) : '',
-      quotedTotal: request.quote?.quotedTotal ? String(request.quote.quotedTotal) : '',
-      leadTimeDays: typeof request.quote?.leadTimeDays === 'number' ? String(request.quote.leadTimeDays) : '',
-      quoteReference: request.quote?.quoteReference || '',
       expectedFulfillmentDate: request.quote?.expectedFulfillmentDate?.slice(0, 10) || request.neededBy?.slice(0, 10) || getTodayValue(),
       rentalStartDate: request.quote?.rentalStartDate?.slice(0, 10) || request.eventDate?.slice(0, 10) || '',
       rentalEndDate: request.quote?.rentalEndDate?.slice(0, 10) || '',
@@ -182,8 +177,39 @@ export default function PurchasingDashboard() {
       rentalStartDate: request.quote?.rentalStartDate?.slice(0, 10) || request.eventDate?.slice(0, 10) || '',
       rentalEndDate: request.quote?.rentalEndDate?.slice(0, 10) || '',
       notes: '',
+      attachmentUrl: '',
     });
     setFulfillmentDialogOpen(true);
+  };
+
+  const handleFulfillmentAttachmentChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setFulfillmentForm((current) => ({ ...current, attachmentUrl: '' }));
+      return;
+    }
+
+    const isAllowedFile = file.type.startsWith('image/') || file.type === 'application/pdf';
+    if (!isAllowedFile) {
+      toast.error('Please upload an image or PDF file only.');
+      event.target.value = '';
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Please upload a completion file smaller than 5 MB.');
+      event.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFulfillmentForm((current) => ({
+        ...current,
+        attachmentUrl: typeof reader.result === 'string' ? reader.result : '',
+      }));
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmitQuote = async () => {
@@ -196,8 +222,8 @@ export default function PurchasingDashboard() {
       return;
     }
 
-    if (!quoteForm.quotedUnitPrice && !quoteForm.quotedTotal) {
-      toast.error('Enter a unit price or a total quote');
+    if (!quoteForm.quotedUnitPrice) {
+      toast.error('Enter the supplier unit price');
       return;
     }
 
@@ -208,9 +234,6 @@ export default function PurchasingDashboard() {
         supplierContact: quoteForm.supplierContact.trim(),
         supplierEmail: quoteForm.supplierEmail.trim(),
         quotedUnitPrice: quoteForm.quotedUnitPrice ? Number(quoteForm.quotedUnitPrice) : undefined,
-        quotedTotal: quoteForm.quotedTotal ? Number(quoteForm.quotedTotal) : undefined,
-        leadTimeDays: quoteForm.leadTimeDays ? Number(quoteForm.leadTimeDays) : undefined,
-        quoteReference: quoteForm.quoteReference.trim(),
         expectedFulfillmentDate: quoteForm.expectedFulfillmentDate || undefined,
         rentalStartDate: quoteForm.rentalStartDate || undefined,
         rentalEndDate: quoteForm.rentalEndDate || undefined,
@@ -244,6 +267,7 @@ export default function PurchasingDashboard() {
         rentalStartDate: fulfillmentForm.rentalStartDate || undefined,
         rentalEndDate: fulfillmentForm.rentalEndDate || undefined,
         notes: fulfillmentForm.notes.trim(),
+        ...(fulfillmentForm.attachmentUrl ? { attachments: [fulfillmentForm.attachmentUrl] } : {}),
       });
       toast.success('Procurement completed and inventory updated');
       setFulfillmentDialogOpen(false);
@@ -342,7 +366,7 @@ export default function PurchasingDashboard() {
                     {request.quote?.submittedAt ? (
                       <div className="mt-3 space-y-1 text-sm">
                         <p><span className="text-muted-foreground">Supplier:</span> {request.quote.supplierName}</p>
-                        <p><span className="text-muted-foreground">Quote:</span> {formatProcurementCurrency(request.quote.quotedTotal)}</p>
+                        <p><span className="text-muted-foreground">Estimated Total:</span> {formatProcurementCurrency(request.quote.quotedTotal)}</p>
                         <p><span className="text-muted-foreground">Expected:</span> {formatProcurementDate(request.quote.expectedFulfillmentDate)}</p>
                         <p><span className="text-muted-foreground">Timeline:</span> {reviewBasis.timelineConfirmed ? 'On schedule' : 'Needs review'}</p>
                         {request.quote.notes ? (
@@ -359,6 +383,19 @@ export default function PurchasingDashboard() {
                     <div className="mt-3 space-y-1 text-sm">
                       <p><span className="text-muted-foreground">Accounting:</span> {request.accounting?.status === 'approved' ? 'Approved' : request.accounting?.status === 'rejected' ? 'Needs revision' : 'Pending'}</p>
                       <p><span className="text-muted-foreground">Fulfillment:</span> {request.fulfillment?.fulfilledAt ? formatProcurementDate(request.fulfillment.fulfilledAt) : 'Not completed yet'}</p>
+                      {request.fulfillment?.attachments?.[0] ? (
+                        <p>
+                          <span className="text-muted-foreground">Completion File:</span>{' '}
+                          <a
+                            href={request.fulfillment.attachments[0]}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary hover:underline"
+                          >
+                            View attachment
+                          </a>
+                        </p>
+                      ) : null}
                       {request.accounting?.rejectionReason ? (
                         <p><span className="text-muted-foreground">Return reason:</span> {request.accounting.rejectionReason.replace(/_/g, ' ')}</p>
                       ) : null}
@@ -510,289 +547,310 @@ export default function PurchasingDashboard() {
         </Tabs>
 
         <Dialog open={quoteDialogOpen} onOpenChange={setQuoteDialogOpen}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
+          <DialogContent className="flex max-h-[90vh] w-[min(96vw,88rem)] !max-w-[min(96vw,88rem)] flex-col overflow-hidden p-0">
+            <DialogHeader className="border-b px-6 py-4">
               <DialogTitle>
                 {selectedRequest ? `Purchasing Report - ${selectedRequest.requestNumber}` : 'Purchasing Report'}
               </DialogTitle>
             </DialogHeader>
             {selectedRequest ? (
-              <div className="space-y-4 pt-2">
-                <div className="rounded-lg border bg-muted/20 p-4">
-                  <p className="font-medium">{selectedRequest.itemName}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedRequest.requestedQuantity} units needed by {formatProcurementDate(selectedRequest.neededBy)}
-                  </p>
-                  <p className="mt-2 text-sm text-muted-foreground">{selectedRequest.requestReason}</p>
-                </div>
+              <>
+                <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                  <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+                    <div className="space-y-4">
+                      <div className="rounded-lg border bg-muted/20 p-4">
+                        <p className="font-medium">{selectedRequest.itemName}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {selectedRequest.requestedQuantity} units needed by {formatProcurementDate(selectedRequest.neededBy)}
+                        </p>
+                        <p className="mt-2 text-sm text-muted-foreground">{selectedRequest.requestReason}</p>
+                      </div>
 
-                <div className="space-y-3 rounded-lg border p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-medium">Recommended Suppliers</p>
-                      <p className="text-sm text-muted-foreground">
-                        Matched using department, request type, item category, and saved service areas.
-                      </p>
-                    </div>
-                    <Badge variant="outline">{recommendedSuppliers.length} match(es)</Badge>
-                  </div>
-                  {recommendedSuppliers.length > 0 ? (
-                    <div className="grid gap-3 lg:grid-cols-3">
-                      {recommendedSuppliers.map(({ supplier, score }) => (
-                        <button
-                          key={supplier._id}
-                          type="button"
-                          className={`rounded-xl border p-4 text-left transition hover:border-primary ${quoteForm.supplierId === supplier._id ? 'border-primary bg-primary/5' : ''}`}
-                          onClick={() => applySupplierToQuoteForm(supplier._id)}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="font-medium">{supplier.name}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {[supplier.city, supplier.province].filter(Boolean).join(', ') || 'Supplier profile'}
-                              </p>
-                            </div>
-                            <Badge variant="outline">Score {score}</Badge>
+                      <div className="space-y-3 rounded-lg border p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-medium">Recommended Suppliers</p>
+                            <p className="text-sm text-muted-foreground">
+                              Matched using department, request type, item category, and saved service areas.
+                            </p>
                           </div>
-                          <p className="mt-3 text-sm text-muted-foreground">
-                            {(supplier.supportedCategories || []).join(', ') || 'No categories saved'}
+                          <Badge variant="outline">{recommendedSuppliers.length} match(es)</Badge>
+                        </div>
+                        {recommendedSuppliers.length > 0 ? (
+                          <div className="grid gap-3 md:grid-cols-2">
+                            {recommendedSuppliers.map(({ supplier, score }) => (
+                              <button
+                                key={supplier._id}
+                                type="button"
+                                className={`flex h-full flex-col rounded-xl border p-4 text-left transition hover:border-primary ${quoteForm.supplierId === supplier._id ? 'border-primary bg-primary/5' : ''}`}
+                                onClick={() => applySupplierToQuoteForm(supplier._id)}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="font-medium">{supplier.name}</p>
+                                    <p className="text-sm text-muted-foreground">
+                                      {[supplier.city, supplier.province].filter(Boolean).join(', ') || 'Supplier profile'}
+                                    </p>
+                                  </div>
+                                  <Badge variant="outline">Score {score}</Badge>
+                                </div>
+                                <p className="mt-3 text-sm text-muted-foreground">
+                                  {(supplier.supportedCategories || []).join(', ') || 'No categories saved'}
+                                </p>
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                  {(supplier.serviceAreas || []).join(', ') || 'No service areas saved'}
+                                </p>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            No supplier directory match yet. You can still complete the report manually or add suppliers in the Suppliers tab.
                           </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {(supplier.serviceAreas || []).join(', ') || 'No service areas saved'}
-                          </p>
-                        </button>
-                      ))}
+                        )}
+                      </div>
                     </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      No supplier directory match yet. You can still complete the report manually or add suppliers in the Suppliers tab.
-                    </p>
-                  )}
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="supplier-directory">Supplier From Directory</Label>
-                  <Select
-                    value={quoteForm.supplierId || '__manual__'}
-                    onValueChange={(value) => {
-                      if (value === '__manual__') {
-                        setQuoteForm((current) => ({ ...current, supplierId: '' }));
-                        return;
-                      }
-                      applySupplierToQuoteForm(value);
-                    }}
-                  >
-                    <SelectTrigger id="supplier-directory">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__manual__">Manual supplier entry</SelectItem>
-                      {activeSuppliers.map((supplier) => (
-                        <SelectItem key={supplier._id} value={supplier._id}>
-                          {supplier.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                    <div className="space-y-4">
+                      <div className="space-y-4 rounded-lg border p-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="supplier-directory">Supplier From Directory</Label>
+                          <Select
+                            value={quoteForm.supplierId || '__manual__'}
+                            onValueChange={(value) => {
+                              if (value === '__manual__') {
+                                setQuoteForm((current) => ({ ...current, supplierId: '' }));
+                                return;
+                              }
+                              applySupplierToQuoteForm(value);
+                            }}
+                          >
+                            <SelectTrigger id="supplier-directory">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__manual__">Manual supplier entry</SelectItem>
+                              {activeSuppliers.map((supplier) => (
+                                <SelectItem key={supplier._id} value={supplier._id}>
+                                  {supplier.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="supplier-name">Supplier Name</Label>
-                    <Input
-                      id="supplier-name"
-                      value={quoteForm.supplierName}
-                      onChange={(event) => setQuoteForm((current) => ({ ...current, supplierName: event.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="supplier-contact">Supplier Contact</Label>
-                    <Input
-                      id="supplier-contact"
-                      value={quoteForm.supplierContact}
-                      onChange={(event) => setQuoteForm((current) => ({ ...current, supplierContact: event.target.value }))}
-                    />
-                  </div>
-                </div>
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="supplier-name">Supplier Name</Label>
+                            <Input
+                              id="supplier-name"
+                              value={quoteForm.supplierName}
+                              onChange={(event) => setQuoteForm((current) => ({ ...current, supplierName: event.target.value }))}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="supplier-contact">Supplier Contact</Label>
+                            <Input
+                              id="supplier-contact"
+                              value={quoteForm.supplierContact}
+                              onChange={(event) => setQuoteForm((current) => ({ ...current, supplierContact: event.target.value }))}
+                            />
+                          </div>
+                        </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="supplier-email">Supplier Email</Label>
-                    <Input
-                      id="supplier-email"
-                      value={quoteForm.supplierEmail}
-                      onChange={(event) => setQuoteForm((current) => ({ ...current, supplierEmail: event.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="quote-reference">Quote Reference</Label>
-                    <Input
-                      id="quote-reference"
-                      value={quoteForm.quoteReference}
-                      onChange={(event) => setQuoteForm((current) => ({ ...current, quoteReference: event.target.value }))}
-                    />
-                  </div>
-                </div>
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="supplier-email">Supplier Email</Label>
+                            <Input
+                              id="supplier-email"
+                              value={quoteForm.supplierEmail}
+                              onChange={(event) => setQuoteForm((current) => ({ ...current, supplierEmail: event.target.value }))}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="expected-date">Expected Fulfillment Date</Label>
+                            <Input
+                              id="expected-date"
+                              type="date"
+                              value={quoteForm.expectedFulfillmentDate}
+                              onChange={(event) => setQuoteForm((current) => ({ ...current, expectedFulfillmentDate: event.target.value }))}
+                            />
+                          </div>
+                        </div>
 
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="quoted-unit-price">Unit Price</Label>
-                    <Input
-                      id="quoted-unit-price"
-                      type="number"
-                      min="0"
-                      value={quoteForm.quotedUnitPrice}
-                      onChange={(event) => setQuoteForm((current) => ({ ...current, quotedUnitPrice: event.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="quoted-total">Quoted Total</Label>
-                    <Input
-                      id="quoted-total"
-                      type="number"
-                      min="0"
-                      value={quoteForm.quotedTotal}
-                      onChange={(event) => setQuoteForm((current) => ({ ...current, quotedTotal: event.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lead-time">Lead Time (days)</Label>
-                    <Input
-                      id="lead-time"
-                      type="number"
-                      min="0"
-                      value={quoteForm.leadTimeDays}
-                      onChange={(event) => setQuoteForm((current) => ({ ...current, leadTimeDays: event.target.value }))}
-                    />
-                  </div>
-                </div>
+                        <div className="space-y-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="quoted-unit-price">Unit Price</Label>
+                            <Input
+                              id="quoted-unit-price"
+                              type="number"
+                              min="0"
+                              value={quoteForm.quotedUnitPrice}
+                              onChange={(event) => setQuoteForm((current) => ({ ...current, quotedUnitPrice: event.target.value }))}
+                            />
+                          </div>
+                          <div className="rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+                            Estimated total for {selectedRequest.requestedQuantity} unit(s):{' '}
+                            <span className="font-semibold text-foreground">
+                              {formatProcurementCurrency(
+                                quoteForm.quotedUnitPrice ? Number(quoteForm.quotedUnitPrice) * selectedRequest.requestedQuantity : 0
+                              )}
+                            </span>
+                          </div>
+                        </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="expected-date">Expected Fulfillment Date</Label>
-                  <Input
-                    id="expected-date"
-                    type="date"
-                    value={quoteForm.expectedFulfillmentDate}
-                    onChange={(event) => setQuoteForm((current) => ({ ...current, expectedFulfillmentDate: event.target.value }))}
-                  />
-                </div>
+                        {selectedRequest.requestType === 'rental' ? (
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label htmlFor="rental-start">Rental Start</Label>
+                              <Input
+                                id="rental-start"
+                                type="date"
+                                value={quoteForm.rentalStartDate}
+                                onChange={(event) => setQuoteForm((current) => ({ ...current, rentalStartDate: event.target.value }))}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="rental-end">Rental Return Date</Label>
+                              <Input
+                                id="rental-end"
+                                type="date"
+                                value={quoteForm.rentalEndDate}
+                                onChange={(event) => setQuoteForm((current) => ({ ...current, rentalEndDate: event.target.value }))}
+                              />
+                            </div>
+                          </div>
+                        ) : null}
 
-                {selectedRequest.requestType === 'rental' ? (
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="rental-start">Rental Start</Label>
-                      <Input
-                        id="rental-start"
-                        type="date"
-                        value={quoteForm.rentalStartDate}
-                        onChange={(event) => setQuoteForm((current) => ({ ...current, rentalStartDate: event.target.value }))}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="rental-end">Rental Return Date</Label>
-                      <Input
-                        id="rental-end"
-                        type="date"
-                        value={quoteForm.rentalEndDate}
-                        onChange={(event) => setQuoteForm((current) => ({ ...current, rentalEndDate: event.target.value }))}
-                      />
+                        <div className="space-y-2">
+                          <Label htmlFor="quote-notes">Report Notes</Label>
+                          <Textarea
+                            id="quote-notes"
+                            value={quoteForm.notes}
+                            onChange={(event) => setQuoteForm((current) => ({ ...current, notes: event.target.value }))}
+                            rows={5}
+                            placeholder="Add supplier terms, delivery notes, rental details, or anything accounting should review."
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
-                ) : null}
-
-                <div className="space-y-2">
-                  <Label htmlFor="quote-notes">Report Notes</Label>
-                  <Textarea
-                    id="quote-notes"
-                    value={quoteForm.notes}
-                    onChange={(event) => setQuoteForm((current) => ({ ...current, notes: event.target.value }))}
-                    rows={4}
-                    placeholder="Add supplier terms, delivery notes, rental details, or anything accounting should review."
-                  />
                 </div>
-
-                <Button onClick={handleSubmitQuote} className="w-full">
-                  Submit To Accounting
-                </Button>
-              </div>
+                <div className="border-t bg-background px-6 py-4">
+                  <div className="flex justify-end">
+                    <Button onClick={handleSubmitQuote} className="w-full sm:w-auto sm:min-w-[220px]">
+                      Submit To Accounting
+                    </Button>
+                  </div>
+                </div>
+              </>
             ) : null}
           </DialogContent>
         </Dialog>
 
         <Dialog open={fulfillmentDialogOpen} onOpenChange={setFulfillmentDialogOpen}>
-          <DialogContent className="max-w-xl">
-            <DialogHeader>
+          <DialogContent className="max-h-[85vh] max-w-xl overflow-hidden p-0">
+            <DialogHeader className="border-b px-6 py-4">
               <DialogTitle>
                 {selectedRequest ? `Complete Procurement - ${selectedRequest.requestNumber}` : 'Complete Procurement'}
               </DialogTitle>
             </DialogHeader>
             {selectedRequest ? (
-              <div className="space-y-4 pt-2">
-                <div className="rounded-lg border bg-muted/20 p-4">
-                  <p className="font-medium">{selectedRequest.itemName}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Approved for {selectedRequest.requestedQuantity} units | Needed by {formatProcurementDate(selectedRequest.neededBy)}
-                  </p>
-                </div>
+              <>
+                <div className="overflow-y-auto px-6 py-4">
+                  <div className="space-y-4">
+                    <div className="rounded-lg border bg-muted/20 p-4">
+                      <p className="font-medium">{selectedRequest.itemName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Approved for {selectedRequest.requestedQuantity} units | Needed by {formatProcurementDate(selectedRequest.neededBy)}
+                      </p>
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="received-quantity">Received Quantity</Label>
-                  <Input
-                    id="received-quantity"
-                    type="number"
-                    min="1"
-                    value={fulfillmentForm.receivedQuantity}
-                    onChange={(event) => setFulfillmentForm((current) => ({ ...current, receivedQuantity: event.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="invoice-reference">Invoice / OR / Rental Reference</Label>
-                  <Input
-                    id="invoice-reference"
-                    value={fulfillmentForm.invoiceReference}
-                    onChange={(event) => setFulfillmentForm((current) => ({ ...current, invoiceReference: event.target.value }))}
-                  />
-                </div>
-
-                {selectedRequest.requestType === 'rental' ? (
-                  <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="fulfillment-rental-start">Rental Start</Label>
+                      <Label htmlFor="received-quantity">Received Quantity</Label>
                       <Input
-                        id="fulfillment-rental-start"
-                        type="date"
-                        value={fulfillmentForm.rentalStartDate}
-                        onChange={(event) => setFulfillmentForm((current) => ({ ...current, rentalStartDate: event.target.value }))}
+                        id="received-quantity"
+                        type="number"
+                        min="1"
+                        value={fulfillmentForm.receivedQuantity}
+                        onChange={(event) => setFulfillmentForm((current) => ({ ...current, receivedQuantity: event.target.value }))}
                       />
                     </div>
+
                     <div className="space-y-2">
-                      <Label htmlFor="fulfillment-rental-end">Rental Return Date</Label>
+                      <Label htmlFor="invoice-reference">Invoice / OR / Rental Reference</Label>
                       <Input
-                        id="fulfillment-rental-end"
-                        type="date"
-                        value={fulfillmentForm.rentalEndDate}
-                        onChange={(event) => setFulfillmentForm((current) => ({ ...current, rentalEndDate: event.target.value }))}
+                        id="invoice-reference"
+                        value={fulfillmentForm.invoiceReference}
+                        onChange={(event) => setFulfillmentForm((current) => ({ ...current, invoiceReference: event.target.value }))}
                       />
+                    </div>
+
+                    {selectedRequest.requestType === 'rental' ? (
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="fulfillment-rental-start">Rental Start</Label>
+                          <Input
+                            id="fulfillment-rental-start"
+                            type="date"
+                            value={fulfillmentForm.rentalStartDate}
+                            onChange={(event) => setFulfillmentForm((current) => ({ ...current, rentalStartDate: event.target.value }))}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="fulfillment-rental-end">Rental Return Date</Label>
+                          <Input
+                            id="fulfillment-rental-end"
+                            type="date"
+                            value={fulfillmentForm.rentalEndDate}
+                            onChange={(event) => setFulfillmentForm((current) => ({ ...current, rentalEndDate: event.target.value }))}
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="space-y-2">
+                      <Label htmlFor="fulfillment-notes">Completion Notes</Label>
+                      <Textarea
+                        id="fulfillment-notes"
+                        value={fulfillmentForm.notes}
+                        onChange={(event) => setFulfillmentForm((current) => ({ ...current, notes: event.target.value }))}
+                        rows={4}
+                        placeholder="Add delivery, pickup, or inventory handoff notes."
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="fulfillment-attachment">Completion Attachment (image or PDF)</Label>
+                      <Input
+                        id="fulfillment-attachment"
+                        type="file"
+                        accept="image/*,.pdf,application/pdf"
+                        onChange={handleFulfillmentAttachmentChange}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Upload proof of completion such as a receipt, signed acknowledgment, or delivery photo.
+                      </p>
+                      {fulfillmentForm.attachmentUrl ? (
+                        <button
+                          type="button"
+                          className="text-sm text-primary hover:underline"
+                          onClick={() => setFulfillmentForm((current) => ({ ...current, attachmentUrl: '' }))}
+                        >
+                          Remove attached file
+                        </button>
+                      ) : null}
                     </div>
                   </div>
-                ) : null}
-
-                <div className="space-y-2">
-                  <Label htmlFor="fulfillment-notes">Completion Notes</Label>
-                  <Textarea
-                    id="fulfillment-notes"
-                    value={fulfillmentForm.notes}
-                    onChange={(event) => setFulfillmentForm((current) => ({ ...current, notes: event.target.value }))}
-                    rows={4}
-                    placeholder="Add delivery, pickup, or inventory handoff notes."
-                  />
                 </div>
-
-                <Button onClick={handleCompleteRequest} className="w-full">
-                  Complete And Update Inventory
-                </Button>
-              </div>
+                <div className="border-t bg-background px-6 py-4">
+                  <div className="flex justify-end">
+                    <Button onClick={handleCompleteRequest} className="w-full sm:w-auto sm:min-w-[240px]">
+                      Complete And Update Inventory
+                    </Button>
+                  </div>
+                </div>
+              </>
             ) : null}
           </DialogContent>
         </Dialog>

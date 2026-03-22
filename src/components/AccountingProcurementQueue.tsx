@@ -37,7 +37,7 @@ const REVIEW_FIELDS: Array<{
   {
     key: 'pricingReviewed',
     label: 'Pricing reviewed',
-    description: 'The unit price or total quote is documented and acceptable.',
+    description: 'The supplier pricing is documented and acceptable.',
   },
   {
     key: 'timelineConfirmed',
@@ -238,8 +238,8 @@ export default function AccountingProcurementQueue() {
                   <p className="text-sm font-medium">Supplier And Quote</p>
                   <div className="mt-3 space-y-1 text-sm">
                     <p><span className="text-muted-foreground">Supplier:</span> {request.quote?.supplierName || 'Not set'}</p>
-                    <p><span className="text-muted-foreground">Total Quote:</span> {formatProcurementCurrency(request.quote?.quotedTotal)}</p>
                     <p><span className="text-muted-foreground">Unit Price:</span> {formatProcurementCurrency(request.quote?.quotedUnitPrice)}</p>
+                    <p><span className="text-muted-foreground">Estimated Total:</span> {formatProcurementCurrency(request.quote?.quotedTotal)}</p>
                     <p><span className="text-muted-foreground">Expected:</span> {formatProcurementDate(request.quote?.expectedFulfillmentDate)}</p>
                     {supplierProfile ? (
                       <p className="pt-1 text-muted-foreground">
@@ -305,7 +305,7 @@ export default function AccountingProcurementQueue() {
               <div className="rounded-lg border bg-muted/20 p-4">
                 <p className="font-medium">{selectedRequest.requestNumber}</p>
                 <p className="text-sm text-muted-foreground">
-                  {selectedRequest.itemName} | {formatProcurementCurrency(selectedRequest.quote?.quotedTotal)} | Needed by {formatProcurementDate(selectedRequest.neededBy)}
+                  {selectedRequest.itemName} | {selectedRequest.requestedQuantity} unit(s) | Needed by {formatProcurementDate(selectedRequest.neededBy)}
                 </p>
               </div>
 

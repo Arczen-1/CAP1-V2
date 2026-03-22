@@ -236,136 +236,138 @@ export default function DepartmentProcurementPanel({
                 New Purchase / Rental Request
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-xl">
-              <DialogHeader>
+            <DialogContent className="max-h-[90vh] w-[min(96vw,64rem)] max-w-4xl overflow-hidden p-0">
+              <DialogHeader className="border-b px-6 py-4">
                 <DialogTitle>Create Purchasing Request</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4 pt-2">
-                <div className="space-y-2">
-                  <Label htmlFor="inventory-item">Inventory Item</Label>
-                  <Select value={formData.inventoryItemId} onValueChange={handleInventorySelection}>
-                    <SelectTrigger id="inventory-item">
-                      <SelectValue placeholder="Select inventory item" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__manual__">Manual item request</SelectItem>
-                      {sortedInventoryItems.map((item) => (
-                        <SelectItem key={item._id} value={item._id}>
-                          {item.name} ({item.itemCode})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {selectedInventoryItem ? (
-                  <div className="grid gap-3 rounded-lg border bg-muted/30 p-3 text-sm sm:grid-cols-3">
-                    <div>
-                      <p className="text-muted-foreground">Available</p>
-                      <p className="font-medium">{selectedInventoryItem.availableQuantity}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Total Units</p>
-                      <p className="font-medium">{selectedInventoryItem.quantity}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Category</p>
-                      <p className="font-medium">{selectedInventoryItem.category}</p>
-                    </div>
-                  </div>
-                ) : formData.inventoryItemId === '__manual__' ? (
-                  <div className="grid gap-4 rounded-lg border bg-muted/20 p-4 sm:grid-cols-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="manual-item-name">Manual Item Name</Label>
-                      <Input
-                        id="manual-item-name"
-                        value={formData.manualItemName}
-                        onChange={(event) => setFormData((current) => ({ ...current, manualItemName: event.target.value }))}
-                        placeholder="Enter item name"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="manual-item-code">Item Code (optional)</Label>
-                      <Input
-                        id="manual-item-code"
-                        value={formData.manualItemCode}
-                        onChange={(event) => setFormData((current) => ({ ...current, manualItemCode: event.target.value }))}
-                        placeholder="Optional item code"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="manual-item-category">Category (optional)</Label>
-                      <Input
-                        id="manual-item-category"
-                        value={formData.manualItemCategory}
-                        onChange={(event) => setFormData((current) => ({ ...current, manualItemCategory: event.target.value }))}
-                        placeholder="Optional category"
-                      />
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="grid gap-4 sm:grid-cols-2">
+              <div className="overflow-y-auto px-6 py-5">
+                <div className="space-y-5">
                   <div className="space-y-2">
-                    <Label htmlFor="request-type">Request Type</Label>
-                    <Select
-                      value={formData.requestType}
-                      onValueChange={(value: ProcurementRequestType) => setFormData((current) => ({ ...current, requestType: value }))}
-                    >
-                      <SelectTrigger id="request-type">
-                        <SelectValue />
+                    <Label htmlFor="inventory-item">Inventory Item</Label>
+                    <Select value={formData.inventoryItemId} onValueChange={handleInventorySelection}>
+                      <SelectTrigger id="inventory-item">
+                        <SelectValue placeholder="Select inventory item" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="purchase">Purchase</SelectItem>
-                        <SelectItem value="rental">Rental</SelectItem>
+                        <SelectItem value="__manual__">Manual item request</SelectItem>
+                        {sortedInventoryItems.map((item) => (
+                          <SelectItem key={item._id} value={item._id}>
+                            {item.name} ({item.itemCode})
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {selectedInventoryItem ? (
+                    <div className="grid gap-3 rounded-lg border bg-muted/30 p-4 text-sm sm:grid-cols-3">
+                      <div>
+                        <p className="text-muted-foreground">Available</p>
+                        <p className="font-medium">{selectedInventoryItem.availableQuantity}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Total Units</p>
+                        <p className="font-medium">{selectedInventoryItem.quantity}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Category</p>
+                        <p className="font-medium">{selectedInventoryItem.category}</p>
+                      </div>
+                    </div>
+                  ) : formData.inventoryItemId === '__manual__' ? (
+                    <div className="grid gap-4 rounded-lg border bg-muted/20 p-4 md:grid-cols-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="manual-item-name">Manual Item Name</Label>
+                        <Input
+                          id="manual-item-name"
+                          value={formData.manualItemName}
+                          onChange={(event) => setFormData((current) => ({ ...current, manualItemName: event.target.value }))}
+                          placeholder="Enter item name"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="manual-item-code">Item Code (optional)</Label>
+                        <Input
+                          id="manual-item-code"
+                          value={formData.manualItemCode}
+                          onChange={(event) => setFormData((current) => ({ ...current, manualItemCode: event.target.value }))}
+                          placeholder="Optional item code"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="manual-item-category">Category (optional)</Label>
+                        <Input
+                          id="manual-item-category"
+                          value={formData.manualItemCategory}
+                          onChange={(event) => setFormData((current) => ({ ...current, manualItemCategory: event.target.value }))}
+                          placeholder="Optional category"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="request-type">Request Type</Label>
+                      <Select
+                        value={formData.requestType}
+                        onValueChange={(value: ProcurementRequestType) => setFormData((current) => ({ ...current, requestType: value }))}
+                      >
+                        <SelectTrigger id="request-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="purchase">Purchase</SelectItem>
+                          <SelectItem value="rental">Rental</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="request-quantity">Quantity Needed</Label>
+                      <Input
+                        id="request-quantity"
+                        type="number"
+                        min="1"
+                        value={formData.requestedQuantity}
+                        onChange={(event) => setFormData((current) => ({ ...current, requestedQuantity: event.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="needed-by">Needed By</Label>
+                      <Input
+                        id="needed-by"
+                        type="date"
+                        value={formData.neededBy}
+                        onChange={(event) => setFormData((current) => ({ ...current, neededBy: event.target.value }))}
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
-                    <Label htmlFor="request-quantity">Quantity Needed</Label>
-                    <Input
-                      id="request-quantity"
-                      type="number"
-                      min="1"
-                      value={formData.requestedQuantity}
-                      onChange={(event) => setFormData((current) => ({ ...current, requestedQuantity: event.target.value }))}
+                    <Label htmlFor="request-reason">Reason</Label>
+                    <Textarea
+                      id="request-reason"
+                      value={formData.requestReason}
+                      onChange={(event) => setFormData((current) => ({ ...current, requestReason: event.target.value }))}
+                      placeholder="Explain what is needed and why."
+                      rows={4}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="request-notes">Notes</Label>
+                    <Textarea
+                      id="request-notes"
+                      value={formData.requestNotes}
+                      onChange={(event) => setFormData((current) => ({ ...current, requestNotes: event.target.value }))}
+                      placeholder="Optional supplier notes, event context, or special handling."
+                      rows={4}
                     />
                   </div>
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="needed-by">Needed By</Label>
-                  <Input
-                    id="needed-by"
-                    type="date"
-                    value={formData.neededBy}
-                    onChange={(event) => setFormData((current) => ({ ...current, neededBy: event.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="request-reason">Reason</Label>
-                  <Textarea
-                    id="request-reason"
-                    value={formData.requestReason}
-                    onChange={(event) => setFormData((current) => ({ ...current, requestReason: event.target.value }))}
-                    placeholder="Explain what is needed and why."
-                    rows={3}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="request-notes">Notes</Label>
-                  <Textarea
-                    id="request-notes"
-                    value={formData.requestNotes}
-                    onChange={(event) => setFormData((current) => ({ ...current, requestNotes: event.target.value }))}
-                    placeholder="Optional supplier notes, event context, or special handling."
-                    rows={3}
-                  />
-                </div>
-
-                <Button onClick={handleCreateRequest} className="w-full">
+              </div>
+              <div className="border-t bg-background px-6 py-4">
+                <Button onClick={handleCreateRequest} className="w-full sm:w-auto">
                   Send To Purchasing
                 </Button>
               </div>
@@ -489,9 +491,8 @@ export default function DepartmentProcurementPanel({
                     {request.quote?.submittedAt ? (
                       <div className="mt-3 space-y-1 text-sm">
                         <p><span className="text-muted-foreground">Supplier:</span> {request.quote.supplierName || 'Not set'}</p>
-                        <p><span className="text-muted-foreground">Quote:</span> {formatProcurementCurrency(request.quote.quotedTotal)}</p>
                         <p><span className="text-muted-foreground">Unit Price:</span> {formatProcurementCurrency(request.quote.quotedUnitPrice)}</p>
-                        <p><span className="text-muted-foreground">Lead Time:</span> {request.quote.leadTimeDays ? `${request.quote.leadTimeDays} day(s)` : 'Not set'}</p>
+                        <p><span className="text-muted-foreground">Estimated Total:</span> {formatProcurementCurrency(request.quote.quotedTotal)}</p>
                         <p><span className="text-muted-foreground">Expected Fulfillment:</span> {formatProcurementDate(request.quote.expectedFulfillmentDate)}</p>
                         {request.requestType === 'rental' ? (
                           <p><span className="text-muted-foreground">Rental Window:</span> {formatProcurementDate(request.quote.rentalStartDate)} to {formatProcurementDate(request.quote.rentalEndDate)}</p>
@@ -526,6 +527,19 @@ export default function DepartmentProcurementPanel({
                         <p><span className="text-muted-foreground">Completed:</span> {formatProcurementDate(request.fulfillment.fulfilledAt)}</p>
                         <p><span className="text-muted-foreground">Received:</span> {request.fulfillment.receivedQuantity || request.requestedQuantity} units</p>
                         <p><span className="text-muted-foreground">Inventory Update:</span> {request.fulfillment.inventoryUpdated ? 'Done' : 'Pending'}</p>
+                        {request.fulfillment.attachments?.[0] ? (
+                          <p>
+                            <span className="text-muted-foreground">Completion File:</span>{' '}
+                            <a
+                              href={request.fulfillment.attachments[0]}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              View attachment
+                            </a>
+                          </p>
+                        ) : null}
                         {request.fulfillment.inventoryUpdateSummary ? (
                           <p className="pt-1 text-muted-foreground">{request.fulfillment.inventoryUpdateSummary}</p>
                         ) : null}

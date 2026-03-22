@@ -118,6 +118,10 @@ const procurementFulfillmentSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  attachments: {
+    type: [String],
+    default: []
+  },
   fulfilledAt: Date,
   fulfilledBy: {
     type: mongoose.Schema.Types.ObjectId,
