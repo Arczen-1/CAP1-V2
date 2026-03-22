@@ -62,20 +62,33 @@ router.post('/', auth, requireCreativeAccess, [
   body('name').notEmpty().trim().withMessage('Name is required'),
   body('category').isIn(['Backdrop', 'Table Decor', 'Lighting', 'Floral', 'Signage', 'Props', 'Drapery', 'Centerpiece', 'Other']),
   body('quantity').isInt({ min: 0 }),
-  body('pricePerItem').isFloat({ gt: 0 }).withMessage('Price per item is required')
+  body().custom((_, { req }) => {
+    const purchasePrice = Number(req.body?.pricePerItem || 0);
+    const rentalPricePerDay = Number(req.body?.rentalPricePerDay || 0);
+
+    if (purchasePrice <= 0 && rentalPricePerDay <= 0) {
+      throw new Error('Set a purchase price or rental price per day');
+    }
+
+    return true;
+  })
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
+
+    const purchasePrice = Number(req.body.pricePerItem || 0);
+    const rentalPricePerDay = Number(req.body.rentalPricePerDay || 0);
     
     const payload = {
       ...req.body,
-      pricePerItem: Number(req.body.pricePerItem) || 0,
+      pricePerItem: purchasePrice,
+      rentalPricePerDay,
       acquisition: {
         ...(req.body.acquisition || {}),
-        cost: Number(req.body.pricePerItem) || 0
+        cost: purchasePrice
       },
       createdBy: req.user._id
     };
@@ -98,19 +111,28 @@ router.put('/:id', auth, requireCreativeAccess, async (req, res) => {
       return res.status(404).json({ message: 'Item not found' });
     }
     
+    const nextPurchasePrice = req.body.pricePerItem !== undefined
+      ? Number(req.body.pricePerItem || 0)
+      : Number(item.pricePerItem || 0);
+    const nextRentalPrice = req.body.rentalPricePerDay !== undefined
+      ? Number(req.body.rentalPricePerDay || 0)
+      : Number(item.rentalPricePerDay || 0);
+
+    if (nextPurchasePrice <= 0 && nextRentalPrice <= 0) {
+      return res.status(400).json({ message: 'Set a purchase price or rental price per day' });
+    }
+
     const payload = {
       ...req.body,
-      updatedBy: req.user._id
-    };
-
-    if (req.body.pricePerItem !== undefined) {
-      payload.pricePerItem = Number(req.body.pricePerItem) || 0;
-      payload.acquisition = {
+      updatedBy: req.user._id,
+      pricePerItem: nextPurchasePrice,
+      rentalPricePerDay: nextRentalPrice,
+      acquisition: {
         ...(item.acquisition?.toObject?.() || item.acquisition || {}),
         ...(req.body.acquisition || {}),
-        cost: Number(req.body.pricePerItem) || 0
-      };
-    }
+        cost: nextPurchasePrice
+      }
+    };
 
     Object.assign(item, payload);
     await item.save();

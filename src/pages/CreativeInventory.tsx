@@ -32,6 +32,7 @@ interface CreativeItem {
   quantity: number;
   availableQuantity: number;
   pricePerItem?: number;
+  rentalPricePerDay?: number;
   condition: string;
   status: string;
   acquisition?: {
@@ -118,6 +119,7 @@ export default function CreativeInventory() {
     category: '',
     quantity: 1,
     pricePerItem: '',
+    rentalPricePerDay: '',
     condition: 'good',
     status: 'available',
     imageUrl: '',
@@ -166,9 +168,13 @@ export default function CreativeInventory() {
   };
 
   const handleAddItem = async () => {
-    const pricePerItem = parseFloat(formData.pricePerItem);
-    if (!Number.isFinite(pricePerItem) || pricePerItem <= 0) {
-      toast.error('Set a price per item before adding this item');
+    const purchasePrice = parseFloat(formData.pricePerItem);
+    const rentalPricePerDay = parseFloat(formData.rentalPricePerDay);
+    const normalizedPurchasePrice = Number.isFinite(purchasePrice) && purchasePrice > 0 ? purchasePrice : 0;
+    const normalizedRentalPrice = Number.isFinite(rentalPricePerDay) && rentalPricePerDay > 0 ? rentalPricePerDay : 0;
+
+    if (normalizedPurchasePrice <= 0 && normalizedRentalPrice <= 0) {
+      toast.error('Set a purchase price or rental price per day before adding this item');
       return;
     }
 
@@ -179,7 +185,8 @@ export default function CreativeInventory() {
         name: formData.name,
         category: formData.category,
         quantity: parseInt(formData.quantity.toString()),
-        pricePerItem,
+        pricePerItem: normalizedPurchasePrice,
+        rentalPricePerDay: normalizedRentalPrice,
         condition: formData.condition,
         status: formData.status,
         images: formData.imageUrl ? [{ url: formData.imageUrl, caption: 'Primary image', isPrimary: true }] : [],
@@ -204,9 +211,13 @@ export default function CreativeInventory() {
   const handleEditItem = async () => {
     if (!selectedItem) return;
 
-    const pricePerItem = parseFloat(formData.pricePerItem);
-    if (!Number.isFinite(pricePerItem) || pricePerItem <= 0) {
-      toast.error('Set a price per item before saving');
+    const purchasePrice = parseFloat(formData.pricePerItem);
+    const rentalPricePerDay = parseFloat(formData.rentalPricePerDay);
+    const normalizedPurchasePrice = Number.isFinite(purchasePrice) && purchasePrice > 0 ? purchasePrice : 0;
+    const normalizedRentalPrice = Number.isFinite(rentalPricePerDay) && rentalPricePerDay > 0 ? rentalPricePerDay : 0;
+
+    if (normalizedPurchasePrice <= 0 && normalizedRentalPrice <= 0) {
+      toast.error('Set a purchase price or rental price per day before saving');
       return;
     }
 
@@ -217,10 +228,11 @@ export default function CreativeInventory() {
         name: formData.name,
         category: formData.category,
         quantity: parseInt(formData.quantity.toString()),
-        pricePerItem,
+        pricePerItem: normalizedPurchasePrice,
+        rentalPricePerDay: normalizedRentalPrice,
         condition: formData.condition,
         status: formData.status,
-        images: formData.imageUrl ? [{ url: formData.imageUrl, caption: 'Primary image', isPrimary: true }] : selectedItem.images
+        images: formData.imageUrl ? [{ url: formData.imageUrl, caption: 'Primary image', isPrimary: true }] : []
       })
       });
       toast.success('Item updated successfully');
@@ -234,7 +246,7 @@ export default function CreativeInventory() {
     }
   };
 
-  const getCreativeItemPrice = (item: CreativeItem) => item.pricePerItem ?? item.acquisition?.cost;
+  const getCreativePurchasePrice = (item: CreativeItem) => item.pricePerItem ?? item.acquisition?.cost;
 
   const handleDeleteItem = async (itemId: string) => {
     if (!confirm('Are you sure you want to delete this item?')) return;
@@ -254,7 +266,8 @@ export default function CreativeInventory() {
       name: item.name,
       category: item.category,
       quantity: item.quantity,
-      pricePerItem: getCreativeItemPrice(item)?.toString() || '',
+      pricePerItem: getCreativePurchasePrice(item)?.toString() || '',
+      rentalPricePerDay: item.rentalPricePerDay?.toString() || '',
       condition: item.condition,
       status: item.status,
       imageUrl: item.images[0]?.url || '',
@@ -272,6 +285,7 @@ export default function CreativeInventory() {
       category: '',
       quantity: 1,
       pricePerItem: '',
+      rentalPricePerDay: '',
       condition: 'good',
       status: 'available',
       imageUrl: '',
@@ -410,16 +424,29 @@ export default function CreativeInventory() {
                     onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>Price Per Item (PHP) *</Label>
-                  <Input
-                    type="number"
-                    min={0.01}
-                    step="0.01"
-                    value={formData.pricePerItem}
-                    onChange={(e) => setFormData({ ...formData, pricePerItem: e.target.value })}
-                    placeholder="0.00"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Purchase Price (PHP)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={formData.pricePerItem}
+                      onChange={(e) => setFormData({ ...formData, pricePerItem: e.target.value })}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Rental Price / Day (PHP)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={formData.rentalPricePerDay}
+                      onChange={(e) => setFormData({ ...formData, rentalPricePerDay: e.target.value })}
+                      placeholder="0.00"
+                    />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -571,7 +598,7 @@ export default function CreativeInventory() {
                         <TableHead>Category</TableHead>
                         <TableHead>Stock</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Price / Item</TableHead>
+                        <TableHead className="text-right">Pricing</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -634,8 +661,18 @@ export default function CreativeInventory() {
                               {item.status.replace(/_/g, ' ')}
                             </Badge>
                           </TableCell>
-                          <TableCell className="align-top text-right font-medium">
-                            {formatCurrency(getCreativeItemPrice(item))}
+                          <TableCell className="align-top text-right">
+                            <div className="space-y-1 text-sm">
+                              {Number(getCreativePurchasePrice(item)) > 0 ? (
+                                <p className="font-medium">Buy: {formatCurrency(getCreativePurchasePrice(item))}</p>
+                              ) : null}
+                              {Number(item.rentalPricePerDay) > 0 ? (
+                                <p className="text-muted-foreground">Rent: {formatCurrency(item.rentalPricePerDay)}</p>
+                              ) : null}
+                              {Number(getCreativePurchasePrice(item)) <= 0 && Number(item.rentalPricePerDay) <= 0 ? (
+                                <p className="font-medium">Not set</p>
+                              ) : null}
+                            </div>
                           </TableCell>
                           <TableCell className="align-top text-right">
                             <div className="flex justify-end gap-1">
@@ -854,16 +891,29 @@ export default function CreativeInventory() {
                   onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Price Per Item (PHP) *</Label>
-                <Input
-                  type="number"
-                  min={0.01}
-                  step="0.01"
-                  value={formData.pricePerItem}
-                  onChange={(e) => setFormData({ ...formData, pricePerItem: e.target.value })}
-                  placeholder="0.00"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Purchase Price (PHP)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={formData.pricePerItem}
+                    onChange={(e) => setFormData({ ...formData, pricePerItem: e.target.value })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Rental Price / Day (PHP)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={formData.rentalPricePerDay}
+                    onChange={(e) => setFormData({ ...formData, rentalPricePerDay: e.target.value })}
+                    placeholder="0.00"
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">

@@ -45,6 +45,10 @@ const creativeInventorySchema = new mongoose.Schema({
     type: Number,
     min: 0
   },
+  rentalPricePerDay: {
+    type: Number,
+    min: 0
+  },
   availableQuantity: {
     type: Number,
     default: function() { return this.quantity; },

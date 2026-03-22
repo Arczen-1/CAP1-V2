@@ -38,6 +38,7 @@ interface LinenItem {
   washCount: number;
   status: string;
   pricePerItem?: number;
+  rentalPricePerDay?: number;
   acquisition?: {
     cost?: number;
   };
@@ -61,6 +62,7 @@ export default function LinenInventory() {
     quantity: 1,
     minimumStock: 10,
     pricePerItem: '',
+    rentalPricePerDay: '',
     status: 'available',
     imageUrl: ''
   });
@@ -94,9 +96,13 @@ export default function LinenInventory() {
   };
 
   const handleAddItem = async () => {
-    const pricePerItem = parseFloat(formData.pricePerItem);
-    if (!Number.isFinite(pricePerItem) || pricePerItem <= 0) {
-      toast.error('Set a price per item before adding this item');
+    const purchasePrice = parseFloat(formData.pricePerItem);
+    const rentalPricePerDay = parseFloat(formData.rentalPricePerDay);
+    const normalizedPurchasePrice = Number.isFinite(purchasePrice) && purchasePrice > 0 ? purchasePrice : 0;
+    const normalizedRentalPrice = Number.isFinite(rentalPricePerDay) && rentalPricePerDay > 0 ? rentalPricePerDay : 0;
+
+    if (normalizedPurchasePrice <= 0 && normalizedRentalPrice <= 0) {
+      toast.error('Set a purchase price or rental price per day before adding this item');
       return;
     }
 
@@ -111,7 +117,8 @@ export default function LinenInventory() {
           color: formData.color,
           quantity: parseInt(formData.quantity.toString(), 10),
           minimumStock: parseInt(formData.minimumStock.toString(), 10),
-          pricePerItem,
+          pricePerItem: normalizedPurchasePrice,
+          rentalPricePerDay: normalizedRentalPrice,
           status: formData.status,
           images: formData.imageUrl ? [{ url: formData.imageUrl, caption: 'Primary image', isPrimary: true }] : []
         })
@@ -129,9 +136,13 @@ export default function LinenInventory() {
   const handleEditItem = async () => {
     if (!selectedItem) return;
 
-    const pricePerItem = parseFloat(formData.pricePerItem);
-    if (!Number.isFinite(pricePerItem) || pricePerItem <= 0) {
-      toast.error('Set a price per item before saving');
+    const purchasePrice = parseFloat(formData.pricePerItem);
+    const rentalPricePerDay = parseFloat(formData.rentalPricePerDay);
+    const normalizedPurchasePrice = Number.isFinite(purchasePrice) && purchasePrice > 0 ? purchasePrice : 0;
+    const normalizedRentalPrice = Number.isFinite(rentalPricePerDay) && rentalPricePerDay > 0 ? rentalPricePerDay : 0;
+
+    if (normalizedPurchasePrice <= 0 && normalizedRentalPrice <= 0) {
+      toast.error('Set a purchase price or rental price per day before saving');
       return;
     }
 
@@ -146,9 +157,10 @@ export default function LinenInventory() {
           color: formData.color,
           quantity: parseInt(formData.quantity.toString(), 10),
           minimumStock: parseInt(formData.minimumStock.toString(), 10),
-          pricePerItem,
+          pricePerItem: normalizedPurchasePrice,
+          rentalPricePerDay: normalizedRentalPrice,
           status: formData.status,
-          images: formData.imageUrl ? [{ url: formData.imageUrl, caption: 'Primary image', isPrimary: true }] : selectedItem.images
+          images: formData.imageUrl ? [{ url: formData.imageUrl, caption: 'Primary image', isPrimary: true }] : []
         })
       });
       toast.success('Item updated successfully');
@@ -162,7 +174,7 @@ export default function LinenInventory() {
     }
   };
 
-  const getLinenItemPrice = (item: LinenItem) => item.pricePerItem ?? item.acquisition?.cost;
+  const getLinenPurchasePrice = (item: LinenItem) => item.pricePerItem ?? item.acquisition?.cost;
 
   const handleDeleteItem = async (itemId: string) => {
     if (!confirm('Are you sure you want to delete this item?')) return;
@@ -187,7 +199,8 @@ export default function LinenInventory() {
       color: item.color,
       quantity: item.quantity,
       minimumStock: item.minimumStock,
-      pricePerItem: getLinenItemPrice(item)?.toString() || '',
+      pricePerItem: getLinenPurchasePrice(item)?.toString() || '',
+      rentalPricePerDay: item.rentalPricePerDay?.toString() || '',
       status: item.status,
       imageUrl: item.images[0]?.url || ''
     });
@@ -204,6 +217,7 @@ export default function LinenInventory() {
       quantity: 1,
       minimumStock: 10,
       pricePerItem: '',
+      rentalPricePerDay: '',
       status: 'available',
       imageUrl: ''
     });
@@ -363,16 +377,29 @@ export default function LinenInventory() {
                     />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Price Per Item (PHP) *</Label>
-                  <Input
-                    type="number"
-                    min={0.01}
-                    step="0.01"
-                    value={formData.pricePerItem}
-                    onChange={(e) => setFormData({ ...formData, pricePerItem: e.target.value })}
-                    placeholder="0.00"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Purchase Price (PHP)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={formData.pricePerItem}
+                      onChange={(e) => setFormData({ ...formData, pricePerItem: e.target.value })}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Rental Price / Day (PHP)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={formData.rentalPricePerDay}
+                      onChange={(e) => setFormData({ ...formData, rentalPricePerDay: e.target.value })}
+                      placeholder="0.00"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Status</Label>
@@ -483,7 +510,7 @@ export default function LinenInventory() {
                         <TableHead>Details</TableHead>
                         <TableHead>Stock</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Price / Item</TableHead>
+                        <TableHead className="text-right">Pricing</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -555,8 +582,18 @@ export default function LinenInventory() {
                               {item.status.replace(/_/g, ' ')}
                             </Badge>
                           </TableCell>
-                          <TableCell className="align-top text-right font-medium">
-                            {formatCurrency(getLinenItemPrice(item))}
+                          <TableCell className="align-top text-right">
+                            <div className="space-y-1 text-sm">
+                              {Number(getLinenPurchasePrice(item)) > 0 ? (
+                                <p className="font-medium">Buy: {formatCurrency(getLinenPurchasePrice(item))}</p>
+                              ) : null}
+                              {Number(item.rentalPricePerDay) > 0 ? (
+                                <p className="text-muted-foreground">Rent: {formatCurrency(item.rentalPricePerDay)}</p>
+                              ) : null}
+                              {Number(getLinenPurchasePrice(item)) <= 0 && Number(item.rentalPricePerDay) <= 0 ? (
+                                <p className="font-medium">Not set</p>
+                              ) : null}
+                            </div>
                           </TableCell>
                           <TableCell className="align-top text-right">
                             <div className="flex justify-end gap-1">
@@ -664,16 +701,29 @@ export default function LinenInventory() {
                   <Input type="number" min={1} value={formData.minimumStock} onChange={(e) => setFormData({ ...formData, minimumStock: parseInt(e.target.value, 10) || 10 })} />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Price Per Item (PHP) *</Label>
-                <Input
-                  type="number"
-                  min={0.01}
-                  step="0.01"
-                  value={formData.pricePerItem}
-                  onChange={(e) => setFormData({ ...formData, pricePerItem: e.target.value })}
-                  placeholder="0.00"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Purchase Price (PHP)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={formData.pricePerItem}
+                    onChange={(e) => setFormData({ ...formData, pricePerItem: e.target.value })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Rental Price / Day (PHP)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={formData.rentalPricePerDay}
+                    onChange={(e) => setFormData({ ...formData, rentalPricePerDay: e.target.value })}
+                    placeholder="0.00"
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>Status</Label>

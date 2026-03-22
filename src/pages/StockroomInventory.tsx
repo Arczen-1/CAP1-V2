@@ -66,6 +66,7 @@ export default function StockroomInventory() {
     status: 'available',
     purchasePrice: 0,
     rentalPricePerDay: 0,
+    imageUrl: '',
     notes: ''
   });
 
@@ -106,13 +107,19 @@ export default function StockroomInventory() {
       if (editingItem) {
         await api.request(`/stockroom-inventory/${editingItem._id}`, {
           method: 'PUT',
-          body: JSON.stringify(formData)
+          body: JSON.stringify({
+            ...formData,
+            images: formData.imageUrl ? [{ url: formData.imageUrl, caption: 'Primary image', isPrimary: true }] : []
+          })
         });
         toast.success('Item updated successfully');
       } else {
         await api.request('/stockroom-inventory', {
           method: 'POST',
-          body: JSON.stringify(formData)
+          body: JSON.stringify({
+            ...formData,
+            images: formData.imageUrl ? [{ url: formData.imageUrl, caption: 'Primary image', isPrimary: true }] : []
+          })
         });
         toast.success('Item created successfully');
       }
@@ -151,6 +158,7 @@ export default function StockroomInventory() {
       status: 'available',
       purchasePrice: 0,
       rentalPricePerDay: 0,
+      imageUrl: '',
       notes: ''
     });
   };
@@ -167,6 +175,7 @@ export default function StockroomInventory() {
       status: item.status,
       purchasePrice: item.purchasePrice || 0,
       rentalPricePerDay: item.rentalPricePerDay || 0,
+      imageUrl: item.images?.[0]?.url || '',
       notes: item.notes || ''
     });
     setIsDialogOpen(true);
@@ -360,7 +369,7 @@ export default function StockroomInventory() {
                     />
                   </div>
                   <div>
-                    <Label>Rental Price Per Day (PHP)</Label>
+                    <Label>Rental Price / Day (PHP)</Label>
                     <Input
                       type="number"
                       min="0"
@@ -372,6 +381,14 @@ export default function StockroomInventory() {
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">Set at least one price so contracts and purchasing can use this item properly.</p>
+                <div>
+                  <Label>Image URL</Label>
+                  <Input
+                    value={formData.imageUrl}
+                    onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                    placeholder="https://example.com/image.jpg"
+                  />
+                </div>
                 <div>
                   <Label>Notes</Label>
                   <Input
@@ -486,7 +503,7 @@ export default function StockroomInventory() {
                           <TableHead>Category</TableHead>
                           <TableHead>Stock</TableHead>
                           <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Price</TableHead>
+                          <TableHead className="text-right">Pricing</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -553,8 +570,18 @@ export default function StockroomInventory() {
                                 {item.status.replace(/_/g, ' ')}
                               </Badge>
                             </TableCell>
-                            <TableCell className="align-top text-right font-medium">
-                              {formatCurrency([item.rentalPricePerDay, item.purchasePrice].find((value) => Number(value) > 0))}
+                            <TableCell className="align-top text-right">
+                              <div className="space-y-1 text-sm">
+                                {Number(item.purchasePrice) > 0 ? (
+                                  <p className="font-medium">Buy: {formatCurrency(item.purchasePrice)}</p>
+                                ) : null}
+                                {Number(item.rentalPricePerDay) > 0 ? (
+                                  <p className="text-muted-foreground">Rent: {formatCurrency(item.rentalPricePerDay)}</p>
+                                ) : null}
+                                {Number(item.purchasePrice) <= 0 && Number(item.rentalPricePerDay) <= 0 ? (
+                                  <p className="font-medium">Not set</p>
+                                ) : null}
+                              </div>
                             </TableCell>
                             <TableCell className="align-top text-right">
                               <div className="flex justify-end gap-1">
