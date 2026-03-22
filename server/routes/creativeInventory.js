@@ -122,7 +122,7 @@ router.put('/:id', auth, requireCreativeAccess, async (req, res) => {
 });
 
 // Delete item
-router.delete('/:id', auth, requireRole(['admin']), async (req, res) => {
+router.delete('/:id', auth, requireCreativeAccess, async (req, res) => {
   try {
     await CreativeInventory.findByIdAndDelete(req.params.id);
     res.json({ message: 'Item deleted' });

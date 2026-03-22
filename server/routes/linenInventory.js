@@ -127,7 +127,7 @@ router.put('/:id', auth, requireLinenAccess, async (req, res) => {
 });
 
 // Delete item
-router.delete('/:id', auth, requireRole(['admin']), async (req, res) => {
+router.delete('/:id', auth, requireLinenAccess, async (req, res) => {
   try {
     await LinenInventory.findByIdAndDelete(req.params.id);
     res.json({ message: 'Item deleted' });

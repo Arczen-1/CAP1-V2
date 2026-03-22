@@ -23,6 +23,7 @@ import KitchenDashboard from './pages/dashboards/KitchenDashboard';
 import PurchasingDashboard from './pages/dashboards/PurchasingDashboard';
 import CreativeDashboard from './pages/dashboards/CreativeDashboard';
 import LinenDashboard from './pages/dashboards/LinenDashboard';
+import StockroomDashboard from './pages/dashboards/StockroomDashboard';
 
 // Department Management Modules
 import CreativeInventory from './pages/CreativeInventory';
@@ -201,6 +202,12 @@ function AppRoutes() {
       <Route path="/purchasing" element={
         <RoleRoute allowedRoles={['purchasing', 'admin']}>
           <PurchasingDashboard />
+        </RoleRoute>
+      } />
+
+      <Route path="/stockroom" element={
+        <RoleRoute allowedRoles={['stockroom', 'admin']}>
+          <StockroomDashboard />
         </RoleRoute>
       } />
       

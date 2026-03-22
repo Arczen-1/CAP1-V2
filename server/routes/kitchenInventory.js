@@ -3,6 +3,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const KitchenInventory = require('../models/KitchenInventory');
 const { auth, requireRole } = require('../middleware/auth');
+const requireKitchenInventoryAccess = requireRole(['kitchen', 'purchasing', 'admin']);
 
 // Get all kitchen items
 router.get('/', auth, async (req, res) => {
@@ -44,7 +45,7 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // Create new item
-router.post('/', auth, requireRole(['kitchen', 'purchasing', 'admin']), [
+router.post('/', auth, requireKitchenInventoryAccess, [
   body('name').trim().notEmpty().withMessage('Item name is required'),
   body('category').isIn(['Utensil', 'Cookware', 'Serveware', 'Appliance', 'Tool', 'Container', 'Ingredient', 'Other']).withMessage('Invalid category'),
   body('quantity').isInt({ min: 0 }).withMessage('Quantity must be a positive number'),
@@ -71,7 +72,7 @@ router.post('/', auth, requireRole(['kitchen', 'purchasing', 'admin']), [
 });
 
 // Update item
-router.put('/:id', auth, requireRole(['kitchen', 'purchasing', 'admin']), async (req, res) => {
+router.put('/:id', auth, requireKitchenInventoryAccess, async (req, res) => {
   try {
     const item = await KitchenInventory.findById(req.params.id);
     if (!item) {
@@ -95,7 +96,7 @@ router.put('/:id', auth, requireRole(['kitchen', 'purchasing', 'admin']), async 
 });
 
 // Delete item
-router.delete('/:id', auth, requireRole(['admin']), async (req, res) => {
+router.delete('/:id', auth, requireKitchenInventoryAccess, async (req, res) => {
   try {
     const item = await KitchenInventory.findById(req.params.id);
     if (!item) {

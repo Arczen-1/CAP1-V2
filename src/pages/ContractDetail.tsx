@@ -2355,6 +2355,338 @@ export default function ContractDetail() {
     }, 250);
   };
 
+  const handlePrintKitchenChecklist = () => {
+    if (!contract) {
+      return;
+    }
+
+    if (!(contract.menuDetails?.length)) {
+      toast.error('Add menu items first before printing the kitchen checklist.');
+      return;
+    }
+
+    const menuRows = contract.menuDetails.map((item, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(item.item)}</td>
+        <td>${escapeHtml(item.category)}</td>
+        <td>${escapeHtml(String(item.quantity || 1))}</td>
+        <td>${item.confirmed ? 'Confirmed' : 'Pending'}</td>
+        <td class="check-cell">[ ]</td>
+        <td>____________________________</td>
+      </tr>
+    `).join('');
+
+    const printWindow = window.open('', '_blank', 'width=1080,height=1180');
+    if (!printWindow) {
+      toast.error('Please allow pop-ups to print the kitchen checklist');
+      return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${escapeHtml(contract.contractNumber)} - Kitchen Checklist</title>
+          <style>
+            ${PRINT_DOCUMENT_STYLES}
+            .check-cell { text-align: center; width: 90px; }
+          </style>
+        </head>
+        <body>
+          ${getPrintHeaderHtml(
+            'Kitchen Preparation Checklist',
+            'Printed checklist for kitchen staff to review menu items and confirm preparation before the event.',
+            [
+              { label: 'Contract Number', value: contract.contractNumber },
+              { label: 'Event Date', value: new Date(contract.eventDate).toLocaleDateString() },
+              { label: 'Printed', value: new Date().toLocaleString() },
+            ],
+          )}
+          <div class="summary-strip">
+            ${getSummaryLinesHtml([
+              { label: 'Client', value: contract.clientName },
+              { label: 'Venue', value: contract.venue?.name || '-' },
+              { label: 'Guest Packs', value: String(contract.totalPacks || 0) },
+              { label: 'Ingredient Status', value: formatEnumLabel(contract.ingredientStatus) },
+              { label: 'Menu Items', value: String(contract.menuDetails.length) },
+              { label: 'Confirmed Items', value: String(contract.menuDetails.filter((item) => item.confirmed).length) },
+            ])}
+          </div>
+          <section class="document-section">
+            <h3 class="section-heading">Kitchen Checklist</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Menu Item</th>
+                  <th>Category</th>
+                  <th>Qty</th>
+                  <th>Status</th>
+                  <th class="check-cell">Prep Check</th>
+                  <th>Kitchen Notes</th>
+                </tr>
+              </thead>
+              <tbody>${menuRows}</tbody>
+            </table>
+          </section>
+          <section class="document-section">
+            <h3 class="section-heading">Kitchen Sign-Off</h3>
+            <div class="info-grid">
+              <div>
+                ${getDetailListHtml([
+                  { label: 'Prepared By', value: '____________________________' },
+                  { label: 'Checked By', value: '____________________________' },
+                ])}
+              </div>
+              <div>
+                ${getDetailListHtml([
+                  { label: 'Prep Start Time', value: '____________________________' },
+                  { label: 'Final Notes', value: '________________________________________' },
+                ])}
+              </div>
+            </div>
+          </section>
+          <div class="document-note">
+            Printed from the kitchen preparation view for ${COMPANY_NAME}.
+          </div>
+        </div>
+      </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
+
+  const handlePrintInventoryPulloutSummary = (
+    sectionKey: InventorySectionKey,
+    title: string,
+    items: InventorySummaryItem[],
+  ) => {
+    if (!contract) {
+      return;
+    }
+
+    if (!items.length) {
+      toast.error(`Add ${title.toLowerCase()} items first before printing the pull-out summary.`);
+      return;
+    }
+
+    const preparedCount = items.filter((item) => item.itemStatus === 'prepared').length;
+    const totalUnits = items.reduce((sum, item) => sum + (Number(item.requestedQuantity) || 0), 0);
+    const itemRows = items.map((item, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(item.itemName)}</td>
+        <td>${escapeHtml(item.itemCode || '-')}</td>
+        <td>${escapeHtml(item.category || '-')}</td>
+        <td>${escapeHtml(String(item.requestedQuantity || 0))}</td>
+        <td>${escapeHtml(formatEnumLabel(item.itemStatus))}</td>
+        <td class="check-cell">[ ]</td>
+        <td class="check-cell">[ ]</td>
+        <td>____________________________</td>
+      </tr>
+    `).join('');
+
+    const printWindow = window.open('', '_blank', 'width=1080,height=1180');
+    if (!printWindow) {
+      toast.error('Please allow pop-ups to print this pull-out summary');
+      return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${escapeHtml(contract.contractNumber)} - ${escapeHtml(title)} Pull-Out Summary</title>
+          <style>
+            ${PRINT_DOCUMENT_STYLES}
+            .check-cell { text-align: center; width: 88px; }
+          </style>
+        </head>
+        <body>
+          ${getPrintHeaderHtml(
+            `${title} Pull-Out Summary`,
+            'Printed cross-check form for releasing physical items and confirming quantities before the event.',
+            [
+              { label: 'Contract Number', value: contract.contractNumber },
+              { label: 'Event Date', value: new Date(contract.eventDate).toLocaleDateString() },
+              { label: 'Printed', value: new Date().toLocaleString() },
+            ],
+          )}
+          <div class="summary-strip">
+            ${getSummaryLinesHtml([
+              { label: 'Client', value: contract.clientName },
+              { label: 'Venue', value: contract.venue?.name || '-' },
+              { label: 'Guest Packs', value: String(contract.totalPacks || 0) },
+              { label: 'Department', value: INVENTORY_SECTION_LABELS[sectionKey] },
+              { label: 'Items Listed', value: String(items.length) },
+              { label: 'Total Units', value: String(totalUnits) },
+              { label: 'Prepared Items', value: String(preparedCount) },
+              { label: 'Contract Stage', value: formatStatusLabel(contract.status) },
+            ])}
+          </div>
+          <section class="document-section">
+            <h3 class="section-heading">${escapeHtml(title)} Items</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Item</th>
+                  <th>Code</th>
+                  <th>Category</th>
+                  <th>Contract Qty</th>
+                  <th>Prep Status</th>
+                  <th class="check-cell">Pulled Out</th>
+                  <th class="check-cell">Cross-Checked</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>${itemRows}</tbody>
+            </table>
+          </section>
+          <section class="document-section">
+            <h3 class="section-heading">Release Sign-Off</h3>
+            <div class="info-grid">
+              <div>
+                ${getDetailListHtml([
+                  { label: 'Pulled Out By', value: '____________________________' },
+                  { label: 'Checked By', value: '____________________________' },
+                ])}
+              </div>
+              <div>
+                ${getDetailListHtml([
+                  { label: 'Pull-Out Time', value: '____________________________' },
+                  { label: 'Remarks', value: '________________________________________' },
+                ])}
+              </div>
+            </div>
+          </section>
+          <div class="document-note">
+            Printed from the ${escapeHtml(title.toLowerCase())} section for ${COMPANY_NAME}.
+          </div>
+        </div>
+      </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
+
+  const handlePrintLogisticsDispatchSheet = () => {
+    if (!contract) {
+      return;
+    }
+
+    const truckLabel = contract.logisticsAssignment?.truck?.plateNumber || 'Not assigned';
+    const driverLabel = contract.logisticsAssignment?.driver?.fullName || 'Not assigned';
+    const dispatchRows = [
+      'Vehicle inspection complete',
+      'Truck loaded with event items',
+      'Driver briefed on route and timing',
+      'Departure from stockroom/warehouse',
+      'Arrival at venue',
+      'Return trip cleared after event',
+    ].map((label) => `
+      <tr>
+        <td>${escapeHtml(label)}</td>
+        <td class="check-cell">[ ]</td>
+        <td>____________________________</td>
+      </tr>
+    `).join('');
+
+    const printWindow = window.open('', '_blank', 'width=1080,height=1180');
+    if (!printWindow) {
+      toast.error('Please allow pop-ups to print the logistics dispatch sheet');
+      return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${escapeHtml(contract.contractNumber)} - Logistics Dispatch Sheet</title>
+          <style>
+            ${PRINT_DOCUMENT_STYLES}
+            .check-cell { text-align: center; width: 96px; }
+          </style>
+        </head>
+        <body>
+          ${getPrintHeaderHtml(
+            'Logistics Dispatch Sheet',
+            'Printed logistics form for transport assignment, dispatch checks, and event-day coordination.',
+            [
+              { label: 'Contract Number', value: contract.contractNumber },
+              { label: 'Event Date', value: new Date(contract.eventDate).toLocaleDateString() },
+              { label: 'Printed', value: new Date().toLocaleString() },
+            ],
+          )}
+          <div class="summary-strip">
+            ${getSummaryLinesHtml([
+              { label: 'Client', value: contract.clientName },
+              { label: 'Venue', value: contract.venue?.name || '-' },
+              { label: 'Driver', value: driverLabel },
+              { label: 'Truck', value: truckLabel },
+              { label: 'Status', value: getLogisticsStatusLabel(logisticsStatusValue) },
+              { label: 'Guest Packs', value: String(contract.totalPacks || 0) },
+            ])}
+          </div>
+          <section class="document-section">
+            <h3 class="section-heading">Dispatch Checklist</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Checkpoint</th>
+                  <th class="check-cell">Done</th>
+                  <th>Notes / Time</th>
+                </tr>
+              </thead>
+              <tbody>${dispatchRows}</tbody>
+            </table>
+          </section>
+          <section class="document-section">
+            <h3 class="section-heading">Dispatch Sign-Off</h3>
+            <div class="info-grid">
+              <div>
+                ${getDetailListHtml([
+                  { label: 'Dispatcher', value: '____________________________' },
+                  { label: 'Driver Signature', value: '____________________________' },
+                ])}
+              </div>
+              <div>
+                ${getDetailListHtml([
+                  { label: 'Departure Time', value: '____________________________' },
+                  { label: 'Arrival Time', value: '____________________________' },
+                ])}
+              </div>
+            </div>
+          </section>
+          <div class="document-note">
+            Printed from the logistics section for ${COMPANY_NAME}.
+          </div>
+        </div>
+      </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
+
   const inventoryStatusOptions = {
     creativeAssets: ['pending', 'prepared'],
     linenRequirements: ['pending', 'prepared'],
@@ -2499,6 +2831,18 @@ export default function ContractDetail() {
               >
                 {isInventorySectionConfirmed ? 'Confirmed' : 'Pending Confirmation'}
               </Badge>
+            ) : null}
+            {isPreEventPreparationActive ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                data-print-hide="true"
+                onClick={() => handlePrintInventoryPulloutSummary(sectionKey, title, items)}
+              >
+                <Printer className="mr-2 h-4 w-4" />
+                Print Pull-Out Summary
+              </Button>
             ) : null}
             {canConfirmFinalizationSections ? renderReferenceBadge('Reference View') : null}
             {canEditInventoryDraftSection ? renderTabEditButton('addons', 'Edit Inventory Items', canEditInventoryDraftSection) : null}
@@ -2730,12 +3074,13 @@ export default function ContractDetail() {
     );
   };
 
+  const isOperationalPreparationStage = ['approved', 'completed'].includes(contract?.status || '');
   const canViewDetailsTab = useBanquetFocusedContractView || !useInventoryFocusedContractView;
   const canViewMenuTab = !useRestrictedDepartmentContractView && (isAdmin() || isSales() || isKitchen() || isPurchasing() || isBanquet());
   const canViewInventoryTab = useBanquetFocusedContractView ? false : true;
   const canViewPaymentsTab = !useRestrictedDepartmentContractView && (isAdmin() || isAccounting() || isSales());
-  const canViewBanquetTab = useBanquetFocusedContractView || (!useInventoryFocusedContractView && (isAdmin() || isBanquet() || isSales()));
-  const canViewLogisticsTab = !useRestrictedDepartmentContractView && (isAdmin() || isLogistics() || isBanquet() || isSales());
+  const canViewBanquetTab = isOperationalPreparationStage && (useBanquetFocusedContractView || (!useInventoryFocusedContractView && (isAdmin() || isBanquet() || isSales())));
+  const canViewLogisticsTab = isOperationalPreparationStage && !useRestrictedDepartmentContractView && (isAdmin() || isLogistics() || isBanquet() || isSales());
   const canViewPreferencesTab = useBanquetFocusedContractView || (!useInventoryFocusedContractView && (isAdmin() || isSales() || isCreative() || isLinen() || isKitchen() || isPurchasing() || isBanquet()));
   const canViewTimelineTab = !useRestrictedDepartmentContractView && role !== 'accounting';
   const visibleTabs = ALL_CONTRACT_TABS.filter((tab) => {
@@ -3584,6 +3929,7 @@ export default function ContractDetail() {
       : 'Everything is marked ready.';
   const showPreparationReadiness = ['approved', 'completed'].includes(contract.status);
   const showPostEventProgress = showPreparationReadiness && eventHasPassed;
+  const isPreEventPreparationActive = showPreparationReadiness && !showPostEventProgress;
   const postEventCounts = postEventProgressItems.reduce<Record<ReadinessStatus, number>>((counts, item) => {
     counts[item.status] += 1;
     return counts;
@@ -4319,6 +4665,12 @@ export default function ContractDetail() {
                   Menu Items
                 </CardTitle>
                 <div className="flex flex-wrap items-center justify-end gap-2">
+                  {isPreEventPreparationActive ? (
+                    <Button variant="outline" size="sm" data-print-hide="true" onClick={handlePrintKitchenChecklist}>
+                      <Printer className="mr-2 h-4 w-4" />
+                      Print Kitchen Checklist
+                    </Button>
+                  ) : null}
                   {isPreSignatureStage ? renderReferenceBadge() : null}
                   {renderTabEditButton('package')}
                 </div>
@@ -5162,6 +5514,12 @@ export default function ContractDetail() {
                   Logistics Booking Form
                 </CardTitle>
                 <div className="flex flex-wrap items-center gap-2">
+                  {isPreEventPreparationActive ? (
+                    <Button variant="outline" size="sm" data-print-hide="true" onClick={handlePrintLogisticsDispatchSheet}>
+                      <Printer className="mr-2 h-4 w-4" />
+                      Print Dispatch Sheet
+                    </Button>
+                  ) : null}
                   {isPreSignatureStage ? renderReferenceBadge() : null}
                   {renderTabEditButton('event')}
                 </div>

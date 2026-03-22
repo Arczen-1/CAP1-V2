@@ -3,6 +3,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const StockroomInventory = require('../models/StockroomInventory');
 const { auth, requireRole } = require('../middleware/auth');
+const requireStockroomInventoryAccess = requireRole(['logistics', 'stockroom', 'admin']);
 
 // Get all stockroom items
 router.get('/', auth, async (req, res) => {
@@ -46,7 +47,7 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // Create new item
-router.post('/', auth, requireRole(['logistics', 'stockroom', 'admin']), [
+router.post('/', auth, requireStockroomInventoryAccess, [
   body('name').trim().notEmpty().withMessage('Item name is required'),
   body('category').isIn(['Chair', 'Table', 'Tent', 'Equipment', 'Tool', 'Decor', 'Other']).withMessage('Invalid category'),
   body('quantity').isInt({ min: 0 }).withMessage('Quantity must be a positive number'),
@@ -83,7 +84,7 @@ router.post('/', auth, requireRole(['logistics', 'stockroom', 'admin']), [
 });
 
 // Update item
-router.put('/:id', auth, requireRole(['logistics', 'stockroom', 'admin']), async (req, res) => {
+router.put('/:id', auth, requireStockroomInventoryAccess, async (req, res) => {
   try {
     const item = await StockroomInventory.findById(req.params.id);
     if (!item) {
@@ -111,7 +112,7 @@ router.put('/:id', auth, requireRole(['logistics', 'stockroom', 'admin']), async
 });
 
 // Delete item
-router.delete('/:id', auth, requireRole(['admin']), async (req, res) => {
+router.delete('/:id', auth, requireStockroomInventoryAccess, async (req, res) => {
   try {
     const item = await StockroomInventory.findById(req.params.id);
     if (!item) {

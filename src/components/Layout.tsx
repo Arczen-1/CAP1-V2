@@ -54,6 +54,7 @@ const navItems: NavItem[] = [
   { label: 'Banquet', href: '/banquet', icon: Users, roles: ['banquet_supervisor', 'admin'] },
   { label: 'Kitchen', href: '/kitchen', icon: ChefHat, roles: ['kitchen', 'admin'] },
   { label: 'Purchasing', href: '/purchasing', icon: ShoppingCart, roles: ['purchasing', 'admin'] },
+  { label: 'Stockroom', href: '/stockroom', icon: Package, roles: ['stockroom', 'admin'] },
   { label: 'Creative', href: '/creative', icon: Palette, roles: ['creative', 'admin'] },
   { label: 'Linen', href: '/linen', icon: Shirt, roles: ['linen', 'admin'] },
   { label: 'Incidents', href: '/incidents', icon: AlertTriangle, roles: ['all'] },
@@ -64,7 +65,7 @@ const managementNavItems: NavItem[] = [
   { label: 'Banquet Staff', href: '/banquet/staff', icon: UserCog, roles: ['banquet_supervisor', 'admin'] },
   { label: 'Drivers & Trucks', href: '/logistics/management', icon: Truck, roles: ['logistics', 'admin'] },
   { label: 'Linen Inventory', href: '/linen/inventory', icon: Package, roles: ['linen', 'admin'] },
-  { label: 'Stockroom', href: '/stockroom/inventory', icon: Package, roles: ['logistics', 'stockroom', 'admin'] },
+  { label: 'Stockroom Inventory', href: '/stockroom/inventory', icon: Package, roles: ['logistics', 'stockroom', 'admin'] },
   { label: 'Kitchen Inventory', href: '/kitchen/inventory', icon: ChefHat, roles: ['kitchen', 'admin'] },
   { label: 'Admin Management', href: '/admin/management', icon: Shield, roles: ['admin'] },
 ];
