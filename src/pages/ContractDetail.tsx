@@ -70,6 +70,8 @@ const COMPANY_TAGLINE = 'Event Catering And Hospitality Services';
 const RESERVATION_FEE_AMOUNT = 30000;
 const REQUIRED_DOWN_PAYMENT_RATE = 0.4;
 const PAYMENT_AGING_WINDOW_DAYS = 30;
+const BANQUET_PLANNING_WINDOW_DAYS = 30;
+const BANQUET_ROSTER_FREEZE_DAYS = 7;
 const PRINT_DOCUMENT_STYLES = `
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
@@ -1351,7 +1353,7 @@ export default function ContractDetail() {
 
     setBanquetAssignmentDraft({
       serviceGuestCount: operationsSummary.banquet.planningGuestCount || 0,
-      supervisorId: banquetAssignmentDraft.supervisorId || operationsSummary.banquet.selectedSupervisorId || (role === 'banquet_supervisor' ? user?.id || '' : ''),
+      supervisorId: effectiveBanquetSupervisorId,
       staffingPlan: { ...operationsSummary.banquet.suggestedPlan },
       assignments: nextAssignments
     });
@@ -1413,11 +1415,6 @@ export default function ContractDetail() {
       return;
     }
 
-    if (!banquetAssignmentDraft.supervisorId) {
-      toast.error('Assign a banquet supervisor before saving the event team.');
-      return;
-    }
-
     if (banquetAssignmentDraft.serviceGuestCount <= 0) {
       toast.error('Enter the service guest count first.');
       return;
@@ -1435,7 +1432,7 @@ export default function ContractDetail() {
     try {
       await api.updateBanquetAssignment(id!, {
         serviceGuestCount: banquetAssignmentDraft.serviceGuestCount,
-        supervisorId: banquetAssignmentDraft.supervisorId,
+        supervisorId: effectiveBanquetSupervisorId,
         staffingPlan: banquetAssignmentDraft.staffingPlan,
         assignments
       });
@@ -2364,9 +2361,7 @@ export default function ContractDetail() {
       return;
     }
 
-    const assignedSupervisorName = banquetSummary?.supervisorOptions.find(
-      (option) => option._id === banquetAssignmentDraft.supervisorId,
-    )?.name || contract.assignedSupervisor?.name || 'Not assigned';
+    const assignedSupervisorName = effectiveBanquetSupervisorName || 'Not recorded';
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -3229,6 +3224,13 @@ export default function ContractDetail() {
   const banquetSummary = operationsSummary?.banquet;
   const banquetSelectedAssignments = banquetSummary?.selectedAssignments || [];
   const banquetSuggestedAssignments = banquetSummary?.suggestedAssignments || [];
+  const effectiveBanquetSupervisorId = banquetAssignmentDraft.supervisorId
+    || banquetSummary?.selectedSupervisorId
+    || contract?.assignedSupervisor?._id
+    || (role === 'banquet_supervisor' ? user?.id || '' : '');
+  const effectiveBanquetSupervisorName = banquetSummary?.supervisorOptions.find((option) => option._id === effectiveBanquetSupervisorId)?.name
+    || contract?.assignedSupervisor?.name
+    || (role === 'banquet_supervisor' ? user?.name || '' : '');
   const banquetAssignedTotal = BANQUET_ASSIGNMENT_ROLE_KEYS.reduce(
     (sum, roleKey) => sum + banquetAssignmentDraft.assignments[roleKey].length,
     0
@@ -3248,7 +3250,7 @@ export default function ContractDetail() {
       )
     ), 0);
 
-    const completedSteps = coveredAssignments + (banquetAssignmentDraft.supervisorId ? 1 : 0);
+    const completedSteps = coveredAssignments + (effectiveBanquetSupervisorId ? 1 : 0);
     return Math.round((completedSteps / totalSteps) * 100);
   })();
   const getBanquetAvailableStaffForRole = (roleKey: BanquetAssignmentRole) => (
@@ -3278,6 +3280,106 @@ export default function ContractDetail() {
       .map((staffId) => banquetStaffLookup.get(staffId))
       .filter((staff): staff is BanquetStaffSummary => Boolean(staff))
   );
+  const banquetMissingRoles = BANQUET_ASSIGNMENT_ROLE_KEYS
+    .map((roleKey) => ({
+      roleKey,
+      label: BANQUET_ROLE_LABELS[roleKey],
+      missing: Math.max(0, (Number(banquetAssignmentDraft.staffingPlan[roleKey]) || 0) - banquetAssignmentDraft.assignments[roleKey].length),
+    }))
+    .filter((item) => item.missing > 0);
+  const banquetEventDaysAway = contract?.eventDate
+    ? Math.ceil((new Date(contract.eventDate).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / (1000 * 60 * 60 * 24))
+    : null;
+  const banquetRosterFreezeActive = banquetEventDaysAway !== null && banquetEventDaysAway >= 0 && banquetEventDaysAway <= BANQUET_ROSTER_FREEZE_DAYS;
+  const banquetRosterPlanningActive = banquetEventDaysAway !== null && banquetEventDaysAway > BANQUET_ROSTER_FREEZE_DAYS && banquetEventDaysAway <= BANQUET_PLANNING_WINDOW_DAYS;
+  const banquetRosterForecastActive = banquetEventDaysAway !== null && banquetEventDaysAway > BANQUET_PLANNING_WINDOW_DAYS;
+  const banquetRosterFrozenReady = banquetRosterFreezeActive && Boolean(effectiveBanquetSupervisorName) && banquetMissingRoles.length === 0 && banquetPlannedTotal > 0;
+  const banquetRosterStage = banquetEventDaysAway === null
+    ? {
+        label: 'Schedule Needed',
+        className: 'border-amber-200 bg-amber-50 text-amber-900',
+        title: 'Banquet staffing timing cannot be evaluated yet.',
+        note: 'Save the event date before the banquet team can apply the planning and roster freeze rules.',
+      }
+    : banquetEventDaysAway < 0
+      ? {
+          label: 'Post-Event',
+          className: 'border-slate-200 bg-slate-50 text-slate-700',
+          title: 'Event date has passed.',
+          note: 'Use the banquet plan for attendance review, incident follow-up, and service accountability.',
+        }
+      : banquetRosterFreezeActive
+        ? {
+            label: banquetRosterFrozenReady ? 'Roster Frozen' : 'Freeze Required',
+            className: banquetRosterFrozenReady ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-800',
+            title: banquetRosterFrozenReady
+              ? 'Banquet roster is inside the one-week freeze window and appears complete.'
+              : 'Banquet roster is inside the one-week freeze window but is not complete.',
+            note: banquetRosterFrozenReady
+              ? 'Changes after this point should be treated as replacements with supervisor approval and a recorded reason.'
+              : 'Assign the supervisor and complete all planned role slots. Late changes should be handled as controlled replacements.',
+          }
+        : banquetRosterPlanningActive
+          ? {
+              label: 'Roster Planning',
+              className: 'border-blue-200 bg-blue-50 text-blue-800',
+              title: 'Banquet roster is in the Mancom planning window.',
+              note: 'Use this period to confirm headcount, supervisor ownership, and staffing shortages before the one-week freeze.',
+            }
+          : {
+              label: 'Staffing Forecast',
+              className: 'border-slate-200 bg-slate-50 text-slate-700',
+              title: 'Banquet staffing is still in forecast mode.',
+              note: 'The system can estimate headcount now, but final names should be confirmed during the one-month operations review.',
+            };
+  const banquetDecisionChecks = [
+    {
+      label: 'Staffing freeze timing',
+      ready: banquetEventDaysAway !== null && (banquetEventDaysAway > BANQUET_ROSTER_FREEZE_DAYS || banquetRosterFrozenReady || banquetEventDaysAway < 0),
+      detail: banquetEventDaysAway === null
+        ? 'Event date is required before applying the banquet freeze rule.'
+        : banquetEventDaysAway < 0
+          ? 'Event date has passed; roster changes should be handled as post-event records.'
+          : banquetEventDaysAway <= BANQUET_ROSTER_FREEZE_DAYS
+            ? banquetRosterFrozenReady
+              ? `Inside the ${BANQUET_ROSTER_FREEZE_DAYS}-day freeze window with a complete roster.`
+              : `Inside the ${BANQUET_ROSTER_FREEZE_DAYS}-day freeze window; roster must be completed or handled as an exception.`
+            : banquetEventDaysAway <= BANQUET_PLANNING_WINDOW_DAYS
+              ? `Inside the ${BANQUET_PLANNING_WINDOW_DAYS}-day planning window before the roster freeze.`
+              : `${banquetEventDaysAway} day(s) before the event; staffing can remain forecasted until the Mancom planning window.`,
+    },
+    {
+      label: 'Supervisor ownership',
+      ready: Boolean(effectiveBanquetSupervisorName),
+      detail: effectiveBanquetSupervisorName
+        ? `${effectiveBanquetSupervisorName} owns banquet coordination for this event.`
+        : 'Open or save this plan as the banquet supervisor so ownership is recorded.',
+    },
+    {
+      label: 'Guest-based staffing target',
+      ready: banquetPlannedTotal > 0,
+      detail: banquetPlannedTotal > 0
+        ? `${banquetPlannedTotal} planned position(s) based on ${banquetAssignmentDraft.serviceGuestCount || banquetSummary?.planningGuestCount || 0} service guests.`
+        : 'Load or enter the recommended role targets before assigning names.',
+    },
+    {
+      label: 'Same-day staff availability',
+      ready: banquetMissingRoles.length === 0 && banquetPlannedTotal > 0,
+      detail: banquetMissingRoles.length === 0 && banquetPlannedTotal > 0
+        ? 'All planned banquet slots have assigned names that are available on the event date.'
+        : banquetMissingRoles.length > 0
+          ? `Still missing ${banquetMissingRoles.reduce((sum, item) => sum + item.missing, 0)} staff: ${banquetMissingRoles.map((item) => `${item.missing} ${item.label}`).join(', ')}.`
+          : 'No staffing target has been saved yet.',
+    },
+    {
+      label: 'Operational blockers',
+      ready: !banquetSummary || banquetSummary.blockers.length === 0,
+      detail: banquetSummary && banquetSummary.blockers.length > 0
+        ? banquetSummary.blockers.join(' ')
+        : 'No banquet blocker is currently reported for this event.',
+    },
+  ];
+  const banquetDecisionReady = banquetDecisionChecks.every((check) => check.ready);
 
   useEffect(() => {
     if (visibleTabs.includes(rawActiveTab)) {
@@ -4345,6 +4447,51 @@ export default function ContractDetail() {
   const canMarkLogisticsDispatched = !logisticsStatusWillChange && logisticsStatusValue === 'ready_for_dispatch';
   const logisticsCompletionWaitsForPostEvent = !logisticsStatusWillChange && logisticsStatusValue === 'dispatched' && !eventHasPassed;
   const canMarkLogisticsCompleted = !logisticsStatusWillChange && logisticsStatusValue === 'dispatched' && eventHasPassed;
+  const logisticsEstimatedLoad = operationsSummary?.logistics.estimatedVolumeCubicMeters || 0;
+  const logisticsSelectedTruckCapacity = selectedLogisticsTruck?.capacityVolume || 0;
+  const logisticsCapacityReady = !selectedLogisticsTruck
+    ? false
+    : logisticsEstimatedLoad <= 0 || logisticsSelectedTruckCapacity <= 0 || logisticsSelectedTruckCapacity >= logisticsEstimatedLoad;
+  const logisticsDecisionChecks = [
+    {
+      label: 'Event-date availability',
+      ready: Boolean(operationsSummary),
+      detail: operationsSummary
+        ? `${operationsSummary.logistics.availableTrucks.length} truck option(s) and ${operationsSummary.logistics.availableDrivers.length} driver option(s) are free for ${new Date(contract.eventDate).toLocaleDateString()}.`
+        : 'Availability checks are unavailable right now.',
+    },
+    {
+      label: 'Truck assignment',
+      ready: Boolean(selectedLogisticsTruck),
+      detail: selectedLogisticsTruck
+        ? `${selectedLogisticsTruck.plateNumber} is selected with ${logisticsSelectedTruckCapacity || 'unlisted'} m3 capacity.`
+        : 'Select a truck before dispatch can be confirmed.',
+    },
+    {
+      label: 'Driver assignment',
+      ready: Boolean(selectedLogisticsDriver),
+      detail: selectedLogisticsDriver
+        ? `${selectedLogisticsDriver.fullName} (${selectedLogisticsDriver.driverId}) is assigned for the event date.`
+        : 'Assign a driver before dispatch can be confirmed.',
+    },
+    {
+      label: 'Load fit',
+      ready: logisticsCapacityReady,
+      detail: selectedLogisticsTruck
+        ? logisticsEstimatedLoad > 0 && logisticsSelectedTruckCapacity > 0
+          ? `${logisticsEstimatedLoad} m3 estimated load against ${logisticsSelectedTruckCapacity} m3 truck capacity.`
+          : 'Estimated load or truck capacity is not fully listed, so staff should verify before loading.'
+        : 'No selected truck to compare against the estimated load.',
+    },
+    {
+      label: 'Conflict blockers',
+      ready: !operationsSummary || operationsSummary.logistics.blockers.length === 0,
+      detail: operationsSummary && operationsSummary.logistics.blockers.length > 0
+        ? operationsSummary.logistics.blockers.join(' ')
+        : 'No same-day truck or driver conflict is currently reported.',
+    },
+  ];
+  const logisticsDecisionReady = logisticsDecisionChecks.every((check) => check.ready);
   const logisticsAutoSaveMessage = !logisticsAssignment.truckId
     ? {
         label: 'No Truck Booked Yet',
@@ -5422,13 +5569,11 @@ export default function ContractDetail() {
                           <p className="text-xs text-muted-foreground">Guest base used for staffing</p>
                         </div>
                         <div className="rounded-lg border p-4">
-                          <p className="text-sm text-muted-foreground">Assigned Supervisor</p>
+                          <p className="text-sm text-muted-foreground">Plan Owner</p>
                           <p className="mt-1 font-semibold">
-                            {banquetSummary.supervisorOptions.find((option) => option._id === banquetAssignmentDraft.supervisorId)?.name
-                              || contract.assignedSupervisor?.name
-                              || 'Not assigned'}
+                            {effectiveBanquetSupervisorName || 'Not recorded'}
                           </p>
-                          <p className="text-xs text-muted-foreground">Main owner of the service team</p>
+                          <p className="text-xs text-muted-foreground">Recorded from the assigned/current banquet supervisor</p>
                         </div>
                         <div className="rounded-lg border p-4">
                           <p className="text-sm text-muted-foreground">Crew Assigned</p>
@@ -5455,6 +5600,77 @@ export default function ContractDetail() {
                           {banquetSummary.blockers.join(' ')}
                         </div>
                       ) : null}
+
+                      <div className="rounded-xl border bg-slate-50/70 p-4">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                              Banquet Staffing Window
+                            </p>
+                            <p className="mt-1 text-sm font-medium">{banquetRosterStage.title}</p>
+                            <p className="mt-1 text-sm text-muted-foreground">{banquetRosterStage.note}</p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline" className={banquetRosterStage.className}>
+                              {banquetRosterStage.label}
+                            </Badge>
+                            {banquetEventDaysAway !== null && banquetEventDaysAway >= 0 ? (
+                              <Badge variant="outline" className="border-slate-200 bg-background text-slate-700">
+                                {banquetEventDaysAway === 0 ? 'Event today' : `${banquetEventDaysAway} day(s) to event`}
+                              </Badge>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="mt-4 grid gap-3 md:grid-cols-3">
+                          <div className={`rounded-lg border px-3 py-3 ${banquetRosterForecastActive ? 'bg-background ring-1 ring-slate-300' : 'bg-background'}`}>
+                            <p className="text-sm font-medium">Forecast</p>
+                            <p className="mt-1 text-xs text-muted-foreground">More than {BANQUET_PLANNING_WINDOW_DAYS} days before event: estimate staff needs from guest count.</p>
+                          </div>
+                          <div className={`rounded-lg border px-3 py-3 ${banquetRosterPlanningActive ? 'bg-background ring-1 ring-blue-300' : 'bg-background'}`}>
+                            <p className="text-sm font-medium">Mancom Planning</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{BANQUET_PLANNING_WINDOW_DAYS} to {BANQUET_ROSTER_FREEZE_DAYS + 1} days before event: confirm supervisor, names, and shortages.</p>
+                          </div>
+                          <div className={`rounded-lg border px-3 py-3 ${banquetRosterFreezeActive ? 'bg-background ring-1 ring-amber-300' : 'bg-background'}`}>
+                            <p className="text-sm font-medium">Roster Freeze</p>
+                            <p className="mt-1 text-xs text-muted-foreground">Final {BANQUET_ROSTER_FREEZE_DAYS} days: roster should be complete; changes become replacements with reason.</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className={`rounded-xl border p-4 ${banquetDecisionReady ? 'border-emerald-200 bg-emerald-50/70' : 'border-amber-200 bg-amber-50/70'}`}>
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div>
+                            <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${banquetDecisionReady ? 'text-emerald-800' : 'text-amber-800'}`}>
+                              Banquet Decision Review
+                            </p>
+                            <p className={`mt-1 text-sm ${banquetDecisionReady ? 'text-emerald-950' : 'text-amber-950'}`}>
+                              {banquetDecisionReady
+                                ? 'Staffing is ready for supervisor review and check-in sheet printing.'
+                                : 'Complete the items below before treating the banquet plan as ready.'}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className={banquetDecisionReady ? 'border-emerald-200 bg-white text-emerald-800' : 'border-amber-200 bg-white text-amber-900'}>
+                            {banquetDecisionReady ? 'Ready For Review' : 'Needs Attention'}
+                          </Badge>
+                        </div>
+                        <div className="mt-4 grid gap-3 md:grid-cols-2">
+                          {banquetDecisionChecks.map((check) => (
+                            <div key={check.label} className="rounded-lg border bg-background px-3 py-3">
+                              <div className="flex items-start gap-2">
+                                {check.ready ? (
+                                  <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                                ) : (
+                                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                                )}
+                                <div>
+                                  <p className="text-sm font-medium">{check.label}</p>
+                                  <p className="mt-1 text-xs text-muted-foreground">{check.detail}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
 
                       <div className="rounded-xl border bg-slate-50/70 px-4 py-3 text-sm text-muted-foreground">
                         Fill out the banquet plan top to bottom: confirm the service guest count, set the supervisor and staffing targets, assign names, then save and print the check-in sheet.
@@ -5510,7 +5726,7 @@ export default function ContractDetail() {
                               <div>
                                 <CardTitle className="text-base">Planning Form</CardTitle>
                                 <p className="mt-1 text-sm text-muted-foreground">
-                                  Complete the guest base, banquet supervisor, and planned headcount before assigning individual names below.
+                                Complete the guest base and planned headcount before assigning individual names below. Ownership is recorded from the assigned/current supervisor account.
                                 </p>
                               </div>
                               {banquetSummary.updatedAt ? (
@@ -5534,29 +5750,6 @@ export default function ContractDetail() {
                                   }))}
                                   disabled={!canManageBanquet}
                                 />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Banquet Supervisor</Label>
-                                <Select
-                                  value={banquetAssignmentDraft.supervisorId || '__none__'}
-                                  onValueChange={(value) => setBanquetAssignmentDraft((current) => ({
-                                    ...current,
-                                    supervisorId: value === '__none__' ? '' : value
-                                  }))}
-                                  disabled={!canManageBanquet}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Assign supervisor" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="__none__">No supervisor assigned</SelectItem>
-                                    {banquetSummary.supervisorOptions.map((option) => (
-                                      <SelectItem key={option._id} value={option._id}>
-                                        {option.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
                               </div>
                             </div>
 
@@ -5777,6 +5970,41 @@ export default function ContractDetail() {
                         {operationsSummary.logistics.blockers.join(' ')}
                       </div>
                     )}
+
+                    <div className={`rounded-xl border p-4 ${logisticsDecisionReady ? 'border-emerald-200 bg-emerald-50/70' : 'border-amber-200 bg-amber-50/70'}`}>
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                          <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${logisticsDecisionReady ? 'text-emerald-800' : 'text-amber-800'}`}>
+                            Dispatch Decision Review
+                          </p>
+                          <p className={`mt-1 text-sm ${logisticsDecisionReady ? 'text-emerald-950' : 'text-amber-950'}`}>
+                            {logisticsDecisionReady
+                              ? 'Truck and driver booking are ready for dispatch confirmation when loading is complete.'
+                              : 'Resolve the items below before dispatch is treated as ready.'}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className={logisticsDecisionReady ? 'border-emerald-200 bg-white text-emerald-800' : 'border-amber-200 bg-white text-amber-900'}>
+                          {logisticsDecisionReady ? 'Ready For Dispatch Review' : 'Needs Attention'}
+                        </Badge>
+                      </div>
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        {logisticsDecisionChecks.map((check) => (
+                          <div key={check.label} className="rounded-lg border bg-background px-3 py-3">
+                            <div className="flex items-start gap-2">
+                              {check.ready ? (
+                                <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                              ) : (
+                                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                              )}
+                              <div>
+                                <p className="text-sm font-medium">{check.label}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">{check.detail}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
 
                     <div className="space-y-4">
                       <Card className="border-slate-200 bg-slate-50/50">
