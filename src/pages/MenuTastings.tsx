@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useRole } from '@/contexts/AuthContext';
 import BookingCalendar, { type BookingSortMode } from '@/components/BookingCalendar';
 import { getSortTimestamp } from '@/lib/worklist';
 
@@ -104,11 +105,32 @@ const getContractBadgeClassName = (hasContract: boolean) => (
 );
 
 export default function MenuTastings() {
+  const { isSales, isAdmin } = useRole();
   const [tastings, setTastings] = useState<MenuTasting[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState<SortOrder>('created_desc');
   const [isLoading, setIsLoading] = useState(true);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const canManageTastings = isSales() || isAdmin();
+
+  const canConfirmTasting = (tasting: MenuTasting) =>
+    canManageTastings && tasting.status === 'booked' && !tasting.contractCreated;
+
+  const handleConfirmBooking = async (tasting: MenuTasting) => {
+    try {
+      setConfirmingId(tasting._id);
+      await api.updateMenuTasting(tasting._id, { status: 'confirmed' });
+      setTastings((prev) => prev.map((item) => (
+        item._id === tasting._id ? { ...item, status: 'confirmed' } : item
+      )));
+      toast.success(`${tasting.tastingNumber} confirmed.`);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to confirm booking');
+    } finally {
+      setConfirmingId(null);
+    }
+  };
 
   useEffect(() => {
     fetchData();
@@ -545,6 +567,16 @@ export default function MenuTastings() {
                                   <Button asChild variant="outline" size="sm">
                                     <Link to={`/menu-tastings/${tasting._id}`}>View Details</Link>
                                   </Button>
+                                  {canConfirmTasting(tasting) && (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleConfirmBooking(tasting)}
+                                      disabled={confirmingId === tasting._id}
+                                    >
+                                      <CheckCircle className="mr-2 h-4 w-4" />
+                                      {confirmingId === tasting._id ? 'Confirming...' : 'Confirm Booking'}
+                                    </Button>
+                                  )}
                                   {tasting.contractCreated && tasting.contract?._id ? (
                                     <Button asChild size="sm">
                                       <Link to={`/contracts/${tasting.contract._id}`}>View Contract</Link>
@@ -619,6 +651,16 @@ export default function MenuTastings() {
                             <Button asChild variant="outline" className="w-full">
                               <Link to={`/menu-tastings/${tasting._id}`}>View Details</Link>
                             </Button>
+                            {canConfirmTasting(tasting) && (
+                              <Button
+                                className="w-full"
+                                onClick={() => handleConfirmBooking(tasting)}
+                                disabled={confirmingId === tasting._id}
+                              >
+                                <CheckCircle className="mr-2 h-4 w-4" />
+                                {confirmingId === tasting._id ? 'Confirming...' : 'Confirm Booking'}
+                              </Button>
+                            )}
                             {tasting.contractCreated && tasting.contract?._id ? (
                               <Button asChild className="w-full">
                                 <Link to={`/contracts/${tasting.contract._id}`}>View Contract</Link>

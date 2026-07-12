@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "C:\\Users\\P12CDA9\\AppData\\Local\\Programs\\nodejs\\node.exe",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js"],
+      "port": 5173
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "C:\\Users\\P12CDA9\\AppData\\Local\\Programs\\nodejs\\node.exe",
+      "runtimeArgs": ["server/server.js"],
+      "port": 5000
+    }
+  ]
+}

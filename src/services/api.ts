@@ -120,6 +120,18 @@ class ApiService {
     });
   }
 
+  async submitMenuTastingFeedback(id: string, feedback: {
+    rating: number;
+    comments?: string;
+    itemsLiked?: string[];
+    itemsToChange?: string[];
+  }) {
+    return this.request(`/menu-tastings/${id}/feedback`, {
+      method: 'POST',
+      body: JSON.stringify(feedback)
+    });
+  }
+
   async getTastingStats() {
     return this.request('/menu-tastings/stats/overview');
   }

@@ -16,9 +16,20 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { useAuth, useRole } from '@/contexts/AuthContext';
 import { mockApi } from '@/services/mockApi';
-import { ArrowLeft, Ban, Calendar, Clock, Trash2, Users, Phone, Mail, MapPin, User, Utensils, FileText } from 'lucide-react';
+import { ArrowLeft, Ban, Calendar, CheckCircle, ClipboardCheck, Clock, Trash2, Users, Phone, Mail, MapPin, Star, User, UserX, Utensils, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -72,6 +83,14 @@ export default function MenuTastingDetail() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isMarkingNoShow, setIsMarkingNoShow] = useState(false);
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackComments, setFeedbackComments] = useState('');
+  const [feedbackItemsLiked, setFeedbackItemsLiked] = useState('');
+  const [feedbackItemsToChange, setFeedbackItemsToChange] = useState('');
   const tastingService = useMock ? mockApi : api;
 
   useEffect(() => {
@@ -105,6 +124,14 @@ export default function MenuTastingDetail() {
   const canManageTasting = isSales() || isAdmin();
   const canCancelBooking = canManageTasting && !!tasting && !tasting.contractCreated && ['booked', 'confirmed'].includes(tasting.status);
   const canDeleteBooking = canManageTasting && !!tasting && !tasting.contractCreated;
+  // The tasting can only be marked attended or missed once its scheduled day has arrived.
+  const tastingDayReached = !!tasting
+    && new Date(tasting.tastingDate).setHours(0, 0, 0, 0) <= new Date().setHours(23, 59, 59, 999);
+  const canConfirmBooking = canManageTasting && !!tasting && !tasting.contractCreated && tasting.status === 'booked';
+  const canMarkNoShow = canManageTasting && !!tasting && !tasting.contractCreated
+    && ['booked', 'confirmed'].includes(tasting.status) && tastingDayReached;
+  const canRecordFeedback = canManageTasting && !!tasting
+    && ['booked', 'confirmed'].includes(tasting.status) && tastingDayReached;
   const linkedContractId = tasting?.contract?._id || '';
 
   const handleCancelBooking = async () => {
@@ -134,6 +161,73 @@ export default function MenuTastingDetail() {
       toast.error(error.message || 'Failed to delete booking');
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleConfirmBooking = async () => {
+    if (!tasting) return;
+
+    try {
+      setIsConfirming(true);
+      const updatedTasting = await tastingService.updateMenuTasting(tasting._id, { status: 'confirmed' });
+      setTasting(updatedTasting);
+      toast.success('Booking confirmed. The client is expected on the tasting date.');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to confirm booking');
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  const handleMarkNoShow = async () => {
+    if (!tasting) return;
+
+    try {
+      setIsMarkingNoShow(true);
+      const updatedTasting = await tastingService.updateMenuTasting(tasting._id, { status: 'no_show' });
+      setTasting(updatedTasting);
+      toast.success('Booking marked as a no-show.');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to mark booking as a no-show');
+    } finally {
+      setIsMarkingNoShow(false);
+    }
+  };
+
+  const openFeedbackDialog = () => {
+    setFeedbackRating(tasting?.feedback?.rating || 0);
+    setFeedbackComments(tasting?.feedback?.comments || '');
+    setFeedbackItemsLiked((tasting?.feedback?.itemsLiked || []).join(', '));
+    setFeedbackItemsToChange((tasting?.feedback?.itemsToChange || []).join(', '));
+    setFeedbackDialogOpen(true);
+  };
+
+  const parseFeedbackList = (value: string) =>
+    value.split(',').map((item) => item.trim()).filter(Boolean);
+
+  const handleSubmitFeedback = async () => {
+    if (!tasting) return;
+
+    if (feedbackRating < 1) {
+      toast.error('Select a rating before saving the feedback');
+      return;
+    }
+
+    try {
+      setIsSubmittingFeedback(true);
+      const updatedTasting = await tastingService.submitMenuTastingFeedback(tasting._id, {
+        rating: feedbackRating,
+        comments: feedbackComments.trim(),
+        itemsLiked: parseFeedbackList(feedbackItemsLiked),
+        itemsToChange: parseFeedbackList(feedbackItemsToChange)
+      });
+      setTasting(updatedTasting);
+      setFeedbackDialogOpen(false);
+      toast.success('Feedback saved and tasting marked as completed.');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save feedback');
+    } finally {
+      setIsSubmittingFeedback(false);
     }
   };
 
@@ -174,10 +268,49 @@ export default function MenuTastingDetail() {
               <p className="text-muted-foreground">{tasting.tastingNumber}</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Badge className={getStatusBadge(tasting.status)}>
               {tasting.status.charAt(0).toUpperCase() + tasting.status.slice(1)}
             </Badge>
+            {canConfirmBooking && (
+              <Button onClick={handleConfirmBooking} disabled={isConfirming}>
+                <CheckCircle className="mr-2 h-4 w-4" />
+                {isConfirming ? 'Confirming...' : 'Confirm Booking'}
+              </Button>
+            )}
+            {canRecordFeedback && (
+              <Button
+                variant={tasting.status === 'confirmed' ? 'default' : 'outline'}
+                onClick={openFeedbackDialog}
+              >
+                <ClipboardCheck className="mr-2 h-4 w-4" />
+                Record Feedback
+              </Button>
+            )}
+            {canMarkNoShow && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline">
+                    <UserX className="mr-2 h-4 w-4" />
+                    Mark No-Show
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Mark this booking as a no-show?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Use this when the client did not attend the tasting. The booking is kept for reference and the slot history stays intact.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Keep Booking</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleMarkNoShow} disabled={isMarkingNoShow}>
+                      {isMarkingNoShow ? 'Saving...' : 'Mark No-Show'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
             {canCancelBooking && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -393,7 +526,7 @@ export default function MenuTastingDetail() {
           )}
 
           {/* Feedback */}
-          {tasting.feedback && (
+          {tasting.feedback && tasting.feedback.rating > 0 && (
             <Card className="lg:col-span-2">
               <CardHeader>
                 <CardTitle>Tasting Feedback</CardTitle>
@@ -411,6 +544,12 @@ export default function MenuTastingDetail() {
                   <div>
                     <p className="text-sm text-muted-foreground">Items Liked</p>
                     <p className="font-medium">{tasting.feedback.itemsLiked.join(', ')}</p>
+                  </div>
+                )}
+                {tasting.feedback.itemsToChange && tasting.feedback.itemsToChange.length > 0 && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Items To Change</p>
+                    <p className="font-medium">{tasting.feedback.itemsToChange.join(', ')}</p>
                   </div>
                 )}
               </CardContent>
@@ -440,6 +579,78 @@ export default function MenuTastingDetail() {
             </Card>
           )}
         </div>
+
+        <Dialog open={feedbackDialogOpen} onOpenChange={setFeedbackDialogOpen}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Record Tasting Feedback</DialogTitle>
+              <DialogDescription>
+                Capture how the tasting went. Saving the feedback marks this booking as completed.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Rating</Label>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-label={`Rate ${value} of 5`}
+                      className="rounded p-1 transition-colors hover:bg-muted"
+                      onClick={() => setFeedbackRating(value)}
+                    >
+                      <Star
+                        className={value <= feedbackRating
+                          ? 'h-6 w-6 fill-yellow-400 text-yellow-400'
+                          : 'h-6 w-6 text-muted-foreground'}
+                      />
+                    </button>
+                  ))}
+                  {feedbackRating > 0 && (
+                    <span className="ml-2 text-sm text-muted-foreground">{feedbackRating} of 5</span>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="feedback-comments">Comments</Label>
+                <Textarea
+                  id="feedback-comments"
+                  value={feedbackComments}
+                  onChange={(e) => setFeedbackComments(e.target.value)}
+                  placeholder="How did the tasting go? What did the client say?"
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="feedback-items-liked">Items Liked</Label>
+                <Input
+                  id="feedback-items-liked"
+                  value={feedbackItemsLiked}
+                  onChange={(e) => setFeedbackItemsLiked(e.target.value)}
+                  placeholder="Separate items with commas"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="feedback-items-to-change">Items To Change</Label>
+                <Input
+                  id="feedback-items-to-change"
+                  value={feedbackItemsToChange}
+                  onChange={(e) => setFeedbackItemsToChange(e.target.value)}
+                  placeholder="Separate items with commas"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setFeedbackDialogOpen(false)} disabled={isSubmittingFeedback}>
+                Cancel
+              </Button>
+              <Button onClick={handleSubmitFeedback} disabled={isSubmittingFeedback}>
+                {isSubmittingFeedback ? 'Saving...' : 'Save Feedback'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );

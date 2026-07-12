@@ -233,19 +233,57 @@ router.put('/:id', auth, requireRole(['sales', 'admin']), async (req, res) => {
   }
 });
 
-// Update tasting feedback
-router.post('/:id/feedback', auth, async (req, res) => {
+// Record tasting feedback and mark the booking completed
+router.post('/:id/feedback', auth, requireRole(['sales', 'admin']), [
+  body('rating')
+    .isInt({ min: 1, max: 5 })
+    .withMessage('Rating must be between 1 and 5'),
+  body('comments')
+    .optional({ nullable: true })
+    .isString()
+    .trim()
+    .isLength({ max: 2000 })
+    .withMessage('Comments cannot exceed 2000 characters'),
+  body('itemsLiked')
+    .optional({ nullable: true })
+    .isArray()
+    .withMessage('Items liked must be a list'),
+  body('itemsToChange')
+    .optional({ nullable: true })
+    .isArray()
+    .withMessage('Items to change must be a list')
+], async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
     const tasting = await MenuTasting.findById(req.params.id);
-    
+
     if (!tasting) {
       return res.status(404).json({ message: 'Menu tasting not found' });
     }
-    
-    tasting.feedback = req.body;
+
+    if (['cancelled', 'no_show'].includes(tasting.status)) {
+      return res.status(400).json({
+        message: 'Feedback cannot be recorded for a cancelled or no-show booking'
+      });
+    }
+
+    const toTrimmedList = (value) => (Array.isArray(value)
+      ? value.map(item => String(item).trim()).filter(Boolean)
+      : []);
+
+    tasting.feedback = {
+      rating: req.body.rating,
+      comments: typeof req.body.comments === 'string' ? req.body.comments.trim() : '',
+      itemsLiked: toTrimmedList(req.body.itemsLiked),
+      itemsToChange: toTrimmedList(req.body.itemsToChange)
+    };
     tasting.status = 'completed';
     await tasting.save();
-    
+
     res.json(tasting);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });

@@ -148,8 +148,27 @@ menuTastingSchema.pre('save', async function() {
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const count = await mongoose.model('MenuTasting').countDocuments();
-    this.tastingNumber = `TASTE-${year}${month}-${(count + 1).toString().padStart(4, '0')}`;
+    const prefix = `TASTE-${year}${month}`;
+    const tastingModel = mongoose.model('MenuTasting');
+    const prefixPattern = new RegExp(`^${prefix}-\\d{4}$`);
+    const latestTasting = await tastingModel.findOne({ tastingNumber: prefixPattern })
+      .sort({ tastingNumber: -1 })
+      .select('tastingNumber')
+      .lean();
+
+    const latestSequence = latestTasting?.tastingNumber
+      ? parseInt(String(latestTasting.tastingNumber).split('-').pop(), 10) || 0
+      : 0;
+
+    let nextSequence = latestSequence + 1;
+    let candidate = `${prefix}-${String(nextSequence).padStart(4, '0')}`;
+
+    while (await tastingModel.exists({ tastingNumber: candidate })) {
+      nextSequence += 1;
+      candidate = `${prefix}-${String(nextSequence).padStart(4, '0')}`;
+    }
+
+    this.tastingNumber = candidate;
   }
 });
 

@@ -76,7 +76,7 @@ const mockMenuTastings = [
       rating: 5,
       comments: 'Excellent food quality',
       itemsLiked: ['Chicken Roulade', 'Fruit Tart'],
-      itemsToChange: []
+      itemsToChange: [] as string[]
     },
     createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
   },
@@ -951,6 +951,33 @@ export const mockApi = {
     menuTastings[index].contract = contractId;
     menuTastings[index].contractCreated = true;
     menuTastings[index].status = 'completed';
+    return menuTastings[index];
+  },
+
+  async submitMenuTastingFeedback(id: string, feedback: {
+    rating: number;
+    comments?: string;
+    itemsLiked?: string[];
+    itemsToChange?: string[];
+  }) {
+    await delay(300);
+    const index = menuTastings.findIndex(t => t._id === id);
+    if (index === -1) throw new Error('Menu tasting not found');
+    if (['cancelled', 'no_show'].includes(menuTastings[index].status)) {
+      throw new Error('Feedback cannot be recorded for a cancelled or no-show booking');
+    }
+    if (!feedback.rating || feedback.rating < 1 || feedback.rating > 5) {
+      throw new Error('Rating must be between 1 and 5');
+    }
+    Object.assign(menuTastings[index], {
+      feedback: {
+        rating: feedback.rating,
+        comments: feedback.comments || '',
+        itemsLiked: feedback.itemsLiked || [],
+        itemsToChange: feedback.itemsToChange || []
+      },
+      status: 'completed'
+    });
     return menuTastings[index];
   },
 
