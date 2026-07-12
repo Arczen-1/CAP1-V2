@@ -52,6 +52,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { getContractStage } from '@/lib/contractStage';
 
 const SECTION_PRINT_LABELS: Record<string, string> = {
   details: 'Contract Details',
@@ -4368,9 +4369,14 @@ export default function ContractDetail() {
             <div>
               <div className="flex items-center gap-3 flex-wrap">
                 <h1 className="text-2xl font-bold">{contract.contractNumber}</h1>
-                <Badge className={getStatusColor(contract.status)}>
-                  {formatStatusLabel(contract.status)}
-                </Badge>
+                {(() => {
+                  const stage = getContractStage(contract);
+                  return (
+                    <Badge className={stage.badgeClass || getStatusColor(contract.status)}>
+                      {stage.label}
+                    </Badge>
+                  );
+                })()}
                 {contract.clientSigned && (
                   <Badge variant="outline" className="border-green-200 bg-green-50 text-green-800">
                     Client Signed

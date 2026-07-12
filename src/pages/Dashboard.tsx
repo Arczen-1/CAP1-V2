@@ -7,13 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { 
-  Calendar, 
-  CheckCircle, 
-  Clock, 
-  FileText, 
+import {
+  Calendar,
+  CheckCircle,
+  Clock,
+  FileText,
   ArrowRight
 } from 'lucide-react';
+import { getContractStage, type ContractStageSource } from '@/lib/contractStage';
 
 interface DashboardStats {
   total: number;
@@ -25,7 +26,7 @@ interface DashboardStats {
   thisMonth: number;
 }
 
-interface Contract {
+interface Contract extends ContractStageSource {
   _id: string;
   contractNumber: string;
   clientName: string;
@@ -215,9 +216,14 @@ export default function Dashboard() {
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{contract.contractNumber}</span>
-                        <Badge className={getStatusColor(contract.status)}>
-                          {contract.status.replace(/_/g, ' ')}
-                        </Badge>
+                        {(() => {
+                          const stage = getContractStage(contract);
+                          return (
+                            <Badge className={stage.badgeClass || getStatusColor(contract.status)}>
+                              {stage.label}
+                            </Badge>
+                          );
+                        })()}
                       </div>
                       <p className="text-sm text-muted-foreground">
                         {contract.clientName} • {contract.clientType}

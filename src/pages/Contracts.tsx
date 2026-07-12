@@ -38,8 +38,9 @@ import BookingCalendar, { type BookingSortMode } from '@/components/BookingCalen
 import { useRole } from '@/contexts/AuthContext';
 import { getSortTimestamp } from '@/lib/worklist';
 import { cn } from '@/lib/utils';
+import { getContractStage, type ContractStageSource } from '@/lib/contractStage';
 
-interface Contract {
+interface Contract extends ContractStageSource {
   _id: string;
   contractNumber: string;
   createdAt?: string;
@@ -539,9 +540,14 @@ export default function Contracts() {
                                 </div>
                               </TableCell>
                               <TableCell className="align-top">
-                                <Badge variant="outline" className={getStatusColor(contract.status)}>
-                                  {formatStatusLabel(contract.status)}
-                                </Badge>
+                                {(() => {
+                                  const stage = getContractStage(contract);
+                                  return (
+                                    <Badge variant="outline" className={stage.badgeClass || getStatusColor(contract.status)}>
+                                      {stage.label}
+                                    </Badge>
+                                  );
+                                })()}
                               </TableCell>
                               <TableCell className="align-top">
                                 <Badge variant="outline" className={getPaymentStatusColor(contract.paymentStatus || 'unpaid')}>
@@ -577,9 +583,14 @@ export default function Contracts() {
                             <div className="space-y-2">
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="font-semibold">{contract.contractNumber}</span>
-                                <Badge variant="outline" className={getStatusColor(contract.status)}>
-                                  {formatStatusLabel(contract.status)}
-                                </Badge>
+                                {(() => {
+                                  const stage = getContractStage(contract);
+                                  return (
+                                    <Badge variant="outline" className={stage.badgeClass || getStatusColor(contract.status)}>
+                                      {stage.label}
+                                    </Badge>
+                                  );
+                                })()}
                               </div>
                               <div>
                                 <p className="font-medium">{contract.clientName}</p>
@@ -643,7 +654,7 @@ export default function Contracts() {
                 createdAt: contract.createdAt,
                 type: 'contract' as const,
                 clientName: contract.clientName,
-                status: formatStatusLabel(contract.status),
+                status: getContractStage(contract).label,
                 venue: contract.venue?.name,
                 totalGuests: contract.totalPacks,
               }))}
