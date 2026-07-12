@@ -1,0 +1,629 @@
+import { useEffect, useMemo, useState } from 'react';
+import { api } from '@/services/api';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from 'sonner';
+import { CalendarClock, ClipboardList, FileText, PackagePlus, ShoppingBag } from 'lucide-react';
+import type {
+  InventoryProcurementOption,
+  ProcurementDepartment,
+  ProcurementRequisitionType,
+  ProcurementRequest,
+  ProcurementRequestType,
+} from '@/lib/procurement';
+import {
+  formatProcurementCurrency,
+  formatProcurementDate,
+  getProcurementRequisitionTypeLabel,
+  getProcurementSlaStatusLabel,
+  getProcurementStatusLabel,
+  PROCUREMENT_DEPARTMENT_LABELS,
+  PROCUREMENT_REQUEST_TYPE_LABELS,
+  PROCUREMENT_SLA_STATUS_STYLES,
+  PROCUREMENT_SOURCE_LABELS,
+  PROCUREMENT_STATUS_STYLES,
+} from '@/lib/procurement';
+
+interface DepartmentProcurementPanelProps {
+  department: ProcurementDepartment;
+  inventoryItems: InventoryProcurementOption[];
+}
+
+const getDateValueDaysAhead = (daysAhead: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() + daysAhead);
+  return date.toISOString().slice(0, 10);
+};
+
+const getStandardNeededByValue = () => getDateValueDaysAhead(7);
+
+const getDaysUntilNeeded = (value: string) => {
+  const target = new Date(value);
+  const today = new Date();
+  target.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+};
+
+const getSuggestedQuantity = (item?: InventoryProcurementOption) => {
+  if (!item) {
+    return 1;
+  }
+
+  if (typeof item.minimumStock === 'number' && item.availableQuantity <= item.minimumStock) {
+    return Math.max(1, item.minimumStock - item.availableQuantity);
+  }
+
+  return 1;
+};
+
+const getSuggestedReason = (item?: InventoryProcurementOption) => {
+  if (!item) {
+    return '';
+  }
+
+  if (typeof item.minimumStock === 'number' && item.availableQuantity <= item.minimumStock) {
+    return `Restore ${item.name} to a safe stock level before the next event.`;
+  }
+
+  return `Acquire additional ${item.name} for upcoming department needs.`;
+};
+
+export default function DepartmentProcurementPanel({
+  department,
+  inventoryItems,
+}: DepartmentProcurementPanelProps) {
+  const [requests, setRequests] = useState<ProcurementRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    inventoryItemId: '',
+    manualItemName: '',
+    manualItemCode: '',
+    manualItemCategory: '',
+    requestType: 'purchase' as ProcurementRequestType,
+    requisitionType: 'item_requisition' as ProcurementRequisitionType,
+    requestedQuantity: '1',
+    neededBy: getStandardNeededByValue(),
+    requestReason: '',
+    requestNotes: '',
+  });
+
+  const sortedInventoryItems = useMemo(
+    () => [...inventoryItems].sort((left, right) => left.name.localeCompare(right.name)),
+    [inventoryItems]
+  );
+
+  const selectedInventoryItem = useMemo(
+    () => sortedInventoryItems.find((item) => item._id === formData.inventoryItemId),
+    [formData.inventoryItemId, sortedInventoryItems]
+  );
+
+  const fetchRequests = async () => {
+    try {
+      setIsLoading(true);
+      const data = await api.getProcurementRequests({ department });
+      setRequests(data as ProcurementRequest[]);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load purchasing reports');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRequests();
+  }, [department]);
+
+  const resetForm = () => {
+    const firstItem = sortedInventoryItems[0];
+    setFormData({
+      inventoryItemId: firstItem?._id || '',
+      manualItemName: '',
+      manualItemCode: '',
+      manualItemCategory: '',
+      requestType: 'purchase',
+      requisitionType: firstItem ? 'item_requisition' : 'purchase_requisition',
+      requestedQuantity: String(getSuggestedQuantity(firstItem)),
+      neededBy: getStandardNeededByValue(),
+      requestReason: getSuggestedReason(firstItem),
+      requestNotes: '',
+    });
+  };
+
+  useEffect(() => {
+    if (!dialogOpen) {
+      return;
+    }
+
+    if (!formData.inventoryItemId && sortedInventoryItems[0]?._id) {
+      resetForm();
+    }
+  }, [dialogOpen, formData.inventoryItemId, sortedInventoryItems]);
+
+  const handleInventorySelection = (value: string) => {
+    if (value === '__manual__') {
+      setFormData((current) => ({
+        ...current,
+        inventoryItemId: value,
+        manualItemName: '',
+        manualItemCode: '',
+        manualItemCategory: '',
+        requisitionType: 'purchase_requisition',
+        requestedQuantity: '1',
+        requestReason: `Acquire a new ${PROCUREMENT_DEPARTMENT_LABELS[department].toLowerCase()} item for upcoming department needs.`,
+      }));
+      return;
+    }
+
+    const item = sortedInventoryItems.find((entry) => entry._id === value);
+    setFormData((current) => ({
+      ...current,
+      inventoryItemId: value,
+      manualItemName: '',
+      manualItemCode: '',
+      manualItemCategory: '',
+      requisitionType: 'item_requisition',
+      requestedQuantity: String(getSuggestedQuantity(item)),
+      requestReason: getSuggestedReason(item),
+    }));
+  };
+
+  const handleCreateRequest = async () => {
+    const requestedQuantity = Number(formData.requestedQuantity);
+    const isManualItem = formData.inventoryItemId === '__manual__';
+
+    if (!formData.inventoryItemId) {
+      toast.error('Select an inventory item or choose manual item request first');
+      return;
+    }
+
+    if (isManualItem && !formData.manualItemName.trim()) {
+      toast.error('Manual item name is required');
+      return;
+    }
+
+    if (!Number.isInteger(requestedQuantity) || requestedQuantity <= 0) {
+      toast.error('Requested quantity must be a whole number greater than 0');
+      return;
+    }
+
+    if (!formData.neededBy) {
+      toast.error('Needed-by date is required');
+      return;
+    }
+
+    const daysUntilNeeded = getDaysUntilNeeded(formData.neededBy);
+    if (formData.requisitionType !== 'emergency_requisition' && daysUntilNeeded < 7) {
+      toast.error('Standard requisitions need at least 7 days lead time. Choose Emergency if this is urgent.');
+      return;
+    }
+
+    if (!formData.requestReason.trim()) {
+      toast.error('Request reason is required');
+      return;
+    }
+
+    try {
+      await api.createProcurementRequest({
+        department,
+        requestType: formData.requestType,
+        requisitionType: formData.requisitionType,
+        ...(isManualItem ? {} : { inventoryItemId: formData.inventoryItemId }),
+        ...(isManualItem ? {
+          itemName: formData.manualItemName.trim(),
+          itemCode: formData.manualItemCode.trim(),
+          itemCategory: formData.manualItemCategory.trim(),
+        } : {}),
+        requestedQuantity,
+        neededBy: formData.neededBy,
+        requestReason: formData.requestReason.trim(),
+        requestNotes: formData.requestNotes.trim(),
+        source: !isManualItem && selectedInventoryItem && typeof selectedInventoryItem.minimumStock === 'number' && selectedInventoryItem.availableQuantity <= selectedInventoryItem.minimumStock
+          ? 'inventory_low_stock'
+          : 'manual',
+      });
+      toast.success('Procurement request sent to purchasing');
+      setDialogOpen(false);
+      resetForm();
+      fetchRequests();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to create request');
+    }
+  };
+
+  const openRequestDialog = () => {
+    resetForm();
+    setDialogOpen(true);
+  };
+
+  const openRequests = requests.filter((request) => ['requested', 'awaiting_accounting_approval', 'approved', 'proof_submitted', 'proof_needs_revision'].includes(request.status)).length;
+  const waitingAccounting = requests.filter((request) => ['awaiting_accounting_approval', 'proof_submitted'].includes(request.status)).length;
+  const approvedToAcquire = requests.filter((request) => ['approved', 'proof_needs_revision'].includes(request.status)).length;
+  const completed = requests.filter((request) => request.status === 'fulfilled').length;
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-dashed">
+        <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-1">
+            <h2 className="text-lg font-semibold">Purchasing Reports</h2>
+            <p className="text-sm text-muted-foreground">
+              {PROCUREMENT_DEPARTMENT_LABELS[department]} can request purchasing or rental for any saved inventory item here, then follow the budget request, approval, proof submission, and completion in one place.
+            </p>
+          </div>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={openRequestDialog}>
+                <PackagePlus className="mr-2 h-4 w-4" />
+                New Purchase / Rental Request
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-h-[90vh] w-[min(96vw,64rem)] max-w-4xl overflow-hidden p-0">
+              <DialogHeader className="border-b px-6 py-4">
+                <DialogTitle>Create Purchasing Request</DialogTitle>
+              </DialogHeader>
+              <div className="overflow-y-auto px-6 py-5">
+                <div className="space-y-5">
+                  <div className="space-y-2">
+                    <Label htmlFor="inventory-item">Inventory Item</Label>
+                    <Select value={formData.inventoryItemId} onValueChange={handleInventorySelection}>
+                      <SelectTrigger id="inventory-item">
+                        <SelectValue placeholder="Select inventory item" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__manual__">Manual item request</SelectItem>
+                        {sortedInventoryItems.map((item) => (
+                          <SelectItem key={item._id} value={item._id}>
+                            {item.name} ({item.itemCode})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {selectedInventoryItem ? (
+                    <div className="grid gap-3 rounded-lg border bg-muted/30 p-4 text-sm sm:grid-cols-3">
+                      <div>
+                        <p className="text-muted-foreground">Available</p>
+                        <p className="font-medium">{selectedInventoryItem.availableQuantity}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Total Units</p>
+                        <p className="font-medium">{selectedInventoryItem.quantity}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Category</p>
+                        <p className="font-medium">{selectedInventoryItem.category}</p>
+                      </div>
+                    </div>
+                  ) : formData.inventoryItemId === '__manual__' ? (
+                    <div className="grid gap-4 rounded-lg border bg-muted/20 p-4 md:grid-cols-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="manual-item-name">Manual Item Name</Label>
+                        <Input
+                          id="manual-item-name"
+                          value={formData.manualItemName}
+                          onChange={(event) => setFormData((current) => ({ ...current, manualItemName: event.target.value }))}
+                          placeholder="Enter item name"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="manual-item-code">Item Code (optional)</Label>
+                        <Input
+                          id="manual-item-code"
+                          value={formData.manualItemCode}
+                          onChange={(event) => setFormData((current) => ({ ...current, manualItemCode: event.target.value }))}
+                          placeholder="Optional item code"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="manual-item-category">Category (optional)</Label>
+                        <Input
+                          id="manual-item-category"
+                          value={formData.manualItemCategory}
+                          onChange={(event) => setFormData((current) => ({ ...current, manualItemCategory: event.target.value }))}
+                          placeholder="Optional category"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="request-type">Request Type</Label>
+                      <Select
+                        value={formData.requestType}
+                        onValueChange={(value: ProcurementRequestType) => setFormData((current) => ({ ...current, requestType: value }))}
+                      >
+                        <SelectTrigger id="request-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="purchase">Purchase</SelectItem>
+                          <SelectItem value="rental">Rental</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="requisition-type">Requisition Form</Label>
+                      <Select
+                        value={formData.requisitionType}
+                        onValueChange={(value: ProcurementRequisitionType) => setFormData((current) => ({ ...current, requisitionType: value }))}
+                      >
+                        <SelectTrigger id="requisition-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="item_requisition">Item requisition</SelectItem>
+                          <SelectItem value="purchase_requisition">Purchase / rental requisition</SelectItem>
+                          <SelectItem value="emergency_requisition">Emergency requisition</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="request-quantity">Quantity Needed</Label>
+                      <Input
+                        id="request-quantity"
+                        type="number"
+                        min="1"
+                        value={formData.requestedQuantity}
+                        onChange={(event) => setFormData((current) => ({ ...current, requestedQuantity: event.target.value }))}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                    <div className="space-y-2">
+                      <Label htmlFor="needed-by">Needed By</Label>
+                      <Input
+                        id="needed-by"
+                        type="date"
+                        value={formData.neededBy}
+                        onChange={(event) => setFormData((current) => ({ ...current, neededBy: event.target.value }))}
+                      />
+                    </div>
+                    <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+                      {formData.requisitionType === 'emergency_requisition'
+                        ? 'Emergency requests are for same-day to 3-day needs and bypass the normal multi-step approval path.'
+                        : 'Standard item and purchase requisitions require at least 7 days before the needed-by date.'}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="request-reason">Reason</Label>
+                    <Textarea
+                      id="request-reason"
+                      value={formData.requestReason}
+                      onChange={(event) => setFormData((current) => ({ ...current, requestReason: event.target.value }))}
+                      placeholder="Explain what is needed and why."
+                      rows={4}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="request-notes">Notes</Label>
+                    <Textarea
+                      id="request-notes"
+                      value={formData.requestNotes}
+                      onChange={(event) => setFormData((current) => ({ ...current, requestNotes: event.target.value }))}
+                      placeholder="Optional supplier notes, event context, or special handling."
+                      rows={4}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="border-t bg-background px-6 py-4">
+                <Button onClick={handleCreateRequest} className="w-full sm:w-auto">
+                  Send To Purchasing
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <ClipboardList className="h-5 w-5 text-amber-600" />
+              <div>
+                <p className="text-sm text-muted-foreground">Open Requests</p>
+                <p className="text-2xl font-semibold">{openRequests}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <FileText className="h-5 w-5 text-blue-600" />
+              <div>
+                <p className="text-sm text-muted-foreground">With Accounting</p>
+                <p className="text-2xl font-semibold">{waitingAccounting}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <ShoppingBag className="h-5 w-5 text-emerald-600" />
+              <div>
+                <p className="text-sm text-muted-foreground">Budget Approved</p>
+                <p className="text-2xl font-semibold">{approvedToAcquire}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <CalendarClock className="h-5 w-5 text-slate-600" />
+              <div>
+                <p className="text-sm text-muted-foreground">Completed</p>
+                <p className="text-2xl font-semibold">{completed}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-primary"></div>
+        </div>
+      ) : requests.length === 0 ? (
+        <Card>
+          <CardContent className="py-16 text-center">
+            <p className="text-lg font-medium">No purchasing reports yet</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Create a request here whenever inventory needs to buy or rent additional stock, even before it becomes a shortage.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {requests.map((request) => (
+            <Card key={request._id}>
+              <CardHeader className="space-y-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <CardTitle className="text-lg">{request.requestNumber}</CardTitle>
+                      <Badge variant="outline" className={PROCUREMENT_STATUS_STYLES[request.status]}>
+                        {getProcurementStatusLabel(request.status)}
+                      </Badge>
+                      <Badge variant="outline">
+                        {PROCUREMENT_REQUEST_TYPE_LABELS[request.requestType]}
+                      </Badge>
+                      <Badge variant="outline">
+                        {getProcurementRequisitionTypeLabel(request.requisitionType)}
+                      </Badge>
+                      {request.sla?.status ? (
+                        <Badge variant="outline" className={PROCUREMENT_SLA_STATUS_STYLES[request.sla.status]}>
+                          {getProcurementSlaStatusLabel(request.sla.status)}
+                        </Badge>
+                      ) : null}
+                      <Badge variant="outline">
+                        {PROCUREMENT_SOURCE_LABELS[request.source]}
+                      </Badge>
+                    </div>
+                    <p className="text-base font-medium">{request.itemName}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {request.itemCode || 'No item code'} | Needed by {formatProcurementDate(request.neededBy)}
+                      {typeof request.sla?.daysUntilNeeded === 'number' ? ` | ${request.sla.daysUntilNeeded} day(s) lead` : ''}
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[340px]">
+                    <div className="rounded-lg border p-3 text-sm">
+                      <p className="text-muted-foreground">Requested</p>
+                      <p className="mt-1 font-semibold">{request.requestedQuantity} units</p>
+                    </div>
+                    <div className="rounded-lg border p-3 text-sm">
+                      <p className="text-muted-foreground">Contract</p>
+                      <p className="mt-1 font-semibold">{request.contract?.contractNumber || 'Inventory request'}</p>
+                    </div>
+                    <div className="rounded-lg border p-3 text-sm">
+                      <p className="text-muted-foreground">Created</p>
+                      <p className="mt-1 font-semibold">{formatProcurementDate(request.createdAt)}</p>
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-lg border bg-muted/20 p-4">
+                  <p className="text-sm text-muted-foreground">Request reason</p>
+                  <p className="mt-1 font-medium">{request.requestReason}</p>
+                  {request.requestNotes ? (
+                    <p className="mt-2 text-sm text-muted-foreground">{request.requestNotes}</p>
+                  ) : null}
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-3">
+                  <div className="rounded-lg border p-4">
+                    <p className="text-sm font-medium">Budget Request</p>
+                    {request.quote?.submittedAt ? (
+                      <div className="mt-3 space-y-1 text-sm">
+                        <p><span className="text-muted-foreground">Supplier:</span> {request.quote.supplierName || 'Not set'}</p>
+                        <p><span className="text-muted-foreground">Unit Price:</span> {formatProcurementCurrency(request.quote.quotedUnitPrice)}</p>
+                        <p><span className="text-muted-foreground">Estimated Total:</span> {formatProcurementCurrency(request.quote.quotedTotal)}</p>
+                        <p><span className="text-muted-foreground">Expected Fulfillment:</span> {formatProcurementDate(request.quote.expectedFulfillmentDate)}</p>
+                        {request.requestType === 'rental' ? (
+                          <p><span className="text-muted-foreground">Rental Window:</span> {formatProcurementDate(request.quote.rentalStartDate)} to {formatProcurementDate(request.quote.rentalEndDate)}</p>
+                        ) : null}
+                        {request.quote.notes ? (
+                          <p className="pt-1 text-muted-foreground">{request.quote.notes}</p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-sm text-muted-foreground">Purchasing has not submitted the quote report yet.</p>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border p-4">
+                    <p className="text-sm font-medium">Accounting Decision</p>
+                    {request.accounting?.reviewedAt ? (
+                      <div className="mt-3 space-y-1 text-sm">
+                        <p><span className="text-muted-foreground">Status:</span> {request.accounting.status === 'approved' ? 'Approved' : 'Needs revision'}</p>
+                        <p><span className="text-muted-foreground">Release:</span> {request.releaseAuthorization?.status === 'authorized' ? 'Digitally authorized' : 'Locked'}</p>
+                        <p><span className="text-muted-foreground">Reviewed:</span> {formatProcurementDate(request.accounting.reviewedAt)}</p>
+                        <p><span className="text-muted-foreground">Reviewed By:</span> {request.accounting.reviewedBy?.name || 'Accounting'}</p>
+                        <p className="pt-1 text-muted-foreground">{request.accounting.notes || 'No additional notes.'}</p>
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-sm text-muted-foreground">Waiting for the purchasing report before accounting can decide.</p>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border p-4">
+                    <p className="text-sm font-medium">Proof / Completion</p>
+                    {request.fulfillment?.fulfilledAt ? (
+                      <div className="mt-3 space-y-1 text-sm">
+                        <p><span className="text-muted-foreground">Proof Submitted:</span> {formatProcurementDate(request.fulfillment.fulfilledAt)}</p>
+                        <p><span className="text-muted-foreground">Received:</span> {request.fulfillment.receivedQuantity || request.requestedQuantity} units</p>
+                        <p><span className="text-muted-foreground">Inventory Update:</span> {request.fulfillment.inventoryUpdated ? 'Done' : 'Pending'}</p>
+                        <p><span className="text-muted-foreground">Accounting Confirmation:</span> {request.fulfillment.confirmedAt ? formatProcurementDate(request.fulfillment.confirmedAt) : request.status === 'proof_submitted' ? 'Waiting confirmation' : request.status === 'proof_needs_revision' ? 'Needs updated proof' : 'Not confirmed yet'}</p>
+                        {request.fulfillment.attachments?.[0] ? (
+                          <p>
+                            <span className="text-muted-foreground">Completion File:</span>{' '}
+                            <a
+                              href={request.fulfillment.attachments[0]}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              View attachment
+                            </a>
+                          </p>
+                        ) : null}
+                        {request.fulfillment.confirmationNotes ? (
+                          <p className="pt-1 text-muted-foreground">{request.fulfillment.confirmationNotes}</p>
+                        ) : null}
+                        {request.fulfillment.inventoryUpdateSummary ? (
+                          <p className="pt-1 text-muted-foreground">{request.fulfillment.inventoryUpdateSummary}</p>
+                        ) : null}
+                        {request.fulfillment.notes ? (
+                          <p className="pt-1 text-muted-foreground">{request.fulfillment.notes}</p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-sm text-muted-foreground">Purchasing still needs to complete the acquisition or rental.</p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

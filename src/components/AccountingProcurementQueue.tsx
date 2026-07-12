@@ -1,0 +1,622 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { api } from '@/services/api';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from 'sonner';
+import { CheckCircle2, Clock3, FileCheck2, ReceiptText, RotateCcw, XCircle } from 'lucide-react';
+import type { ProcurementRequest, ProcurementReviewBasis } from '@/lib/procurement';
+import {
+  formatProcurementCurrency,
+  formatProcurementDate,
+  getProcurementRequisitionTypeLabel,
+  getProcurementReleaseLabel,
+  getProcurementReviewBasis,
+  getProcurementSlaStatusLabel,
+  PROCUREMENT_REQUEST_TYPE_LABELS,
+  PROCUREMENT_SLA_STATUS_STYLES,
+} from '@/lib/procurement';
+
+const REVIEW_FIELDS: Array<{
+  key: keyof ProcurementReviewBasis;
+  label: string;
+  description: string;
+}> = [
+  {
+    key: 'inventoryNeedValidated',
+    label: 'Need validated',
+    description: 'The request clearly states the item, quantity, and why it is needed.',
+  },
+  {
+    key: 'supplierVerified',
+    label: 'Supplier verified',
+    description: 'The supplier details are complete and appropriate for the request.',
+  },
+  {
+    key: 'pricingReviewed',
+    label: 'Pricing reviewed',
+    description: 'The supplier pricing is documented and acceptable.',
+  },
+  {
+    key: 'timelineConfirmed',
+    label: 'Timeline confirmed',
+    description: 'The expected fulfillment date still supports the needed-by date.',
+  },
+];
+
+const REJECTION_REASONS = [
+  { value: 'missing_quote_details', label: 'Missing quote details' },
+  { value: 'price_too_high', label: 'Price too high' },
+  { value: 'timeline_risk', label: 'Timeline risk' },
+  { value: 'supplier_issue', label: 'Supplier issue' },
+  { value: 'need_not_justified', label: 'Need not justified' },
+  { value: 'budget_hold', label: 'Budget hold' },
+  { value: 'other', label: 'Other' },
+];
+
+type ReviewMode = 'budget' | 'expense';
+type ReviewDecision = 'approved' | 'rejected' | 'confirmed' | 'needs_revision';
+
+const createEmptyChecklist = (): ProcurementReviewBasis => ({
+  inventoryNeedValidated: false,
+  supplierVerified: false,
+  pricingReviewed: false,
+  timelineConfirmed: false,
+});
+
+export default function AccountingProcurementQueue() {
+  const [requests, setRequests] = useState<ProcurementRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<ProcurementRequest | null>(null);
+  const [reviewMode, setReviewMode] = useState<ReviewMode>('budget');
+  const [decision, setDecision] = useState<ReviewDecision>('approved');
+  const [notes, setNotes] = useState('');
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [reviewChecklist, setReviewChecklist] = useState<ProcurementReviewBasis>(createEmptyChecklist());
+
+  const fetchRequests = async () => {
+    try {
+      setIsLoading(true);
+      const data = await api.getProcurementRequests({ status: 'awaiting_accounting_approval,proof_submitted' });
+      setRequests(data as ProcurementRequest[]);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load procurement approvals');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRequests();
+  }, []);
+
+  const budgetRequests = useMemo(
+    () => requests.filter((request) => request.status === 'awaiting_accounting_approval'),
+    [requests]
+  );
+  const expenseRequests = useMemo(
+    () => requests.filter((request) => request.status === 'proof_submitted'),
+    [requests]
+  );
+  const withSupplierProfileCount = useMemo(
+    () => requests.filter((request) => getProcurementReviewBasis(request).supplierVerified).length,
+    [requests]
+  );
+  const rushSlaCount = useMemo(
+    () => requests.filter((request) => request.sla?.status === 'rush' || request.sla?.status === 'blocked').length,
+    [requests]
+  );
+
+  const openBudgetDialog = (request: ProcurementRequest, nextDecision: 'approved' | 'rejected') => {
+    setSelectedRequest(request);
+    setReviewMode('budget');
+    setDecision(nextDecision);
+    setNotes('');
+    setRejectionReason('');
+    setReviewChecklist(getProcurementReviewBasis(request));
+    setDialogOpen(true);
+  };
+
+  const openExpenseDialog = (request: ProcurementRequest, nextDecision: 'confirmed' | 'needs_revision') => {
+    setSelectedRequest(request);
+    setReviewMode('expense');
+    setDecision(nextDecision);
+    setNotes('');
+    setRejectionReason('');
+    setReviewChecklist(createEmptyChecklist());
+    setDialogOpen(true);
+  };
+
+  const handleSubmitDecision = async () => {
+    if (!selectedRequest) {
+      return;
+    }
+
+    try {
+      if (reviewMode === 'budget') {
+        if (!['approved', 'rejected'].includes(decision)) {
+          toast.error('Choose whether to approve or return the budget request.');
+          return;
+        }
+
+        if (decision === 'approved' && !Object.values(reviewChecklist).every(Boolean)) {
+          toast.error('Confirm every accounting review item before approving this budget request.');
+          return;
+        }
+
+        if (decision === 'rejected' && !rejectionReason && !notes.trim()) {
+          toast.error('Select a return reason or add notes for purchasing.');
+          return;
+        }
+
+        await api.reviewProcurementRequest(selectedRequest._id, {
+          decision,
+          notes: notes.trim(),
+          rejectionReason,
+          reviewChecklist,
+        });
+        toast.success(decision === 'approved' ? 'Budget approved for purchasing' : 'Budget request returned to purchasing');
+      } else {
+        if (!['confirmed', 'needs_revision'].includes(decision)) {
+          toast.error('Choose whether to confirm the expense or request updated proof.');
+          return;
+        }
+
+        if (decision === 'needs_revision' && !notes.trim()) {
+          toast.error('Add notes so purchasing knows what proof needs to be updated.');
+          return;
+        }
+
+        await api.reviewProcurementExpense(selectedRequest._id, {
+          decision,
+          notes: notes.trim(),
+        });
+        toast.success(decision === 'confirmed' ? 'Expense confirmed and request completed' : 'Proof returned to purchasing');
+      }
+
+      setDialogOpen(false);
+      setSelectedRequest(null);
+      setNotes('');
+      setRejectionReason('');
+      setReviewChecklist(createEmptyChecklist());
+      fetchRequests();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update procurement approval');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (requests.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-16 text-center">
+          <p className="text-lg font-medium">No procurement approvals waiting</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Budget requests and proof-of-purchase confirmations will appear here for accounting review.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">Budget Reviews</p>
+            <p className="mt-2 text-2xl font-semibold">{budgetRequests.length}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">Expense Confirmations</p>
+            <p className="mt-2 text-2xl font-semibold">{expenseRequests.length}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">Supplier Matched</p>
+            <p className="mt-2 text-2xl font-semibold">{withSupplierProfileCount}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">SLA Rush / Blocked</p>
+            <p className="mt-2 text-2xl font-semibold">{rushSlaCount}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardContent className="flex flex-col gap-2 p-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <h2 className="text-lg font-semibold">Budget Approval Queue</h2>
+            <p className="text-sm text-muted-foreground">
+              Review the supplier, amount, and timeline before releasing budget to purchasing.
+            </p>
+          </div>
+          <Badge variant="outline">{budgetRequests.length} waiting</Badge>
+        </CardContent>
+      </Card>
+
+      {budgetRequests.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            No budget requests are waiting for accounting approval right now.
+          </CardContent>
+        </Card>
+      ) : (
+        budgetRequests.map((request) => {
+          const reviewBasis = getProcurementReviewBasis(request);
+          const supplierProfile = request.quote?.supplier;
+
+          return (
+            <Card key={request._id}>
+              <CardHeader className="space-y-3">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <CardTitle className="text-lg">{request.requestNumber}</CardTitle>
+                      <Badge variant="outline">{PROCUREMENT_REQUEST_TYPE_LABELS[request.requestType]}</Badge>
+                      <Badge variant="outline">{getProcurementRequisitionTypeLabel(request.requisitionType)}</Badge>
+                      {request.sla?.status ? (
+                        <Badge variant="outline" className={PROCUREMENT_SLA_STATUS_STYLES[request.sla.status]}>
+                          {getProcurementSlaStatusLabel(request.sla.status)}
+                        </Badge>
+                      ) : null}
+                      <Badge variant="outline" className={reviewBasis.timelineConfirmed ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}>
+                        {reviewBasis.timelineConfirmed ? 'On time' : 'Timing risk'}
+                      </Badge>
+                    </div>
+                    <p className="font-medium">{request.itemName}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {request.requestedQuantity} units | Needed by {formatProcurementDate(request.neededBy)}
+                      {typeof request.sla?.daysUntilNeeded === 'number' ? ` | ${request.sla.daysUntilNeeded} day(s) lead` : ''}
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[360px]">
+                    <div className="rounded-lg border p-3 text-sm">
+                      <p className="text-muted-foreground">Department</p>
+                      <p className="mt-1 font-semibold capitalize">{request.department}</p>
+                    </div>
+                    <div className="rounded-lg border p-3 text-sm">
+                      <p className="text-muted-foreground">Contract</p>
+                      <p className="mt-1 font-semibold">{request.contract?.contractNumber || 'Inventory request'}</p>
+                    </div>
+                    <div className="rounded-lg border p-3 text-sm">
+                      <p className="text-muted-foreground">Requested By</p>
+                      <p className="mt-1 font-semibold">{request.createdBy?.name || 'Staff'}</p>
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 xl:grid-cols-4">
+                  <div className="rounded-lg border p-4">
+                    <p className="text-sm font-medium">Need Summary</p>
+                    <p className="mt-3 text-sm text-muted-foreground">{request.requestReason}</p>
+                    {request.contract ? (
+                      <Link to={`/contracts/${request.contract._id}`} className="mt-3 inline-flex text-sm text-primary hover:underline">
+                        Open linked contract
+                      </Link>
+                    ) : null}
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <p className="text-sm font-medium">Supplier And Amount</p>
+                    <div className="mt-3 space-y-1 text-sm">
+                      <p><span className="text-muted-foreground">Supplier:</span> {request.quote?.supplierName || 'Not set'}</p>
+                      <p><span className="text-muted-foreground">Unit Price:</span> {formatProcurementCurrency(request.quote?.quotedUnitPrice)}</p>
+                      <p><span className="text-muted-foreground">Estimated Total:</span> {formatProcurementCurrency(request.quote?.quotedTotal)}</p>
+                      <p><span className="text-muted-foreground">Expected:</span> {formatProcurementDate(request.quote?.expectedFulfillmentDate)}</p>
+                      {supplierProfile ? (
+                        <p className="pt-1 text-muted-foreground">
+                          Directory match: {[supplierProfile.city, supplierProfile.province].filter(Boolean).join(', ') || 'Supplier profile linked'}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <p className="text-sm font-medium">Accounting Basis</p>
+                    <div className="mt-3 space-y-2 text-sm">
+                      {REVIEW_FIELDS.map((field) => (
+                        <div key={field.key} className="flex items-start gap-2">
+                          {reviewBasis[field.key] ? (
+                            <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+                          ) : (
+                            <Clock3 className="mt-0.5 h-4 w-4 text-amber-600" />
+                          )}
+                          <div>
+                            <p className="font-medium">{field.label}</p>
+                            <p className="text-muted-foreground">{field.description}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <p className="text-sm font-medium">Accounting Action</p>
+                    <div className="mt-3 space-y-1 text-sm text-muted-foreground">
+                      <p>Approve when the supplier, amount, and needed-by date are all acceptable for budget release.</p>
+                      <p>{getProcurementReleaseLabel(request)} until this request is approved by accounting.</p>
+                      <p>Return when the price, supplier, or timing still needs revision from purchasing.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => openBudgetDialog(request, 'approved')}>
+                    <FileCheck2 className="mr-2 h-4 w-4" />
+                    Approve Budget
+                  </Button>
+                  <Button variant="outline" onClick={() => openBudgetDialog(request, 'rejected')}>
+                    <XCircle className="mr-2 h-4 w-4" />
+                    Return To Purchasing
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })
+      )}
+
+      <Card>
+        <CardContent className="flex flex-col gap-2 p-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <h2 className="text-lg font-semibold">Expense Confirmation Queue</h2>
+            <p className="text-sm text-muted-foreground">
+              Confirm the uploaded receipt or purchase proof after Purchasing records the completed acquisition.
+            </p>
+          </div>
+          <Badge variant="outline">{expenseRequests.length} waiting</Badge>
+        </CardContent>
+      </Card>
+
+      {expenseRequests.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            No proof-of-purchase submissions are waiting for accounting confirmation right now.
+          </CardContent>
+        </Card>
+      ) : (
+        expenseRequests.map((request) => (
+          <Card key={request._id}>
+            <CardHeader className="space-y-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CardTitle className="text-lg">{request.requestNumber}</CardTitle>
+                    <Badge variant="outline">{PROCUREMENT_REQUEST_TYPE_LABELS[request.requestType]}</Badge>
+                    <Badge variant="outline">{getProcurementRequisitionTypeLabel(request.requisitionType)}</Badge>
+                    <Badge variant="outline" className="border-violet-200 bg-violet-50 text-violet-900">
+                      Waiting expense confirmation
+                    </Badge>
+                  </div>
+                  <p className="font-medium">{request.itemName}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Proof submitted {formatProcurementDate(request.fulfillment?.fulfilledAt)} | {request.fulfillment?.receivedQuantity || request.requestedQuantity} unit(s) received
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[360px]">
+                  <div className="rounded-lg border p-3 text-sm">
+                    <p className="text-muted-foreground">Supplier</p>
+                    <p className="mt-1 font-semibold">{request.quote?.supplierName || 'Not set'}</p>
+                  </div>
+                  <div className="rounded-lg border p-3 text-sm">
+                    <p className="text-muted-foreground">Reference</p>
+                    <p className="mt-1 font-semibold">{request.fulfillment?.invoiceReference || 'Not set'}</p>
+                  </div>
+                  <div className="rounded-lg border p-3 text-sm">
+                    <p className="text-muted-foreground">Estimated Total</p>
+                    <p className="mt-1 font-semibold">{formatProcurementCurrency(request.quote?.quotedTotal)}</p>
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 xl:grid-cols-4">
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm font-medium">Budget Summary</p>
+                  <div className="mt-3 space-y-1 text-sm">
+                    <p><span className="text-muted-foreground">Budget Status:</span> Approved</p>
+                    <p><span className="text-muted-foreground">Release:</span> {getProcurementReleaseLabel(request)}</p>
+                    <p><span className="text-muted-foreground">Unit Price:</span> {formatProcurementCurrency(request.quote?.quotedUnitPrice)}</p>
+                    <p><span className="text-muted-foreground">Estimated Total:</span> {formatProcurementCurrency(request.quote?.quotedTotal)}</p>
+                    <p><span className="text-muted-foreground">Expected Date:</span> {formatProcurementDate(request.quote?.expectedFulfillmentDate)}</p>
+                  </div>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm font-medium">Proof Submitted</p>
+                  <div className="mt-3 space-y-1 text-sm">
+                    <p><span className="text-muted-foreground">Submitted:</span> {formatProcurementDate(request.fulfillment?.fulfilledAt)}</p>
+                    <p><span className="text-muted-foreground">Received Qty:</span> {request.fulfillment?.receivedQuantity || request.requestedQuantity}</p>
+                    <p><span className="text-muted-foreground">Reference:</span> {request.fulfillment?.invoiceReference || 'Not set'}</p>
+                    {request.fulfillment?.attachments?.[0] ? (
+                      <p>
+                        <span className="text-muted-foreground">Attachment:</span>{' '}
+                        <a
+                          href={request.fulfillment.attachments[0]}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          View proof file
+                        </a>
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm font-medium">Inventory Update</p>
+                  <div className="mt-3 space-y-1 text-sm text-muted-foreground">
+                    <p>{request.fulfillment?.inventoryUpdateSummary || 'Inventory update summary not available.'}</p>
+                  </div>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm font-medium">Accounting Action</p>
+                  <div className="mt-3 space-y-1 text-sm text-muted-foreground">
+                    <p>Confirm the expense when the proof, OR/receipt reference, and submitted details are acceptable.</p>
+                    <p>Request an update when Purchasing needs to upload clearer or corrected proof.</p>
+                  </div>
+                </div>
+              </div>
+
+              {request.fulfillment?.notes ? (
+                <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+                  {request.fulfillment.notes}
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => openExpenseDialog(request, 'confirmed')}>
+                  <ReceiptText className="mr-2 h-4 w-4" />
+                  Confirm Expense
+                </Button>
+                <Button variant="outline" onClick={() => openExpenseDialog(request, 'needs_revision')}>
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Request Updated Proof
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {reviewMode === 'budget'
+                ? decision === 'approved'
+                  ? 'Approve Budget Request'
+                  : 'Return Budget Request'
+                : decision === 'confirmed'
+                  ? 'Confirm Expense'
+                  : 'Request Updated Proof'}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedRequest ? (
+            <div className="space-y-4 pt-2">
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <p className="font-medium">{selectedRequest.requestNumber}</p>
+                <p className="text-sm text-muted-foreground">
+                  {selectedRequest.itemName} | {selectedRequest.requestedQuantity} unit(s) | Needed by {formatProcurementDate(selectedRequest.neededBy)}
+                </p>
+              </div>
+
+              {reviewMode === 'budget' ? (
+                <>
+                  <div className="space-y-3 rounded-lg border p-4">
+                    <p className="font-medium">Accounting Review Checklist</p>
+                    {decision === 'approved' ? (
+                      <p className="text-sm text-muted-foreground">
+                        Confirming this checklist creates the digital accounting release authorization for purchasing.
+                      </p>
+                    ) : null}
+                    {REVIEW_FIELDS.map((field) => (
+                      <label key={field.key} className="flex items-start gap-3 rounded-lg border p-3">
+                        <Checkbox
+                          checked={reviewChecklist[field.key]}
+                          onCheckedChange={(checked) => setReviewChecklist((current) => ({
+                            ...current,
+                            [field.key]: Boolean(checked),
+                          }))}
+                        />
+                        <div>
+                          <p className="font-medium">{field.label}</p>
+                          <p className="text-sm text-muted-foreground">{field.description}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+
+                  {decision === 'rejected' ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="rejection-reason">Return Reason</Label>
+                      <Select value={rejectionReason} onValueChange={setRejectionReason}>
+                        <SelectTrigger id="rejection-reason">
+                          <SelectValue placeholder="Select a reason for purchasing" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {REJECTION_REASONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="space-y-3 rounded-lg border p-4 text-sm">
+                  <p><span className="text-muted-foreground">Supplier:</span> {selectedRequest.quote?.supplierName || 'Not set'}</p>
+                  <p><span className="text-muted-foreground">Reference:</span> {selectedRequest.fulfillment?.invoiceReference || 'Not set'}</p>
+                  <p><span className="text-muted-foreground">Attachment:</span> {selectedRequest.fulfillment?.attachments?.[0] ? 'Proof file uploaded' : 'No file uploaded'}</p>
+                  {selectedRequest.fulfillment?.attachments?.[0] ? (
+                    <a
+                      href={selectedRequest.fulfillment.attachments[0]}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex text-primary hover:underline"
+                    >
+                      Open uploaded proof
+                    </a>
+                  ) : null}
+                  {selectedRequest.fulfillment?.notes ? (
+                    <p className="text-muted-foreground">{selectedRequest.fulfillment.notes}</p>
+                  ) : null}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="accounting-notes">
+                  {reviewMode === 'budget' ? 'Accounting Notes' : 'Accounting Confirmation Notes'}
+                </Label>
+                <Textarea
+                  id="accounting-notes"
+                  rows={4}
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                  placeholder={
+                    reviewMode === 'budget'
+                      ? decision === 'approved'
+                        ? 'Optional note for the approved budget request.'
+                        : 'Tell purchasing what needs to be revised before budget approval.'
+                      : decision === 'confirmed'
+                        ? 'Optional note confirming the proof of purchase.'
+                        : 'Tell purchasing what proof or receipt details need to be updated.'
+                  }
+                />
+              </div>
+
+              <Button onClick={handleSubmitDecision} className="w-full">
+                {reviewMode === 'budget'
+                  ? decision === 'approved'
+                    ? 'Confirm Budget Approval'
+                    : 'Send Back To Purchasing'
+                  : decision === 'confirmed'
+                    ? 'Confirm Expense'
+                    : 'Request Updated Proof'}
+              </Button>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
