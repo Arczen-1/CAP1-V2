@@ -218,6 +218,15 @@ const buildContractActionUrl = (contract, tab = 'details') => (
   `/contracts/${contract._id}${tab ? `?tab=${tab}` : ''}`
 );
 
+// Final-balance hold: while active, preparation, release, and execution
+// actions are blocked. The hold clears when the balance is settled or when
+// management releases it explicitly.
+const getPaymentHoldError = (contract) => (
+  contract?.paymentHold?.active
+    ? 'This contract is on hold - the final balance is overdue. Settle the remaining balance or ask management to release the hold before preparation can continue.'
+    : null
+);
+
 const notifyRolesForContract = async ({
   contract,
   roles = [],
@@ -1907,6 +1916,11 @@ router.put('/:id/kitchen-menu-item', auth, requireRole(['kitchen', 'admin']), as
       return res.status(400).json({ message: 'Kitchen checklist updates are only available on approved contracts' });
     }
 
+    const kitchenChecklistHoldError = getPaymentHoldError(contract);
+    if (kitchenChecklistHoldError) {
+      return res.status(400).json({ message: kitchenChecklistHoldError });
+    }
+
     const itemIndex = Number(index);
     if (!Number.isInteger(itemIndex) || itemIndex < 0 || itemIndex >= (contract.menuDetails || []).length) {
       return res.status(400).json({ message: 'Menu checklist item not found' });
@@ -1933,6 +1947,11 @@ router.put('/:id/kitchen-ingredient-status', auth, requireRole(['kitchen', 'admi
 
     if (contract.status !== 'approved') {
       return res.status(400).json({ message: 'Kitchen preparation updates are only available on approved contracts' });
+    }
+
+    const kitchenPrepHoldError = getPaymentHoldError(contract);
+    if (kitchenPrepHoldError) {
+      return res.status(400).json({ message: kitchenPrepHoldError });
     }
 
     if (!['pending', 'procured', 'prepared'].includes(String(status || ''))) {
@@ -2418,6 +2437,11 @@ router.put('/:id/logistics-assignment', auth, requireRole(['logistics', 'admin']
       return res.status(400).json({ message: 'Only approved contracts can update logistics booking' });
     }
 
+    const logisticsHoldError = getPaymentHoldError(contract);
+    if (logisticsHoldError) {
+      return res.status(400).json({ message: logisticsHoldError });
+    }
+
     const { driverId, truckId, assignmentStatus, notes } = req.body;
     const eventStart = startOfDay(contract.eventDate);
     const eventEnd = endOfDay(contract.eventDate);
@@ -2525,6 +2549,11 @@ router.put('/:id/banquet-assignment', auth, requireRole(['banquet_supervisor', '
 
     if (!['approved', 'completed'].includes(contract.status)) {
       return res.status(400).json({ message: 'Banquet staffing can only be updated once the contract is approved.' });
+    }
+
+    const banquetHoldError = getPaymentHoldError(contract);
+    if (banquetHoldError) {
+      return res.status(400).json({ message: banquetHoldError });
     }
 
     const rawGuestCount = req.body?.serviceGuestCount;
@@ -2684,6 +2713,11 @@ router.put('/:id/inventory-item-status', auth, async (req, res) => {
 
     if (contract.status !== 'approved') {
       return res.status(400).json({ message: 'Only approved contracts can update checklist statuses' });
+    }
+
+    const inventoryHoldError = getPaymentHoldError(contract);
+    if (inventoryHoldError) {
+      return res.status(400).json({ message: inventoryHoldError });
     }
 
     const itemIndex = Number(index);
@@ -2888,7 +2922,14 @@ router.post('/:id/payment', auth, requireRole(['accounting', 'admin']), [
     } else {
       contract.paymentStatus = 'unpaid';
     }
-    
+
+    // Settling the full balance lifts the final-balance hold immediately.
+    if (paymentMilestones.fullyPaid && contract.paymentHold?.active) {
+      contract.paymentHold.active = false;
+      contract.paymentHold.releasedAt = new Date();
+      contract.paymentHold.overrideNote = 'Released automatically - remaining balance fully settled.';
+    }
+
     await contract.save();
     await notifyDepartmentsForContract({
       contract,
@@ -2932,6 +2973,43 @@ router.post('/:id/progress/:department', auth, async (req, res) => {
 
     contract.departmentProgress[department] = progress;
     await contract.save();
+
+    res.json(contract);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Management release of a final-balance hold. Per policy, only management can
+// let an event proceed while the 60% balance is still outstanding.
+router.put('/:id/payment-hold/release', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const contract = await Contract.findById(req.params.id);
+
+    if (!contract) {
+      return res.status(404).json({ message: 'Contract not found' });
+    }
+
+    if (!contract.paymentHold?.active) {
+      return res.status(400).json({ message: 'This contract has no active payment hold' });
+    }
+
+    contract.paymentHold.active = false;
+    contract.paymentHold.managementOverride = true;
+    contract.paymentHold.releasedAt = new Date();
+    contract.paymentHold.releasedBy = req.user._id;
+    contract.paymentHold.overrideNote = String(req.body?.note || '').trim() || 'Released by management.';
+    await contract.save();
+
+    await notifyDepartmentsForContract({
+      contract,
+      departments: ['accounting', 'sales'],
+      type: 'contract_on_hold',
+      title: `Payment hold released by management: ${contract.contractNumber}`,
+      message: `${contract.clientName}'s final-balance hold was released by management. ${contract.paymentHold.overrideNote} Continue collection follow-up for the outstanding balance.`,
+      priority: 'high',
+      actionLabel: 'Review payment'
+    });
 
     res.json(contract);
   } catch (error) {

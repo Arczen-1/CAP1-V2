@@ -253,6 +253,13 @@ class ApiService {
     });
   }
 
+  async releasePaymentHold(id: string, note?: string) {
+    return this.request(`/contracts/${id}/payment-hold/release`, {
+      method: 'PUT',
+      body: JSON.stringify({ note })
+    });
+  }
+
   async updateInventoryItemStatus(id: string, data: any) {
     return this.request(`/contracts/${id}/inventory-item-status`, {
       method: 'PUT',

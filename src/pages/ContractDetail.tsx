@@ -304,6 +304,14 @@ interface Contract {
     client?: SignatureParty;
     staff?: SignatureParty;
   };
+  paymentHold?: {
+    active?: boolean;
+    reason?: string;
+    startedAt?: string;
+    releasedAt?: string;
+    managementOverride?: boolean;
+    overrideNote?: string;
+  };
 }
 
 interface OperationsSummary {
@@ -722,6 +730,7 @@ export default function ContractDetail() {
   const { user } = useAuth();
   const { isSales, isAccounting, isLogistics, isBanquet, isKitchen, isStockroom, isCreative, isLinen, isAdmin, role } = useRole();
   const [contract, setContract] = useState<Contract | null>(null);
+  const [isReleasingPaymentHold, setIsReleasingPaymentHold] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [signatureDialogOpen, setSignatureDialogOpen] = useState(false);
@@ -1123,6 +1132,24 @@ export default function ContractDetail() {
       toast.error(error.message || 'Failed to close contract');
     } finally {
       setIsClosingContract(false);
+    }
+  };
+
+  const handleReleasePaymentHold = async () => {
+    if (!contract) return;
+
+    const note = window.prompt('Management release note for this payment hold:', 'Approved by management');
+    if (note === null) return;
+
+    try {
+      setIsReleasingPaymentHold(true);
+      const updated = await api.releasePaymentHold(id!, note);
+      setContract((current) => (current ? { ...current, paymentHold: updated.paymentHold } : current));
+      toast.success('Payment hold released. Preparation can continue while collection follow-up proceeds.');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to release the payment hold');
+    } finally {
+      setIsReleasingPaymentHold(false);
     }
   };
 
@@ -3078,7 +3105,7 @@ export default function ContractDetail() {
                               {item.requestAction}
                             </div>
                           ) : null}
-                          {(item.alternativeSuggestions || []).length > 0 ? (
+                          {item.shortageQuantity > 0 && (item.alternativeSuggestions || []).length > 0 ? (
                             <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-3">
                               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-900">Available Alternatives</p>
                               <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -3115,15 +3142,14 @@ export default function ContractDetail() {
                               </div>
                             </div>
                           ) : null}
-                          {canCreateProcurementRequest && item.itemId ? (
+                          {canCreateProcurementRequest && item.itemId && item.shortageQuantity > 0 ? (
                             <div className="mt-3">
                               <Button
                                 type="button"
                                 size="sm"
-                                variant={item.shortageQuantity > 0 ? 'default' : 'outline'}
                                 onClick={() => openProcurementRequestDialog(sectionKey, item)}
                               >
-                                {item.shortageQuantity > 0 ? 'Request Purchasing Or Rental' : 'Create Purchasing Request'}
+                                Request Purchasing Or Rental
                               </Button>
                             </div>
                           ) : null}
@@ -4370,7 +4396,7 @@ export default function ContractDetail() {
               <div className="flex items-center gap-3 flex-wrap">
                 <h1 className="text-2xl font-bold">{contract.contractNumber}</h1>
                 {(() => {
-                  const stage = getContractStage(contract);
+                  const stage = getContractStage(contract, role);
                   return (
                     <Badge className={stage.badgeClass || getStatusColor(contract.status)}>
                       {stage.label}
@@ -4504,6 +4530,28 @@ export default function ContractDetail() {
             )}
           </div>
         </div>
+
+        {contract.paymentHold?.active ? (
+          <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <p className="font-semibold text-red-900">Final Balance Overdue / On Hold</p>
+              <p className="mt-1 text-sm text-red-900/80">
+                {contract.paymentHold.reason || 'The remaining balance was not collected by its due date.'}
+                {' '}Preparation, release, and execution are blocked until the balance is settled or management releases the hold. The PHP 30,000 reservation fee and the 40% collection are non-refundable; refunds require a formal cancellation letter and Execom review.
+              </p>
+            </div>
+            {isAdmin() && (
+              <Button
+                variant="outline"
+                className="shrink-0 border-red-300 bg-white text-red-900 hover:bg-red-100"
+                disabled={isReleasingPaymentHold}
+                onClick={handleReleasePaymentHold}
+              >
+                {isReleasingPaymentHold ? 'Releasing...' : 'Release Hold (Management)'}
+              </Button>
+            )}
+          </div>
+        ) : null}
 
         {/* Readiness */}
         {!useRestrictedDepartmentContractView ? (

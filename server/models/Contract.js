@@ -577,6 +577,23 @@ const contractSchema = new mongoose.Schema({
     default: () => ({})
   },
 
+  // Final-balance hold: set automatically when the 60% balance is still unpaid
+  // past its due date (2 months before the event). Blocks preparation, release,
+  // and execution until the balance is settled or management releases the hold.
+  paymentHold: {
+    active: { type: Boolean, default: false },
+    reason: String,
+    startedAt: Date,
+    releasedAt: Date,
+    releasedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
+    managementOverride: { type: Boolean, default: false },
+    overrideNote: String
+  },
+
   // SLA Tracking
   finalDetailsDeadline: Date,
   slaWarning: {

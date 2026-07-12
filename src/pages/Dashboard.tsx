@@ -217,7 +217,7 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{contract.contractNumber}</span>
                         {(() => {
-                          const stage = getContractStage(contract);
+                          const stage = getContractStage(contract, role);
                           return (
                             <Badge className={stage.badgeClass || getStatusColor(contract.status)}>
                               {stage.label}

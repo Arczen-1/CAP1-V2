@@ -111,7 +111,7 @@ const getPaymentStatusColor = (status: string) => {
 };
 
 export default function Contracts() {
-  const { isSales } = useRole();
+  const { isSales, role } = useRole();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [filteredContracts, setFilteredContracts] = useState<Contract[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -541,7 +541,7 @@ export default function Contracts() {
                               </TableCell>
                               <TableCell className="align-top">
                                 {(() => {
-                                  const stage = getContractStage(contract);
+                                  const stage = getContractStage(contract, role);
                                   return (
                                     <Badge variant="outline" className={stage.badgeClass || getStatusColor(contract.status)}>
                                       {stage.label}
@@ -584,7 +584,7 @@ export default function Contracts() {
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="font-semibold">{contract.contractNumber}</span>
                                 {(() => {
-                                  const stage = getContractStage(contract);
+                                  const stage = getContractStage(contract, role);
                                   return (
                                     <Badge variant="outline" className={stage.badgeClass || getStatusColor(contract.status)}>
                                       {stage.label}
@@ -654,7 +654,7 @@ export default function Contracts() {
                 createdAt: contract.createdAt,
                 type: 'contract' as const,
                 clientName: contract.clientName,
-                status: getContractStage(contract).label,
+                status: getContractStage(contract, role).label,
                 venue: contract.venue?.name,
                 totalGuests: contract.totalPacks,
               }))}

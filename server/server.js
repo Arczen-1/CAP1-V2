@@ -17,7 +17,13 @@ app.use(express.json({ limit: '10mb' }));
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/juancarlos';
 
 mongoose.connect(MONGODB_URI)
-  .then(() => console.log('Connected to MongoDB'))
+  .then(() => {
+    console.log('Connected to MongoDB');
+    // Collection-timeline enforcement: milestone notifications and automatic
+    // cancellation of events whose final balance was not collected in time.
+    const { startPaymentComplianceSweep } = require('./paymentCompliance');
+    startPaymentComplianceSweep();
+  })
   .catch(err => console.error('MongoDB connection error:', err));
 
 // Routes

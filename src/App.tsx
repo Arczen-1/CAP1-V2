@@ -295,7 +295,18 @@ function App() {
     <AuthProvider>
       <Router>
         <AppRoutes />
-        <Toaster position="top-center" />
+        <Toaster
+          position="top-center"
+          duration={5000}
+          toastOptions={{
+            style: {
+              background: 'hsl(var(--primary))',
+              color: 'hsl(var(--primary-foreground))',
+              border: '1px solid hsl(var(--primary))',
+              fontSize: '0.95rem',
+            },
+          }}
+        />
       </Router>
     </AuthProvider>
   );
