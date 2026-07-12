@@ -127,7 +127,7 @@ export default function MenuTastingDetail() {
   // The tasting can only be marked attended or missed once its scheduled day has arrived.
   const tastingDayReached = !!tasting
     && new Date(tasting.tastingDate).setHours(0, 0, 0, 0) <= new Date().setHours(23, 59, 59, 999);
-  const canConfirmBooking = canManageTasting && !!tasting && !tasting.contractCreated && tasting.status === 'booked';
+  const canConfirmBooking = canManageTasting && !!tasting && tasting.status === 'booked';
   const canMarkNoShow = canManageTasting && !!tasting && !tasting.contractCreated
     && ['booked', 'confirmed'].includes(tasting.status) && tastingDayReached;
   const canRecordFeedback = canManageTasting && !!tasting

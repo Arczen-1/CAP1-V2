@@ -115,7 +115,7 @@ export default function MenuTastings() {
   const canManageTastings = isSales() || isAdmin();
 
   const canConfirmTasting = (tasting: MenuTasting) =>
-    canManageTastings && tasting.status === 'booked' && !tasting.contractCreated;
+    canManageTastings && tasting.status === 'booked';
 
   const handleConfirmBooking = async (tasting: MenuTasting) => {
     try {

@@ -297,7 +297,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </Link>
       </div>
 
-      <ScrollArea className="flex-1 py-4">
+      <ScrollArea className="flex-1 min-h-0 py-4">
         <nav className="px-3 space-y-1">
           {filteredNavItems.map((item) => {
             const Icon = item.icon;
@@ -397,9 +397,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen flex">
+    <div className="h-screen flex overflow-hidden">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex w-64 flex-col border-r bg-card">
+      <aside className="hidden lg:flex w-64 shrink-0 flex-col border-r bg-card">
         <SidebarContent />
       </aside>
 
@@ -416,7 +416,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </Sheet>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-h-screen overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Mobile Header */}
         <header className="lg:hidden h-16 border-b flex items-center justify-between px-4 bg-card">
           <div className="flex items-center gap-3 ml-12">

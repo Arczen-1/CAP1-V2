@@ -216,14 +216,24 @@ router.put('/:id', auth, requireRole(['sales', 'admin']), async (req, res) => {
     }
 
     await ensureTastingContractLinkIsValid(tasting);
-    
-    // Don't allow updates if contract already created
+
+    // Once a contract exists the booking details are locked, but the booking
+    // status may still move (e.g. confirming attendance or recording a no-show).
     if (tasting.contractCreated) {
-      return res.status(400).json({
-        message: 'Cannot modify tasting - contract already created'
-      });
+      const disallowedFields = Object.keys(req.body).filter((key) => key !== 'status');
+      if (disallowedFields.length > 0) {
+        return res.status(400).json({
+          message: 'Cannot modify tasting details - contract already created'
+        });
+      }
+
+      if (req.body.status !== undefined && !['booked', 'confirmed', 'no_show'].includes(req.body.status)) {
+        return res.status(400).json({
+          message: 'Only booking status updates are allowed after the contract is created'
+        });
+      }
     }
-    
+
     Object.assign(tasting, req.body);
     await tasting.save();
     
