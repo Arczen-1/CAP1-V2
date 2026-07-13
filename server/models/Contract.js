@@ -464,7 +464,7 @@ const contractSchema = new mongoose.Schema({
   menuDetails: [menuItemSchema],
   totalPacks: {
     type: Number,
-    required: [true, 'Total packs is required'],
+    required: [true, 'Total pax is required'],
     min: [1, 'Must have at least 1 pack']
   },
 

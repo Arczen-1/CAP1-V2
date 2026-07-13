@@ -153,7 +153,7 @@ export const buildSignedContractDocumentHtml = (
           { label: 'Venue Address', value: contract.venue?.address || '-' },
           { label: 'Venue Capacity', value: contract.venue?.capacity ? `${contract.venue.capacity} pax` : '-' },
           { label: 'Package', value: contract.packageSelected || '-' },
-          { label: 'Total Packs', value: String(contract.totalPacks || 0) },
+          { label: 'Total Pax', value: String(contract.totalPacks || 0) },
         ])}</div>
       </div></section>
 

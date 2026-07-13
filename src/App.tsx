@@ -258,7 +258,7 @@ function AppRoutes() {
       } />
       
       <Route path="/stockroom/inventory" element={
-        <RoleRoute allowedRoles={['logistics', 'stockroom', 'admin']}>
+        <RoleRoute allowedRoles={['stockroom', 'admin']}>
           <StockroomInventory />
         </RoleRoute>
       } />

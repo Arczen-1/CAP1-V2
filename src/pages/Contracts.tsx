@@ -529,7 +529,7 @@ export default function Contracts() {
                                   <div className="font-semibold">{contract.contractNumber}</div>
                                   <div className="text-sm text-foreground">{contract.clientName}</div>
                                   <div className="text-xs text-muted-foreground">
-                                    {formatClientTypeLabel(contract.clientType)} | {contract.totalPacks || 0} packs | {(contract.packageSelected || 'custom').replace(/_/g, ' ')}
+                                    {formatClientTypeLabel(contract.clientType)} | {contract.totalPacks || 0} pax | {(contract.packageSelected || 'custom').replace(/_/g, ' ')}
                                   </div>
                                 </div>
                               </TableCell>
@@ -595,7 +595,7 @@ export default function Contracts() {
                               <div>
                                 <p className="font-medium">{contract.clientName}</p>
                                 <p className="text-sm text-muted-foreground">
-                                  {formatClientTypeLabel(contract.clientType)} | {contract.totalPacks || 0} packs
+                                  {formatClientTypeLabel(contract.clientType)} | {contract.totalPacks || 0} pax
                                 </p>
                               </div>
                             </div>
@@ -615,7 +615,7 @@ export default function Contracts() {
                             </div>
                             <div className="flex items-center gap-2 text-muted-foreground">
                               <Users className="h-4 w-4" />
-                              <span>{(contract.packageSelected || 'custom').replace(/_/g, ' ')} | {contract.totalPacks || 0} packs</span>
+                              <span>{(contract.packageSelected || 'custom').replace(/_/g, ' ')} | {contract.totalPacks || 0} pax</span>
                             </div>
                           </div>
 

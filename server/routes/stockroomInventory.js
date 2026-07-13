@@ -3,7 +3,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const StockroomInventory = require('../models/StockroomInventory');
 const { auth, requireRole } = require('../middleware/auth');
-const requireStockroomInventoryAccess = requireRole(['logistics', 'stockroom', 'admin']);
+const requireStockroomInventoryAccess = requireRole(['stockroom', 'admin']);
 
 // Get all stockroom items
 router.get('/', auth, async (req, res) => {

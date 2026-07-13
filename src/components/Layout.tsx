@@ -89,7 +89,7 @@ const managementNavItems: NavItem[] = [
   { label: 'Banquet Staff', href: '/banquet/staff', icon: UserCog, roles: ['banquet_supervisor', 'admin'] },
   { label: 'Drivers & Trucks', href: '/logistics/management', icon: Truck, roles: ['logistics', 'admin'] },
   { label: 'Linen Inventory', href: '/linen/inventory', icon: Package, roles: ['linen', 'admin'] },
-  { label: 'Stockroom Inventory', href: '/stockroom/inventory', icon: Package, roles: ['logistics', 'stockroom', 'admin'] },
+  { label: 'Stockroom Inventory', href: '/stockroom/inventory', icon: Package, roles: ['stockroom', 'admin'] },
   { label: 'Kitchen Inventory', href: '/kitchen/inventory', icon: ChefHat, roles: ['kitchen', 'admin'] },
   { label: 'Admin Management', href: '/admin/management', icon: Shield, roles: ['admin'] },
 ];

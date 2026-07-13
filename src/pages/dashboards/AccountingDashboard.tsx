@@ -23,7 +23,7 @@ import {
   ArrowUpDown,
   Calculator,
   CheckCircle,
-  DollarSign,
+  PhilippinePeso,
   FileText,
   Filter,
   Receipt,
@@ -778,7 +778,7 @@ export default function AccountingDashboard() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Collected</CardTitle>
-              <DollarSign className="h-4 w-4 text-green-600" />
+              <PhilippinePeso className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalPaid)}</div>
@@ -931,7 +931,7 @@ export default function AccountingDashboard() {
                                 <div className="space-y-1">
                                   <div className="font-medium">{formatDate(contract.eventDate)}</div>
                                   <div className="text-xs text-muted-foreground">{contract.clientType}</div>
-                                  <div className="text-xs text-muted-foreground">{contract.totalPacks || 0} packs</div>
+                                  <div className="text-xs text-muted-foreground">{contract.totalPacks || 0} pax</div>
                                 </div>
                               </TableCell>
                               <TableCell className="align-top whitespace-normal">
@@ -981,7 +981,7 @@ export default function AccountingDashboard() {
                                   </Button>
                                   {contract.clientSigned && !milestones.fullyPaid ? (
                                     <Button variant="secondary" onClick={() => handleOpenPaymentDialog(contract)}>
-                                      <DollarSign className="mr-2 h-4 w-4" />
+                                      <PhilippinePeso className="mr-2 h-4 w-4" />
                                       Record Payment
                                     </Button>
                                   ) : null}

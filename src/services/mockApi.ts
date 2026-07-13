@@ -1060,7 +1060,7 @@ export const mockApi = {
       throw new Error('Package selection is required');
     }
     if (!data.totalPacks || data.totalPacks < 1) {
-      throw new Error('Total packs must be at least 1');
+      throw new Error('Total pax must be at least 1');
     }
     if (!data.packagePrice || data.packagePrice < 0) {
       throw new Error('Package price is required');

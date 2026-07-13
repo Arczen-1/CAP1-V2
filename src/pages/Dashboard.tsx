@@ -229,7 +229,7 @@ export default function Dashboard() {
                         {contract.clientName} • {contract.clientType}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {new Date(contract.eventDate).toLocaleDateString()} • {contract.totalPacks} packs
+                        {new Date(contract.eventDate).toLocaleDateString()} • {contract.totalPacks} pax
                       </p>
                     </div>
                     <div className="flex items-center gap-4">

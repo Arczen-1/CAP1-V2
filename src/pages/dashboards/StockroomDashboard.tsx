@@ -178,7 +178,7 @@ const toRow = (contract: Contract): WorklistRow => {
     title: contract.contractNumber,
     subtitle: contract.clientName,
     details: [
-      `${contract.venue?.name || 'No venue saved'} | ${contract.totalPacks || 0} packs`,
+      `${contract.venue?.name || 'No venue saved'} | ${contract.totalPacks || 0} pax`,
       `${equipmentItemCount} equipment item(s) | ${equipmentUnitCount} total unit(s)`,
       isStockroomDraftWorkflowStatus(contract.status)
         ? `Draft status: ${formatLabel(contract.status)}`

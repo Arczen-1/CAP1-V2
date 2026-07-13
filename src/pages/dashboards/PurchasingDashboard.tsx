@@ -12,7 +12,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import SupplierDirectoryPanel from '@/components/SupplierDirectoryPanel';
 import { toast } from 'sonner';
-import { CalendarClock, ClipboardList, FileText, PackageCheck, ShoppingCart } from 'lucide-react';
+import { CalendarClock, ClipboardList, FileText, PackageCheck, Printer, ShoppingCart } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { printRequisitionForm } from '@/lib/requisitionPrint';
 import type { ProcurementRequest, ProcurementSupplierSummary } from '@/lib/procurement';
 import {
   formatProcurementCurrency,
@@ -67,6 +69,7 @@ const buildEmptyFulfillmentForm = () => ({
 });
 
 export default function PurchasingDashboard() {
+  const { user } = useAuth();
   const [requests, setRequests] = useState<ProcurementRequest[]>([]);
   const [suppliers, setSuppliers] = useState<ProcurementSupplierSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -436,11 +439,20 @@ export default function PurchasingDashboard() {
                   </div>
                 </div>
 
-                {action ? (
-                  <div className="flex flex-wrap gap-2">
-                    {action(request)}
-                  </div>
-                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  {action ? action(request) : null}
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (!printRequisitionForm(request, user?.name)) {
+                        toast.error('Please allow pop-ups to print the requisition form');
+                      }
+                    }}
+                  >
+                    <Printer className="mr-2 h-4 w-4" />
+                    Print Requisition Form
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           );

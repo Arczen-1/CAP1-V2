@@ -77,7 +77,7 @@ const toRow = (contract: Contract): WorklistRow => {
     title: contract.contractNumber,
     subtitle: contract.clientName,
     details: [
-      `${contract.venue?.name || 'No venue saved'} | ${contract.totalPacks || 0} packs`,
+      `${contract.venue?.name || 'No venue saved'} | ${contract.totalPacks || 0} pax`,
       `${linenNeeded.tablecloths} tablecloths | ${linenNeeded.napkins} napkins`,
       `Setup: ${contract.tableSetup || 'Not set'} | Napkin: ${contract.napkinType || 'Not set'}`,
     ],

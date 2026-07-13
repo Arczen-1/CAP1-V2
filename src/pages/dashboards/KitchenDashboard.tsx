@@ -146,7 +146,7 @@ export default function KitchenDashboard() {
               </div>
               <h3 className="text-lg font-medium">{contract.clientName}</h3>
               <p className="text-sm text-muted-foreground">
-                {new Date(contract.eventDate).toLocaleDateString()} | {contract.totalPacks} packs
+                {new Date(contract.eventDate).toLocaleDateString()} | {contract.totalPacks} pax
               </p>
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline" className="capitalize">
@@ -251,7 +251,7 @@ export default function KitchenDashboard() {
               </div>
               <h3 className="text-lg font-medium">{contract.clientName}</h3>
               <p className="text-sm text-muted-foreground">
-                {new Date(contract.eventDate).toLocaleDateString()} | {contract.totalPacks} packs | {getEventDistanceLabel(contract.eventDate)}
+                {new Date(contract.eventDate).toLocaleDateString()} | {contract.totalPacks} pax | {getEventDistanceLabel(contract.eventDate)}
               </p>
             </div>
             <Button variant="outline" size="sm" asChild>

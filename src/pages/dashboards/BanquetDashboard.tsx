@@ -81,7 +81,7 @@ const toRow = (contract: Contract): WorklistRow => {
     title: contract.contractNumber,
     subtitle: contract.clientName,
     details: [
-      `${contract.venue?.name || 'No venue saved'} | ${contract.totalPacks || 0} packs`,
+      `${contract.venue?.name || 'No venue saved'} | ${contract.totalPacks || 0} pax`,
       `${formatLabel(contract.clientType)} | Current department: ${formatLabel(contract.currentDepartment) || 'operations'}`,
     ],
     statusLabel: formatLabel(contract.status),

@@ -385,7 +385,7 @@ export default function SalesDashboard() {
                                   </div>
                                   <div className="text-sm text-foreground">{contract.clientName}</div>
                                   <div className="text-xs text-muted-foreground">
-                                    {formatLabel(contract.clientType)} | {contract.totalPacks || 0} packs
+                                    {formatLabel(contract.clientType)} | {contract.totalPacks || 0} pax
                                   </div>
                                 </div>
                               </TableCell>
@@ -430,7 +430,7 @@ export default function SalesDashboard() {
                               <div>
                                 <p className="font-medium">{contract.clientName}</p>
                                 <p className="text-sm text-muted-foreground">
-                                  {formatLabel(contract.clientType)} | {contract.totalPacks || 0} packs
+                                  {formatLabel(contract.clientType)} | {contract.totalPacks || 0} pax
                                 </p>
                               </div>
                             </div>

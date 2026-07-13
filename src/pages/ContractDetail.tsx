@@ -37,7 +37,7 @@ import {
   Edit,
   Send,
   CheckCircle,
-  DollarSign,
+  PhilippinePeso,
   FileDown,
   Printer,
   AlertTriangle,
@@ -1853,7 +1853,7 @@ export default function ContractDetail() {
             ${getSummaryLinesHtml([
               { label: 'Event Date', value: new Date(contract.eventDate).toLocaleDateString() },
               { label: 'Client Type', value: contract.clientType },
-              { label: 'Total Packs', value: String(contract.totalPacks || 0) },
+              { label: 'Total Pax', value: String(contract.totalPacks || 0) },
               { label: 'Remaining Balance', value: formatCurrency(remainingBalance) },
             ])}
           </div>
@@ -1887,7 +1887,7 @@ export default function ContractDetail() {
               <div>
                 ${getDetailListHtml([
                   { label: 'Package', value: contract.packageSelected },
-                  { label: 'Total Packs', value: String(contract.totalPacks || 0) },
+                  { label: 'Total Pax', value: String(contract.totalPacks || 0) },
                   { label: 'Preferred Color', value: contract.preferredColor },
                 ])}
               </div>
@@ -2048,7 +2048,7 @@ export default function ContractDetail() {
                   { label: 'Venue Address', value: contract.venue?.address || '-' },
                   { label: 'Venue Capacity', value: contract.venue?.capacity ? `${contract.venue.capacity} pax` : '-' },
                   { label: 'Package', value: contract.packageSelected },
-                  { label: 'Total Packs', value: String(contract.totalPacks || 0) },
+                  { label: 'Total Pax', value: String(contract.totalPacks || 0) },
                 ])}
               </div>
             </div>
@@ -2317,9 +2317,10 @@ export default function ContractDetail() {
             <td>${isOpenSlot ? '<span class="muted">Open slot</span>' : escapeHtml(staff.fullName)}</td>
             <td>${isOpenSlot ? '-' : escapeHtml(staff.employeeId || '-')}</td>
             <td class="check-cell">&#9633;</td>
-            <td>____________</td>
-            <td>____________</td>
-            <td>________________________________</td>
+            <td>__________</td>
+            <td>__________</td>
+            <td>__________</td>
+            <td>____________________________</td>
           </tr>
         `;
       }).join('');
@@ -2342,7 +2343,8 @@ export default function ContractDetail() {
                 <th>Staff Member</th>
                 <th>Employee ID</th>
                 <th>Present</th>
-                <th>Arrival</th>
+                <th>Time In</th>
+                <th>Time Out</th>
                 <th>Station</th>
                 <th>Signature / Notes</th>
               </tr>
@@ -2410,20 +2412,241 @@ export default function ContractDetail() {
             <div class="info-grid">
               <div>
                 ${getDetailListHtml([
-                  { label: 'Supervisor', value: assignedSupervisorName },
-                  { label: 'Prepared By', value: user?.name || COMPANY_NAME },
+                  { label: 'Arrival Call Time', value: '____________________' },
+                  { label: 'Service End Time', value: '____________________' },
                 ])}
               </div>
               <div>
                 ${getDetailListHtml([
-                  { label: 'Arrival Call Time', value: '____________________' },
                   { label: 'Final Notes', value: '____________________________________________________' },
                 ])}
+              </div>
+            </div>
+            <div class="signature-row">
+              <div class="signature-box">
+                <div class="signature-line">
+                  <span class="signature-role">BISOL / On-Site Supervisor</span>
+                  <span class="signature-name">${escapeHtml(assignedSupervisorName)}</span>
+                  <div class="signature-title">Signature over printed name / date</div>
+                </div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">
+                  <span class="signature-role">Prepared By (Account Executive)</span>
+                  <span class="signature-name">${escapeHtml(user?.name || COMPANY_NAME)}</span>
+                  <div class="signature-title">Signature over printed name / date</div>
+                </div>
               </div>
             </div>
           </section>
           <div class="document-note">
             Printed from the banquet staffing section for ${COMPANY_NAME}.
+          </div>
+        </div>
+      </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
+
+  const handlePrintLogisticsTripTicket = () => {
+    if (!contract) {
+      return;
+    }
+
+    const assignment = (contract.logisticsAssignment || {}) as any;
+    const driverName = assignment?.driver?.fullName || '';
+    const driverPhone = assignment?.driver?.phone || '';
+    const truckPlate = assignment?.truck?.plateNumber || '';
+    const truckModel = assignment?.truck?.model || assignment?.truck?.type || '';
+    const eventDate = new Date(contract.eventDate);
+    const loadingDate = new Date(eventDate);
+    loadingDate.setDate(loadingDate.getDate() - 1);
+    const pax = Number(contract.totalPacks) || 0;
+    const guidelineTrucks = Math.max(1, Math.ceil(pax / 100));
+    const supervisorName = contract.assignedSupervisor?.name
+      || banquetSummary?.supervisorOptions.find((option) => option._id === banquetAssignmentDraft.supervisorId)?.name
+      || '';
+
+    const manifestSections: Array<{ title: string; rows: Array<{ name: string; code: string; quantity: number }> }> = [
+      {
+        title: 'Stockroom & Equipment',
+        rows: (contract.equipmentChecklist || []).map((item: any) => ({
+          name: item.item || 'Equipment item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0,
+        })),
+      },
+      {
+        title: 'Linen',
+        rows: (contract.linenRequirements || []).map((item: any) => ({
+          name: item.type || 'Linen item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0,
+        })),
+      },
+      {
+        title: 'Creative & Decor',
+        rows: (contract.creativeAssets || []).map((item: any) => ({
+          name: item.item || 'Creative item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0,
+        })),
+      },
+    ].filter((section) => section.rows.length > 0);
+
+    if (manifestSections.length === 0) {
+      toast.error('Add inventory items to the contract before printing the trip ticket.');
+      return;
+    }
+
+    const manifestHtml = manifestSections.map((section) => `
+      <section class="document-section">
+        <h3 class="section-heading">${escapeHtml(section.title)} Manifest</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Item</th>
+              <th>Code</th>
+              <th>Qty For Event</th>
+              <th>Loaded</th>
+              <th>Returned (BISOL Count)</th>
+              <th>Warehouse 2nd Count</th>
+              <th>Variance / Remarks</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${section.rows.map((row, index) => `
+              <tr>
+                <td>${index + 1}</td>
+                <td>${escapeHtml(row.name)}</td>
+                <td>${escapeHtml(row.code)}</td>
+                <td>${row.quantity}</td>
+                <td>________</td>
+                <td>________</td>
+                <td>________</td>
+                <td>____________________</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </section>
+    `).join('');
+
+    const printWindow = window.open('', '_blank', 'width=1080,height=1180');
+    if (!printWindow) {
+      toast.error('Please allow pop-ups to print the trip ticket');
+      return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${escapeHtml(contract.contractNumber)} - Dispatch Trip Ticket</title>
+          <style>
+            ${PRINT_DOCUMENT_STYLES}
+          </style>
+        </head>
+        <body>
+          ${getPrintHeaderHtml(
+            'Dispatch & Trip Ticket',
+            'Loading, dispatch, and post-event count sheet. Count all items with the BISOL before loading back, attach photo evidence, then the warehouse performs the second count on return.',
+            [
+              { label: 'Contract Number', value: contract.contractNumber },
+              { label: 'Event Date', value: eventDate.toLocaleDateString() },
+              { label: 'Loading Date', value: `${loadingDate.toLocaleDateString()} (day before event)` },
+              { label: 'Printed', value: new Date().toLocaleString() },
+            ],
+          )}
+          <div class="summary-strip">
+            ${getSummaryLinesHtml([
+              { label: 'Client', value: contract.clientName },
+              { label: 'Venue', value: contract.venue?.name || '-' },
+              { label: 'Venue Address', value: contract.venue?.address || '-' },
+              { label: 'Guest Pax', value: String(pax) },
+              { label: 'Booking Status', value: getLogisticsStatusLabel(assignment?.assignmentStatus || 'pending') },
+              { label: 'BISOL / Supervisor', value: supervisorName || 'To be assigned' },
+            ])}
+          </div>
+          <section class="document-section">
+            <h3 class="section-heading">Fleet & Crew Assignment</h3>
+            <div class="info-grid">
+              <div>
+                ${getDetailListHtml([
+                  { label: 'Truck / Plate No.', value: truckPlate ? `${truckPlate}${truckModel ? ` (${truckModel})` : ''}` : '____________________' },
+                  { label: 'Driver', value: driverName || '____________________' },
+                  { label: 'Driver Contact', value: driverPhone || '____________________' },
+                  { label: 'Additional Truck(s)', value: '____________________' },
+                ])}
+              </div>
+              <div>
+                ${getDetailListHtml([
+                  { label: 'Small Vehicle', value: '____________________' },
+                  { label: 'Account Executive', value: user?.name || '____________________' },
+                  { label: 'Departure Time', value: '____________________' },
+                  { label: 'Return Time', value: '____________________' },
+                ])}
+              </div>
+            </div>
+            <div class="document-note">
+              Standard guideline for ~150 guests: 2 trucks, 1 small vehicle, 1 AE, 1 BISOL on-site supervisor, and a driver per truck.
+              This event (${pax} pax) suggests ${guidelineTrucks} truck${guidelineTrucks === 1 ? '' : 's'} plus 1 small vehicle. Loading may begin the day before the event.
+            </div>
+          </section>
+          ${manifestHtml}
+          <section class="document-section">
+            <h3 class="section-heading">Missing / Damaged Summary</h3>
+            <div class="detail-value">
+              List any missing or damaged items after the second count. The cost of unresolved losses may be charged unless a valid counter-report from the supervisor explains the situation.
+            </div>
+            <table>
+              <thead>
+                <tr><th>Item</th><th>Qty</th><th>Condition / Issue</th><th>Charged To</th></tr>
+              </thead>
+              <tbody>
+                ${'<tr><td>____________________</td><td>______</td><td>____________________________</td><td>____________________</td></tr>'.repeat(3)}
+              </tbody>
+            </table>
+          </section>
+          <section class="document-section">
+            <h3 class="section-heading">Sign-Off (Photo Evidence Attached: &#9633; Yes &nbsp; &#9633; No)</h3>
+            <div class="signature-row">
+              <div class="signature-box">
+                <div class="signature-line">
+                  <span class="signature-role">Driver</span>
+                  <span class="signature-name">${escapeHtml(driverName || '')}</span>
+                  <div class="signature-title">Signature over printed name / date</div>
+                </div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">
+                  <span class="signature-role">BISOL / On-Site Supervisor (Return Count)</span>
+                  <span class="signature-name">${escapeHtml(supervisorName || '')}</span>
+                  <div class="signature-title">Signature over printed name / date</div>
+                </div>
+              </div>
+            </div>
+            <div class="signature-row">
+              <div class="signature-box">
+                <div class="signature-line">
+                  <span class="signature-role">Warehouse Checker (Second Count)</span>
+                  <span class="signature-name"></span>
+                  <div class="signature-title">Signature over printed name / date</div>
+                </div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">
+                  <span class="signature-role">Logistics Officer</span>
+                  <span class="signature-name">${escapeHtml(user?.name || '')}</span>
+                  <div class="signature-title">Signature over printed name / date</div>
+                </div>
+              </div>
+            </div>
+          </section>
+          <div class="document-note">
+            Printed from the logistics section for ${COMPANY_NAME}. Variances found in the second count feed the month-end inventory audit.
           </div>
         </div>
       </div>
@@ -2490,7 +2713,7 @@ export default function ContractDetail() {
             ${getSummaryLinesHtml([
               { label: 'Client', value: contract.clientName },
               { label: 'Venue', value: contract.venue?.name || '-' },
-              { label: 'Guest Packs', value: String(contract.totalPacks || 0) },
+              { label: 'Guest Pax', value: String(contract.totalPacks || 0) },
               { label: 'Ingredient Status', value: formatEnumLabel(contract.ingredientStatus) },
               { label: 'Menu Items', value: String(contract.menuDetails.length) },
               { label: 'Confirmed Items', value: String(contract.menuDetails.filter((item) => item.confirmed).length) },
@@ -2606,7 +2829,7 @@ export default function ContractDetail() {
             ${getSummaryLinesHtml([
               { label: 'Client', value: contract.clientName },
               { label: 'Venue', value: contract.venue?.name || '-' },
-              { label: 'Guest Packs', value: String(contract.totalPacks || 0) },
+              { label: 'Guest Pax', value: String(contract.totalPacks || 0) },
               { label: 'Department', value: INVENTORY_SECTION_LABELS[sectionKey] },
               { label: 'Items Listed', value: String(items.length) },
               { label: 'Total Units', value: String(totalUnits) },
@@ -2721,7 +2944,7 @@ export default function ContractDetail() {
               { label: 'Driver', value: driverLabel },
               { label: 'Truck', value: truckLabel },
               { label: 'Status', value: getLogisticsStatusLabel(logisticsStatusValue) },
-              { label: 'Guest Packs', value: String(contract.totalPacks || 0) },
+              { label: 'Guest Pax', value: String(contract.totalPacks || 0) },
             ])}
           </div>
           <section class="document-section">
@@ -4768,7 +4991,7 @@ export default function ContractDetail() {
                       <span className="font-medium capitalize text-right">{contract.packageSelected}</span>
                     </div>
                     <div className="flex justify-between gap-4">
-                      <span className="text-muted-foreground">Guest Packs</span>
+                      <span className="text-muted-foreground">Guest Pax</span>
                       <span className="font-medium text-right">{contract.totalPacks}</span>
                     </div>
                   </CardContent>
@@ -4800,7 +5023,7 @@ export default function ContractDetail() {
                     <span className="font-medium capitalize">{contract.packageSelected}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Total Packs</span>
+                    <span className="text-muted-foreground">Total Pax</span>
                     <span className="font-medium">{contract.totalPacks}</span>
                   </div>
                 </CardContent>
@@ -4918,7 +5141,7 @@ export default function ContractDetail() {
                       <p className="mt-1 text-sm font-semibold text-slate-900">{formatStatusLabel(contract.status)}</p>
                     </div>
                     <div className="rounded-lg border bg-slate-50 px-4 py-3">
-                      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">Guest Packs</p>
+                      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">Guest Pax</p>
                       <p className="mt-1 text-sm font-semibold text-slate-900">{contract.totalPacks || 0}</p>
                     </div>
                   </CardContent>
@@ -5114,7 +5337,7 @@ export default function ContractDetail() {
               <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="h-5 w-5" />
+                  <PhilippinePeso className="h-5 w-5" />
                   Payment Information
                 </CardTitle>
                 {canPostPayments && (
@@ -5741,6 +5964,10 @@ export default function ContractDetail() {
                       Print Dispatch Sheet
                     </Button>
                   ) : null}
+                  <Button variant="outline" size="sm" data-print-hide="true" onClick={handlePrintLogisticsTripTicket}>
+                    <Printer className="mr-2 h-4 w-4" />
+                    Print Trip Ticket
+                  </Button>
                   {isPreSignatureStage ? renderReferenceBadge() : null}
                   {renderTabEditButton('event')}
                 </div>
@@ -6072,7 +6299,13 @@ export default function ContractDetail() {
                                   placeholder="Truck, loading plan, dispatch notes, or reminders"
                                 />
                               </div>
-                              <Button data-print-hide="true" onClick={() => void handleUpdateLogisticsAssignment()}>Save Truck Booking</Button>
+                              <div className="flex flex-wrap gap-2" data-print-hide="true">
+                                <Button onClick={() => void handleUpdateLogisticsAssignment()}>Save Truck Booking</Button>
+                                <Button variant="outline" onClick={handlePrintLogisticsTripTicket}>
+                                  <Printer className="mr-2 h-4 w-4" />
+                                  Print Trip Ticket
+                                </Button>
+                              </div>
                             </>
                           )}
                           <div className="space-y-2">
