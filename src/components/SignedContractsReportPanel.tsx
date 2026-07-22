@@ -45,7 +45,7 @@ interface SignedContract {
 const COMPANY_NAME = 'Juan Carlos Catering Services';
 const formatDate = (value?: string) => (value ? new Date(value).toLocaleDateString() : '-');
 const formatDateTime = (value?: string) => (value ? new Date(value).toLocaleString() : '-');
-const formatCurrency = (value?: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value || 0);
+const formatCurrency = (value?: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value || 0);
 const escapeHtml = (value?: string) => String(value || '-').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const hasEsign = (contract: SignedContract) => Boolean(contract.signatureAssets?.client?.imageUrl && contract.signatureAssets?.staff?.imageUrl);
 const hasManualCopy = (contract: SignedContract) => Boolean(contract.signedDocument?.fileUrl);

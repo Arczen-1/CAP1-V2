@@ -227,6 +227,22 @@ const getPaymentHoldError = (contract) => (
     : null
 );
 
+// 7-day material freeze: from 7 days before the event through the event day,
+// materials reserved for the contract are locked to it. Releasing prepared
+// items or editing the material lists is blocked; moving preparation forward
+// (pending -> prepared) stays allowed. Admin acts as the management override.
+const isMaterialFreezeActive = (contract) => {
+  if (!contract?.eventDate) {
+    return false;
+  }
+
+  const todayStart = startOfDay(new Date());
+  return todayStart >= addDays(startOfDay(contract.eventDate), -7)
+    && todayStart <= endOfDay(contract.eventDate);
+};
+
+const MATERIAL_FREEZE_MESSAGE = 'Material freeze is active: within 7 days of the event, reserved materials are locked to this event and can no longer be released or reassigned. Ask management if an exception is required.';
+
 const notifyRolesForContract = async ({
   contract,
   roles = [],
@@ -301,6 +317,56 @@ const notifyDepartmentsForContract = async ({
     department,
     excludeUserId
   })));
+};
+
+// One-shot "everything is ready" alert: the moment every department involved
+// in an approved event finishes its preparation, Sales / Accounting / Admin
+// are told, instead of having to keep polling the readiness panel.
+const maybeNotifyPreparationComplete = async (contract) => {
+  if (contract.status !== 'approved' || contract.paymentHold?.active) {
+    return;
+  }
+
+  const menuItems = contract.menuDetails || [];
+  if (menuItems.length === 0) {
+    return;
+  }
+
+  const kitchenReady = menuItems.every((item) => item.confirmed)
+    && contract.ingredientStatus === 'prepared';
+
+  const logisticsStatus = contract.logisticsAssignment?.assignmentStatus || 'pending';
+  const logisticsReady = Boolean(contract.logisticsAssignment?.truck)
+    && ['scheduled', 'ready_for_dispatch', 'dispatched', 'completed'].includes(logisticsStatus);
+
+  const banquetReady = (contract.banquetAssignment?.assignments || []).length > 0;
+
+  const inventorySectionsReady = ['creativeAssets', 'linenRequirements', 'equipmentChecklist']
+    .every((section) => {
+      const items = contract[section] || [];
+      return items.length === 0
+        || items.every((item) => normalizeChecklistStatus(item.status) === 'prepared');
+    });
+
+  if (!kitchenReady || !logisticsReady || !banquetReady || !inventorySectionsReady) {
+    return;
+  }
+
+  const title = `All departments ready for ${contract.contractNumber}`;
+  const alreadySent = await Notification.exists({ contract: contract._id, type: 'task_assigned', title });
+  if (alreadySent) {
+    return;
+  }
+
+  await notifyRolesForContract({
+    contract,
+    roles: ['sales', 'accounting', 'admin'],
+    type: 'task_assigned',
+    title,
+    message: `Kitchen, logistics, banquet, and every inventory department finished preparing ${contract.clientName}'s event on ${formatDateLabel(contract.eventDate)}. The event is ready for execution.`,
+    priority: 'high',
+    actionLabel: 'View readiness'
+  });
 };
 
 const getInventoryValidationDepartments = (contract) => {
@@ -400,6 +466,10 @@ const roundToTwo = (value) => {
   return Math.round((value || 0) * 100) / 100;
 };
 
+// Money comparisons tolerate half a centavo so floating-point drift from
+// summing payments never blocks settling the exact displayed balance.
+const MONEY_EPSILON = 0.005;
+
 const formatDateLabel = (value) => new Date(value).toLocaleDateString('en-US', {
   month: 'long',
   day: 'numeric',
@@ -409,8 +479,8 @@ const formatDateLabel = (value) => new Date(value).toLocaleDateString('en-US', {
 const formatCurrencyForNotification = (value) => new Intl.NumberFormat('en-PH', {
   style: 'currency',
   currency: 'PHP',
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
 }).format(Number(value) || 0);
 
 const normalizeVenueKey = (value) => String(value || '')
@@ -1067,21 +1137,23 @@ const getPaymentMilestones = (contract) => {
   const downPaymentRate = downPaymentPercent / 100;
   const finalPaymentRate = finalPaymentPercent / 100;
   const fullPaymentPlan = downPaymentRate >= 1 || finalPaymentRate <= 0;
-  const totalPaid = (contract.payments || [])
+  const totalPaid = roundToTwo((contract.payments || [])
     .filter(payment => payment.status === 'completed')
-    .reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+    .reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0));
   const requiredDownPayment = roundToTwo(totalContractValue * downPaymentRate);
   const finalBalanceAmount = roundToTwo(Math.max(0, totalContractValue - requiredDownPayment));
-  const remainingBalance = Math.max(0, totalContractValue - totalPaid);
+  const remainingBalance = roundToTwo(Math.max(0, totalContractValue - totalPaid));
   const bookingDate = contract.bookingDate || contract.createdAt || new Date();
   const fortyPercentDueDate = addMonths(bookingDate, 2);
   const fortyPercentFollowUpDate = addMonths(fortyPercentDueDate, -1);
   const finalBalanceDueDate = getFinalPaymentDueDate(contract);
   const agingEndsAt = addDays(fortyPercentDueDate, PAYMENT_AGING_WINDOW_DAYS);
   const today = new Date();
-  const reservationFeePaid = totalPaid >= Math.min(reservationFee, totalContractValue);
-  const downPaymentSatisfied = fullPaymentPlan ? totalPaid >= totalContractValue : totalPaid >= requiredDownPayment;
-  const fullyPaid = totalPaid >= totalContractValue;
+  const reservationFeePaid = totalPaid + MONEY_EPSILON >= Math.min(reservationFee, totalContractValue);
+  const downPaymentSatisfied = fullPaymentPlan
+    ? totalPaid + MONEY_EPSILON >= totalContractValue
+    : totalPaid + MONEY_EPSILON >= requiredDownPayment;
+  const fullyPaid = totalPaid + MONEY_EPSILON >= totalContractValue;
   const fortyPercentPastDue = !downPaymentSatisfied && today > endOfDay(fortyPercentDueDate);
   const uncollectible = !downPaymentSatisfied && today > endOfDay(agingEndsAt);
   const finalBalancePastDue = !fullyPaid && today > endOfDay(finalBalanceDueDate);
@@ -1108,9 +1180,9 @@ const getPaymentMilestones = (contract) => {
     requiredDownPayment,
     finalBalanceAmount,
     remainingBalance,
-    remainingReservationFee: Math.max(0, Math.min(reservationFee, totalContractValue) - totalPaid),
-    remainingDownPayment: Math.max(0, requiredDownPayment - totalPaid),
-    remainingFinalBalance: Math.max(0, totalContractValue - Math.max(totalPaid, requiredDownPayment)),
+    remainingReservationFee: roundToTwo(Math.max(0, Math.min(reservationFee, totalContractValue) - totalPaid)),
+    remainingDownPayment: roundToTwo(Math.max(0, requiredDownPayment - totalPaid)),
+    remainingFinalBalance: roundToTwo(Math.max(0, totalContractValue - Math.max(totalPaid, requiredDownPayment))),
     bookingDate,
     fortyPercentDueDate,
     fortyPercentFollowUpDate,
@@ -1570,7 +1642,7 @@ const buildOperationsSummary = async (contract) => {
       daysUntilEvent,
       label: materialFreezeActive ? 'Material freeze active' : 'Material freeze pending',
       note: materialFreezeActive
-        ? 'This event is inside the 1-week material freeze window. Inventory reservations should be treated as locked for this event.'
+        ? 'This event is inside the 1-week material freeze window. Reserved materials are locked to this event: item lists cannot be edited and prepared items cannot be released without a management override.'
         : 'Materials remain editable until the 1-week freeze window starts.'
     },
     logistics: {
@@ -1868,6 +1940,12 @@ router.put('/:id', auth, async (req, res) => {
       }
     }
 
+    const materialSectionFields = ['equipmentChecklist', 'creativeAssets', 'linenRequirements'];
+    const touchesMaterialSections = materialSectionFields.some((field) => field in req.body);
+    if (touchesMaterialSections && isMaterialFreezeActive(contract) && req.user.role !== 'admin') {
+      return res.status(400).json({ message: MATERIAL_FREEZE_MESSAGE });
+    }
+
     resetSectionConfirmationsForPayload(contract, req.body);
     Object.assign(contract, req.body);
 
@@ -1928,6 +2006,7 @@ router.put('/:id/kitchen-menu-item', auth, requireRole(['kitchen', 'admin']), as
 
     contract.menuDetails[itemIndex].confirmed = Boolean(confirmed);
     await contract.save();
+    await maybeNotifyPreparationComplete(contract);
 
     res.json(contract);
   } catch (error) {
@@ -1964,6 +2043,7 @@ router.put('/:id/kitchen-ingredient-status', auth, requireRole(['kitchen', 'admi
 
     contract.ingredientStatus = status;
     await contract.save();
+    await maybeNotifyPreparationComplete(contract);
 
     res.json(contract);
   } catch (error) {
@@ -2321,13 +2401,13 @@ router.post('/:id/approve', auth, requireRole(['accounting', 'admin']), async (r
       return res.status(400).json({
         message: paymentMilestones.fullPaymentPlan
           ? `Full payment (${paymentMilestones.requiredDownPayment.toFixed(2)}) is required before approval for preparation`
-          : `The 40% collection milestone (${paymentMilestones.requiredDownPayment.toFixed(2)}) must be posted before approval for preparation. The PHP ${paymentMilestones.reservationFee.toFixed(2)} reservation fee is part of the first collection.`
+          : `The ${Math.round(paymentMilestones.downPaymentRate * 100)}% collection milestone (${paymentMilestones.requiredDownPayment.toFixed(2)}) must be posted before approval for preparation. The PHP ${paymentMilestones.reservationFee.toFixed(2)} reservation fee is part of the first collection.`
       });
     }
 
     if (!paymentMilestones.fullyPaid && new Date() > endOfDay(paymentMilestones.finalBalanceDueDate)) {
       return res.status(400).json({
-        message: `The final 60% balance must be fully settled by ${paymentMilestones.finalBalanceDueDate.toLocaleDateString('en-PH')} before the event can proceed`
+        message: `The remaining balance must be fully settled by ${paymentMilestones.finalBalanceDueDate.toLocaleDateString('en-PH')} before the event can proceed`
       });
     }
 
@@ -2418,6 +2498,67 @@ router.post('/:id/complete', auth, requireRole(['accounting', 'admin']), async (
     };
 
     await contract.save();
+
+    await notifyRolesForContract({
+      contract,
+      roles: ['sales', 'admin'],
+      type: 'contract_approved',
+      title: `Contract closed: ${contract.contractNumber}`,
+      message: `${contract.clientName}'s event is fully settled and all post-event checks are recorded. The contract is now closed.`,
+      priority: 'medium',
+      actionLabel: 'View contract',
+      excludeUserId: req.user._id
+    });
+
+    res.json(contract);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Cancel a contract. Per policy a cancellation needs a formal letter reviewed
+// by Execom outside the system, so only management records the outcome here.
+// The reservation fee and any collected milestones stay non-refundable.
+router.post('/:id/cancel', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const reason = String(req.body?.reason || '').trim();
+    if (!reason) {
+      return res.status(400).json({ message: 'A cancellation reason (per the formal cancellation letter) is required' });
+    }
+
+    const contract = await Contract.findById(req.params.id);
+
+    if (!contract) {
+      return res.status(404).json({ message: 'Contract not found' });
+    }
+
+    if (['completed', 'cancelled'].includes(contract.status)) {
+      return res.status(400).json({ message: `Contract is already ${contract.status}` });
+    }
+
+    contract.status = 'cancelled';
+    contract.internalNotes = [contract.internalNotes, `Cancelled on ${formatDateLabel(new Date())}: ${reason}`]
+      .filter(Boolean)
+      .join('\n');
+    if (contract.paymentHold?.active) {
+      contract.paymentHold.active = false;
+      contract.paymentHold.releasedAt = new Date();
+      contract.paymentHold.overrideNote = 'Hold cleared - contract cancelled.';
+    }
+    await contract.save();
+
+    const involvedDepartments = ['sales', 'accounting', 'kitchen', 'banquet', 'logistics', ...getInventoryValidationDepartments(contract)];
+    await notifyDepartmentsForContract({
+      contract,
+      departments: involvedDepartments,
+      type: 'contract_auto_cancelled',
+      title: `Contract cancelled: ${contract.contractNumber}`,
+      message: `${contract.clientName}'s event on ${formatDateLabel(contract.eventDate)} was cancelled by management. Reason: ${reason}. Stop preparation for this event; collected payments remain non-refundable pending Execom review.`,
+      priority: 'high',
+      actionLabel: 'View contract',
+      excludeUserId: req.user._id
+    });
+
     res.json(contract);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -2528,6 +2669,7 @@ router.put('/:id/logistics-assignment', auth, requireRole(['logistics', 'admin']
     contract.departmentProgress.logistics = logisticsProgressMap[contract.logisticsAssignment.assignmentStatus] || 0;
 
     await contract.save();
+    await maybeNotifyPreparationComplete(contract);
 
     const updatedContract = await Contract.findById(contract._id)
       .populate('logisticsAssignment.driver', 'driverId fullName status phone')
@@ -2677,6 +2819,7 @@ router.put('/:id/banquet-assignment', auth, requireRole(['banquet_supervisor', '
     };
 
     await contract.save();
+    await maybeNotifyPreparationComplete(contract);
 
     const updatedContract = await Contract.findById(contract._id)
       .populate('assignedSupervisor', 'name email');
@@ -2727,6 +2870,14 @@ router.put('/:id/inventory-item-status', auth, async (req, res) => {
     }
 
     const nextStatus = normalizeChecklistStatus(status);
+    const currentStatus = normalizeChecklistStatus(items[itemIndex].status);
+    const releasesReservedItem = sectionRules.readyStatuses.includes(currentStatus)
+      && !sectionRules.readyStatuses.includes(nextStatus);
+
+    if (releasesReservedItem && isMaterialFreezeActive(contract) && req.user.role !== 'admin') {
+      return res.status(400).json({ message: MATERIAL_FREEZE_MESSAGE });
+    }
+
     items[itemIndex].status = nextStatus;
     contract.departmentProgress[sectionRules.progressKey] = calculateProgressFromItems(items, sectionRules.readyStatuses);
 
@@ -2735,6 +2886,7 @@ router.put('/:id/inventory-item-status', auth, async (req, res) => {
     }
 
     await contract.save();
+    await maybeNotifyPreparationComplete(contract);
 
     res.json(contract);
   } catch (error) {
@@ -2906,13 +3058,22 @@ router.post('/:id/payment', auth, requireRole(['accounting', 'admin']), [
       return res.status(400).json({ message: 'Payments can only be posted after the client has signed the contract' });
     }
 
+    const amount = roundToTwo(Number(req.body.amount));
+    const milestonesBefore = getPaymentMilestones(contract);
+    if (amount > milestonesBefore.remainingBalance + MONEY_EPSILON) {
+      return res.status(400).json({
+        message: `Payment cannot be higher than the remaining contract balance of ${formatCurrencyForNotification(milestonesBefore.remainingBalance)}`
+      });
+    }
+
     contract.payments.push({
       ...req.body,
+      amount,
       receiptIssuedBy: 'Juan Carlos',
       receiptGeneratedAt: new Date(),
       status: req.body.status || 'completed'
     });
-    
+
     const paymentMilestones = getPaymentMilestones(contract);
 
     if (paymentMilestones.fullyPaid) {
@@ -2942,12 +3103,19 @@ router.post('/:id/payment', auth, requireRole(['accounting', 'admin']), [
     });
 
     if (['submitted', 'accounting_review'].includes(contract.status) && paymentMilestones.downPaymentSatisfied) {
+      const downPaymentPercentLabel = `${Math.round(paymentMilestones.downPaymentRate * 100)}%`;
+      const milestoneTitle = paymentMilestones.fullyPaid
+        ? `Full payment received for ${contract.contractNumber}`
+        : `${downPaymentPercentLabel} collection milestone met for ${contract.contractNumber}`;
+      const milestoneMessage = paymentMilestones.fullyPaid
+        ? `${contract.clientName}'s contract is now fully paid. Accounting can approve the contract for preparation if no purchasing requirements are pending.`
+        : `${contract.clientName}'s required ${downPaymentPercentLabel} collection milestone is met. Accounting can approve the contract for preparation if no purchasing requirements are pending.`;
       await notifyDepartmentsForContract({
         contract,
         departments: ['accounting'],
         type: 'payment_received',
-        title: `40% collection milestone met for ${contract.contractNumber}`,
-        message: `${contract.clientName}'s required 40% collection milestone is met. Accounting can approve the contract for preparation if no purchasing requirements are pending.`,
+        title: milestoneTitle,
+        message: milestoneMessage,
         priority: 'high',
         actionLabel: 'Approve preparation'
       });

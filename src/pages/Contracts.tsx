@@ -543,9 +543,14 @@ export default function Contracts() {
                                 {(() => {
                                   const stage = getContractStage(contract, role);
                                   return (
-                                    <Badge variant="outline" className={stage.badgeClass || getStatusColor(contract.status)}>
-                                      {stage.label}
-                                    </Badge>
+                                    <div className="space-y-1">
+                                      <Badge variant="outline" className={stage.badgeClass || getStatusColor(contract.status)}>
+                                        {stage.label}
+                                      </Badge>
+                                      {stage.owner && (
+                                        <p className="text-xs text-muted-foreground">with {stage.owner}</p>
+                                      )}
+                                    </div>
                                   );
                                 })()}
                               </TableCell>
@@ -586,9 +591,14 @@ export default function Contracts() {
                                 {(() => {
                                   const stage = getContractStage(contract, role);
                                   return (
-                                    <Badge variant="outline" className={stage.badgeClass || getStatusColor(contract.status)}>
-                                      {stage.label}
-                                    </Badge>
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <Badge variant="outline" className={stage.badgeClass || getStatusColor(contract.status)}>
+                                        {stage.label}
+                                      </Badge>
+                                      {stage.owner && (
+                                        <span className="text-xs text-muted-foreground">with {stage.owner}</span>
+                                      )}
+                                    </span>
                                   );
                                 })()}
                               </div>

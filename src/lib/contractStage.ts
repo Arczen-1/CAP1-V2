@@ -18,12 +18,20 @@ export interface ContractStageSource {
     reason?: string;
     managementOverride?: boolean;
   };
+  eventDate?: string | Date;
+  paymentStatus?: string;
+  payments?: Array<{ amount: number; status?: string }>;
+  totalContractValue?: number;
+  downPaymentPercent?: number;
+  finalPaymentPercent?: number;
 }
 
 export interface ContractStage {
   key: string;
   label: string;
   badgeClass?: string;
+  // Which side of the workflow currently holds the ball for this contract.
+  owner?: string;
 }
 
 const INVENTORY_ROLE_SECTIONS: Record<string, {
@@ -51,11 +59,12 @@ export const getContractStage = (contract: ContractStageSource, viewerRole?: str
       key: 'final_balance_hold',
       label: 'Final Balance Overdue / On Hold',
       badgeClass: 'bg-red-100 text-red-800 border-red-200',
+      owner: 'Accounting',
     };
   }
 
   if (contract.status !== 'draft') {
-    return { key: contract.status, label: contract.status.replace(/_/g, ' ') };
+    return getPostDraftStage(contract);
   }
 
   const confirmations = contract.sectionConfirmations || {};
@@ -101,5 +110,115 @@ export const getContractStage = (contract: ContractStageSource, viewerRole?: str
     key: 'ready_for_signature',
     label: 'Ready For Signature',
     badgeClass: 'bg-teal-100 text-teal-800 border-teal-200',
+    owner: 'Sales',
   };
+};
+
+// Post-draft statuses previously surfaced only the raw enum value, which made
+// it hard to tell which team owns the contract or what phase the event is in.
+// Every stage now carries an owner and a distinct color.
+const getPostDraftStage = (contract: ContractStageSource): ContractStage => {
+  switch (contract.status) {
+    case 'pending_client_signature':
+      return {
+        key: 'pending_client_signature',
+        label: 'Awaiting Client Signature',
+        badgeClass: 'bg-amber-100 text-amber-900 border-amber-200',
+        owner: 'Sales',
+      };
+    case 'submitted':
+    case 'accounting_review': {
+      return isDownPaymentMilestoneMet(contract)
+        ? {
+          key: 'ready_for_preparation_approval',
+          label: 'Ready For Preparation Approval',
+          badgeClass: 'bg-blue-100 text-blue-800 border-blue-200',
+          owner: 'Accounting',
+        }
+        : {
+          key: 'collecting_down_payment',
+          label: 'Collecting Down Payment',
+          badgeClass: 'bg-orange-100 text-orange-800 border-orange-200',
+          owner: 'Accounting',
+        };
+    }
+    case 'approved': {
+      const eventDate = contract.eventDate ? new Date(contract.eventDate) : null;
+      if (eventDate) {
+        const endOfEventDay = new Date(eventDate);
+        endOfEventDay.setHours(23, 59, 59, 999);
+        const daysUntilEvent = Math.ceil((eventDate.setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000);
+
+        if (new Date() > endOfEventDay) {
+          return {
+            key: 'post_event_checks',
+            label: 'Post-Event Checks',
+            badgeClass: 'bg-cyan-100 text-cyan-800 border-cyan-200',
+            owner: 'Departments & Accounting',
+          };
+        }
+
+        if (daysUntilEvent >= 0 && daysUntilEvent <= 7) {
+          return {
+            key: 'event_week_freeze',
+            label: 'Event Week - Materials Frozen',
+            badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+            owner: 'Departments',
+          };
+        }
+      }
+
+      return {
+        key: 'in_preparation',
+        label: 'In Preparation',
+        badgeClass: 'bg-violet-100 text-violet-800 border-violet-200',
+        owner: 'Departments',
+      };
+    }
+    case 'completed':
+      return {
+        key: 'completed',
+        label: 'Closed',
+        badgeClass: 'bg-green-100 text-green-800 border-green-200',
+      };
+    case 'cancelled':
+      return {
+        key: 'cancelled',
+        label: 'Cancelled',
+        badgeClass: 'bg-gray-200 text-gray-700 border-gray-300',
+      };
+    case 'rejected':
+      return {
+        key: 'rejected',
+        label: 'Rejected',
+        badgeClass: 'bg-red-100 text-red-800 border-red-200',
+        owner: 'Sales',
+      };
+    default:
+      return { key: contract.status, label: contract.status.replace(/_/g, ' ') };
+  }
+};
+
+// Mirrors the backend milestone rule: the down payment (40% by default, full
+// payment on 100/0 corporate terms) is met when completed payments cover it,
+// with a half-centavo tolerance for floating-point drift.
+const isDownPaymentMilestoneMet = (contract: ContractStageSource): boolean => {
+  const total = Number(contract.totalContractValue) || 0;
+  if (!total || !Array.isArray(contract.payments)) {
+    return contract.paymentStatus === 'paid';
+  }
+
+  const paid = Math.round(contract.payments
+    .filter((payment) => (payment.status || 'completed') === 'completed')
+    .reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0) * 100) / 100;
+
+  const rawDown = Number(contract.downPaymentPercent);
+  const rawFinal = Number(contract.finalPaymentPercent);
+  const fullPaymentPlan = rawDown >= 100 || rawFinal <= 0;
+  const downPercent = fullPaymentPlan
+    ? 100
+    : (Number.isFinite(rawDown) && rawDown > 0 && rawDown < 100 ? rawDown : 40);
+  const required = Math.round(total * downPercent) / 100;
+
+  return paid + 0.005 >= required;
 };

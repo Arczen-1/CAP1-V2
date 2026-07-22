@@ -500,8 +500,8 @@ const READINESS_STATUS_META: Record<ReadinessStatus, { label: string; badgeClass
   },
   blocked: {
     label: 'Blocked',
-    badgeClassName: 'border-amber-200 bg-amber-100 text-amber-900',
-    cardClassName: 'border-amber-200 bg-amber-50/80',
+    badgeClassName: 'border-red-200 bg-red-100 text-red-800',
+    cardClassName: 'border-red-200 bg-red-50/80',
   },
   not_started: {
     label: 'Not Started',
@@ -741,6 +741,7 @@ export default function ContractDetail() {
   const [isSavingEsignatures, setIsSavingEsignatures] = useState(false);
   const [isClosingContract, setIsClosingContract] = useState(false);
   const [isDeletingContract, setIsDeletingContract] = useState(false);
+  const [isCancellingContract, setIsCancellingContract] = useState(false);
   const [incidentDialogOpen, setIncidentDialogOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
@@ -1137,6 +1138,28 @@ export default function ContractDetail() {
     }
   };
 
+  const handleCancelContract = async () => {
+    if (!contract) return;
+
+    const reason = window.prompt('Cancellation reason (per the formal cancellation letter reviewed by Execom):');
+    if (reason === null) return;
+    if (!reason.trim()) {
+      toast.error('A cancellation reason is required');
+      return;
+    }
+
+    try {
+      setIsCancellingContract(true);
+      await api.cancelContract(id!, reason.trim());
+      toast.success('Contract cancelled. All involved departments were notified.');
+      fetchContractData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to cancel contract');
+    } finally {
+      setIsCancellingContract(false);
+    }
+  };
+
   const handleReleasePaymentHold = async () => {
     if (!contract) return;
 
@@ -1165,9 +1188,11 @@ export default function ContractDetail() {
       const completedPaymentsTotal = contract.payments
         ?.filter(payment => payment.status === 'completed')
         .reduce((sum, payment) => sum + payment.amount, 0) || 0;
-      const balanceRemaining = Math.max(0, (contract.totalContractValue || 0) - completedPaymentsTotal);
+      // Round to centavos and allow half a centavo of float drift so paying the
+      // exact displayed remaining balance is never rejected.
+      const balanceRemaining = Math.round(Math.max(0, (contract.totalContractValue || 0) - completedPaymentsTotal) * 100) / 100;
 
-      if (Number(paymentAmount) > balanceRemaining) {
+      if (Number(paymentAmount) > balanceRemaining + 0.005) {
         toast.error('Payment cannot be higher than the remaining contract balance');
         return;
       }
@@ -1697,8 +1722,8 @@ export default function ContractDetail() {
     return new Intl.NumberFormat('en-PH', {
       style: 'currency',
       currency: 'PHP',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(value || 0);
   };
 
@@ -4694,7 +4719,7 @@ export default function ContractDetail() {
       label: 'Driver assignment',
       ready: Boolean(selectedLogisticsDriver),
       detail: selectedLogisticsDriver
-        ? `${selectedLogisticsDriver.fullName} (${selectedLogisticsDriver.driverId}) is assigned for the event date.`
+        ? `${selectedLogisticsDriver.fullName || selectedLogisticsDriver.driverId} (${selectedLogisticsDriver.driverId}) is assigned for the event date.`
         : 'Assign a driver before dispatch can be confirmed.',
     },
     {
@@ -4768,9 +4793,14 @@ export default function ContractDetail() {
                 {(() => {
                   const stage = getContractStage(contract, role);
                   return (
-                    <Badge className={stage.badgeClass || getStatusColor(contract.status)}>
-                      {stage.label}
-                    </Badge>
+                    <span className="inline-flex items-center gap-2">
+                      <Badge className={stage.badgeClass || getStatusColor(contract.status)}>
+                        {stage.label}
+                      </Badge>
+                      {stage.owner && (
+                        <span className="text-sm text-muted-foreground">with {stage.owner}</span>
+                      )}
+                    </span>
                   );
                 })()}
                 {contract.clientSigned && (
@@ -4867,6 +4897,17 @@ export default function ContractDetail() {
               >
                 <CheckCircle className="mr-2 h-4 w-4" />
                 {isClosingContract ? 'Closing...' : 'Close Contract'}
+              </Button>
+            )}
+
+            {isAdmin() && contract && !['completed', 'cancelled'].includes(contract.status) && (
+              <Button
+                variant="outline"
+                className="border-red-200 text-red-700 hover:bg-red-50"
+                onClick={handleCancelContract}
+                disabled={isCancellingContract}
+              >
+                {isCancellingContract ? 'Cancelling...' : 'Cancel Contract'}
               </Button>
             )}
 
@@ -6233,6 +6274,55 @@ export default function ContractDetail() {
                       </div>
                     </div>
 
+                    <Card className="border-slate-200">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Load Manifest - What To Bring</CardTitle>
+                        <p className="text-sm text-muted-foreground">
+                          Every item assigned to this event, with its preparation status. Loading may begin the day before the event; quantities match the printed trip ticket.
+                        </p>
+                      </CardHeader>
+                      <CardContent className="space-y-5">
+                        {([
+                          { title: 'Stockroom & Equipment', rows: (contract.equipmentChecklist || []).map((item: any) => ({ name: item.item || 'Equipment item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0, status: item.status || 'pending' })) },
+                          { title: 'Linen', rows: (contract.linenRequirements || []).map((item: any) => ({ name: item.type || 'Linen item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0, status: item.status || 'pending' })) },
+                          { title: 'Creative & Decor', rows: (contract.creativeAssets || []).map((item: any) => ({ name: item.item || 'Creative item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0, status: item.status || 'pending' })) },
+                        ].filter((section) => section.rows.length > 0)).map((section) => (
+                          <div key={section.title}>
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{section.title}</p>
+                            <div className="overflow-x-auto rounded-lg border">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b bg-muted/50 text-left">
+                                    <th className="px-3 py-2 font-medium">Item</th>
+                                    <th className="px-3 py-2 font-medium">Code</th>
+                                    <th className="px-3 py-2 font-medium">Qty To Load</th>
+                                    <th className="px-3 py-2 font-medium">Preparation</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {section.rows.map((row, index) => (
+                                    <tr key={`${section.title}-${row.name}-${index}`} className="border-b last:border-b-0">
+                                      <td className="px-3 py-2">{row.name}</td>
+                                      <td className="px-3 py-2 text-muted-foreground">{row.code}</td>
+                                      <td className="px-3 py-2 font-semibold">{row.quantity}</td>
+                                      <td className="px-3 py-2">
+                                        <Badge className={row.status === 'prepared' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
+                                          {row.status === 'prepared' ? 'Prepared' : 'Pending'}
+                                        </Badge>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ))}
+                        {((contract.equipmentChecklist || []).length + (contract.linenRequirements || []).length + (contract.creativeAssets || []).length) === 0 && (
+                          <p className="text-sm text-muted-foreground">No inventory items are assigned to this contract yet.</p>
+                        )}
+                      </CardContent>
+                    </Card>
+
                     <div className="space-y-4">
                       <Card className="border-slate-200 bg-slate-50/50">
                         <CardHeader className="pb-3">
@@ -6248,7 +6338,7 @@ export default function ContractDetail() {
                           </div>
                           <div className="rounded-xl border bg-background p-4">
                             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Booked Driver</p>
-                            <p className="mt-1 font-semibold">{savedLogisticsDriver?.fullName || selectedLogisticsDriver?.fullName || 'Not assigned yet'}</p>
+                            <p className="mt-1 font-semibold">{savedLogisticsDriver?.fullName || selectedLogisticsDriver?.fullName || savedLogisticsDriver?.driverId || selectedLogisticsDriver?.driverId || 'Not assigned yet'}</p>
                             <p className="text-sm text-muted-foreground">
                               {savedLogisticsDriver?.driverId || selectedLogisticsDriver?.driverId || 'No driver assigned'}
                             </p>
@@ -6345,7 +6435,7 @@ export default function ContractDetail() {
                                       <SelectItem value="__none__">No driver assigned yet</SelectItem>
                                       {logisticsDriverOptions.map((driver) => (
                                         <SelectItem key={driver._id} value={driver._id}>
-                                          {driver.fullName} ({driver.driverId})
+                                          {driver.fullName || driver.driverId} ({driver.driverId})
                                         </SelectItem>
                                       ))}
                                     </SelectContent>

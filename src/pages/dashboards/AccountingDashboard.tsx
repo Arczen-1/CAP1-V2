@@ -106,8 +106,8 @@ const ACCOUNTING_STATUS_OPTIONS: Array<{ value: AccountingStatusFilter; label: s
 const formatCurrency = (value = 0) => new Intl.NumberFormat('en-PH', {
   style: 'currency',
   currency: 'PHP',
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 }).format(value);
 
 const formatStatusLabel = (value?: string) => (value || '').replace(/_/g, ' ');

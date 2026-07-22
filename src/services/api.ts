@@ -232,6 +232,13 @@ class ApiService {
     });
   }
 
+  async cancelContract(id: string, reason: string) {
+    return this.request(`/contracts/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    });
+  }
+
   async updateLogisticsAssignment(id: string, data: any) {
     return this.request(`/contracts/${id}/logistics-assignment`, {
       method: 'PUT',

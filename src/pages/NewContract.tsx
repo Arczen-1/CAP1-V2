@@ -568,8 +568,8 @@ const LINEN_SETUP_RULES: Record<'tablecloths', InventoryMatchRule> = {
 const pesoFormatter = new Intl.NumberFormat('en-PH', {
   style: 'currency',
   currency: 'PHP',
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 });
 
 const formatCurrency = (amount: number) => pesoFormatter.format(amount || 0);

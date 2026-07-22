@@ -21,6 +21,8 @@ const endOfDay = (value) => { const d = new Date(value); d.setHours(23, 59, 59, 
 const addDays = (value, days) => { const d = new Date(value); d.setDate(d.getDate() + days); return d; };
 const addMonths = (value, months) => { const d = new Date(value); d.setMonth(d.getMonth() + months); return d; };
 const roundToTwo = (value) => Math.round((value || 0) * 100) / 100;
+// Tolerate half a centavo of floating-point drift when comparing money.
+const MONEY_EPSILON = 0.005;
 
 const getNormalizedPaymentSplit = (contract = {}) => {
   const rawDown = Number(contract.downPaymentPercent);
@@ -51,9 +53,9 @@ const getPaymentMilestones = (contract) => {
   const { downPaymentPercent, finalPaymentPercent } = getNormalizedPaymentSplit(contract);
   const downPaymentRate = downPaymentPercent / 100;
   const fullPaymentPlan = downPaymentRate >= 1 || finalPaymentPercent <= 0;
-  const totalPaid = (contract.payments || [])
+  const totalPaid = roundToTwo((contract.payments || [])
     .filter((payment) => payment.status === 'completed')
-    .reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+    .reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0));
   const requiredDownPayment = roundToTwo(totalContractValue * downPaymentRate);
   const bookingDate = contract.bookingDate || contract.createdAt || new Date();
   const fortyPercentDueDate = addMonths(bookingDate, 2);
@@ -61,13 +63,17 @@ const getPaymentMilestones = (contract) => {
   const finalBalanceDueDate = getFinalPaymentDueDate(contract);
   const agingEndsAt = addDays(fortyPercentDueDate, PAYMENT_AGING_WINDOW_DAYS);
   const now = new Date();
-  const downPaymentSatisfied = fullPaymentPlan ? totalPaid >= totalContractValue : totalPaid >= requiredDownPayment;
-  const fullyPaid = totalPaid >= totalContractValue;
+  const downPaymentSatisfied = fullPaymentPlan
+    ? totalPaid + MONEY_EPSILON >= totalContractValue
+    : totalPaid + MONEY_EPSILON >= requiredDownPayment;
+  const fullyPaid = totalPaid + MONEY_EPSILON >= totalContractValue;
 
   return {
     totalPaid,
+    fullPaymentPlan,
+    downPaymentPercent,
     requiredDownPayment,
-    remainingBalance: Math.max(0, totalContractValue - totalPaid),
+    remainingBalance: roundToTwo(Math.max(0, totalContractValue - totalPaid)),
     fortyPercentDueDate,
     fortyPercentFollowUpDate,
     finalBalanceDueDate,
@@ -136,28 +142,53 @@ const runPaymentComplianceSweep = async () => {
     for (const contract of contracts) {
       const milestones = getPaymentMilestones(contract);
       const eventStart = startOfDay(contract.eventDate);
+      // Wording follows the contract's actual terms: "40%" for a 40/60 split,
+      // "full payment" for corporate 100/0 plans, and the real percent otherwise.
+      const dpLabel = milestones.fullPaymentPlan ? 'full payment' : `${milestones.downPaymentPercent}%`;
 
-      // Milestone 1 follow-up: alert collections 1 month before the 40% due date.
+      // Post-event: once the event day passes, remind every involved department
+      // to record its return checks so accounting can close the contract.
+      if (contract.status === 'approved' && now > endOfDay(contract.eventDate)) {
+        const departmentsWithItems = [
+          ['creativeAssets', 'creative'],
+          ['linenRequirements', 'linen'],
+          ['equipmentChecklist', 'stockroom']
+        ]
+          .filter(([section]) => (contract[section] || []).length > 0)
+          .map(([, role]) => role);
+
+        const sent = await notifyRolesOnce({
+          contract,
+          roles: [...departmentsWithItems, 'logistics', 'accounting'],
+          type: 'deadline_reminder',
+          title: `Post-event checks due: ${contract.contractNumber}`,
+          message: `${contract.clientName}'s event on ${formatDate(contract.eventDate)} has ended. Record the post-event return checks for your department (and report any incidents) so accounting can settle the remaining balance and close the contract.`,
+          priority: 'high'
+        });
+        if (sent) summary.notified += 1;
+      }
+
+      // Milestone 1 follow-up: alert collections 1 month before the down payment due date.
       if (!milestones.downPaymentSatisfied && now >= milestones.fortyPercentFollowUpDate) {
         const sent = await notifyRolesOnce({
           contract,
           roles: ['accounting'],
           type: 'payment_followup',
-          title: `Start 40% payment follow-up: ${contract.contractNumber}`,
-          message: `${contract.clientName}'s 40% collection of ${formatAmount(milestones.requiredDownPayment)} is due on ${formatDate(milestones.fortyPercentDueDate)}. Begin payment follow-ups with the client now.`,
+          title: `Start ${dpLabel} collection follow-up: ${contract.contractNumber}`,
+          message: `${contract.clientName}'s ${dpLabel} collection of ${formatAmount(milestones.requiredDownPayment)} is due on ${formatDate(milestones.fortyPercentDueDate)}. Begin payment follow-ups with the client now.`,
           priority: 'medium'
         });
         if (sent) summary.notified += 1;
       }
 
-      // Milestone 1: the 40% collection task at booking + 2 months.
+      // Milestone 1: the down payment collection task at booking + 2 months.
       if (!milestones.downPaymentSatisfied && now >= milestones.fortyPercentDueDate) {
         const sent = await notifyRolesOnce({
           contract,
           roles: ['accounting'],
           type: 'payment_milestone_due',
-          title: `40% collection task: ${contract.contractNumber}`,
-          message: `${contract.clientName}'s 40% collection of ${formatAmount(milestones.requiredDownPayment)} reached its due date (${formatDate(milestones.fortyPercentDueDate)}). Unresolved accounts enter the 30-day aging window ending ${formatDate(milestones.agingEndsAt)}.`
+          title: `${dpLabel} collection task: ${contract.contractNumber}`,
+          message: `${contract.clientName}'s ${dpLabel} collection of ${formatAmount(milestones.requiredDownPayment)} reached its due date (${formatDate(milestones.fortyPercentDueDate)}). Unresolved accounts enter the 30-day aging window ending ${formatDate(milestones.agingEndsAt)}.`
         });
         if (sent) summary.notified += 1;
       }
@@ -169,7 +200,7 @@ const runPaymentComplianceSweep = async () => {
           roles: ['accounting'],
           type: 'payment_uncollectible',
           title: `Account uncollectible: ${contract.contractNumber}`,
-          message: `${contract.clientName}'s 40% collection was not received within the 30-day aging window that ended ${formatDate(milestones.agingEndsAt)}. The account is now marked uncollectible.`
+          message: `${contract.clientName}'s ${dpLabel} collection was not received within the 30-day aging window that ended ${formatDate(milestones.agingEndsAt)}. The account is now marked uncollectible.`
         });
         if (sent) summary.notified += 1;
       }
