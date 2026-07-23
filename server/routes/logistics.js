@@ -2,10 +2,20 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const { Driver, Truck } = require('../models/Logistics');
+const Contract = require('../models/Contract');
 const { auth, requireRole } = require('../middleware/auth');
 
 // Access: Logistics and Admin only
 const requireLogisticsAccess = requireRole(['logistics', 'admin']);
+
+// Contracts still in play (not closed/cancelled) that a booked truck or driver
+// must not be deleted out from under.
+const ACTIVE_CONTRACT_STATUSES = ['submitted', 'accounting_review', 'approved'];
+
+const findActiveBookings = (field, id) => Contract.find({
+  status: { $in: ACTIVE_CONTRACT_STATUSES },
+  [field]: id
+}).select('contractNumber eventDate').lean();
 
 // ==================== DRIVERS ====================
 
@@ -103,7 +113,22 @@ router.put('/drivers/:id', auth, requireLogisticsAccess, async (req, res) => {
 // Delete driver
 router.delete('/drivers/:id', auth, requireRole(['admin']), async (req, res) => {
   try {
-    await Driver.findByIdAndDelete(req.params.id);
+    const activeBookings = await findActiveBookings('logisticsAssignment.driver', req.params.id);
+    if (activeBookings.length > 0) {
+      return res.status(400).json({
+        message: `This driver is still booked on ${activeBookings.length} active contract(s) (e.g. ${activeBookings[0].contractNumber}). Reassign those events before deleting the driver.`,
+        contracts: activeBookings.map((contract) => contract.contractNumber)
+      });
+    }
+
+    const driver = await Driver.findByIdAndDelete(req.params.id);
+    if (!driver) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+
+    // Detach the driver from any trucks that referenced them.
+    await Truck.updateMany({ assignedDriver: driver._id }, { $set: { assignedDriver: null } });
+
     res.json({ message: 'Driver deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -203,7 +228,22 @@ router.put('/trucks/:id', auth, requireLogisticsAccess, async (req, res) => {
 // Delete truck
 router.delete('/trucks/:id', auth, requireRole(['admin']), async (req, res) => {
   try {
-    await Truck.findByIdAndDelete(req.params.id);
+    const activeBookings = await findActiveBookings('logisticsAssignment.truck', req.params.id);
+    if (activeBookings.length > 0) {
+      return res.status(400).json({
+        message: `This truck is still booked on ${activeBookings.length} active contract(s) (e.g. ${activeBookings[0].contractNumber}). Reassign those events before deleting the truck.`,
+        contracts: activeBookings.map((contract) => contract.contractNumber)
+      });
+    }
+
+    const truck = await Truck.findByIdAndDelete(req.params.id);
+    if (!truck) {
+      return res.status(404).json({ message: 'Truck not found' });
+    }
+
+    // Detach this truck from any driver's assigned list.
+    await Driver.updateMany({ assignedTrucks: truck._id }, { $pull: { assignedTrucks: truck._id } });
+
     res.json({ message: 'Truck deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -215,21 +255,37 @@ router.post('/trucks/:id/assign-driver', auth, requireLogisticsAccess, async (re
   try {
     const { driverId } = req.body;
     const truck = await Truck.findById(req.params.id);
-    
+
     if (!truck) {
       return res.status(404).json({ message: 'Truck not found' });
     }
-    
-    truck.assignedDriver = driverId;
+
+    const previousDriverId = truck.assignedDriver ? String(truck.assignedDriver) : null;
+
+    if (driverId) {
+      const driver = await Driver.findById(driverId);
+      if (!driver) {
+        return res.status(404).json({ message: 'Driver not found' });
+      }
+    }
+
+    truck.assignedDriver = driverId || null;
     await truck.save();
-    
-    // Add truck to driver's assigned trucks
+
+    // Remove the truck from the previous driver's list when reassigning.
+    if (previousDriverId && previousDriverId !== String(driverId || '')) {
+      await Driver.findByIdAndUpdate(previousDriverId, {
+        $pull: { assignedTrucks: truck._id }
+      });
+    }
+
+    // Add truck to the new driver's assigned trucks.
     if (driverId) {
       await Driver.findByIdAndUpdate(driverId, {
         $addToSet: { assignedTrucks: truck._id }
       });
     }
-    
+
     res.json(truck);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });

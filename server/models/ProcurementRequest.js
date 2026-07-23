@@ -193,6 +193,27 @@ const procurementFulfillmentSchema = new mongoose.Schema({
   inventoryUpdateSummary: {
     type: String,
     trim: true
+  },
+  // Rental lifecycle: rented stock is added to inventory on fulfillment and
+  // removed again when returned to the supplier, so it never permanently
+  // inflates on-hand counts.
+  rentalReturned: {
+    type: Boolean,
+    default: false
+  },
+  rentalReturnedAt: Date,
+  rentalReturnedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  rentalReturnQuantity: {
+    type: Number,
+    min: 0
+  },
+  rentalReturnNotes: {
+    type: String,
+    trim: true
   }
 }, { _id: false });
 

@@ -337,6 +337,13 @@ class ApiService {
     });
   }
 
+  async returnRentalProcurementRequest(id: string, data?: { returnQuantity?: number; notes?: string }) {
+    return this.request(`/procurement-requests/${id}/rental-return`, {
+      method: 'POST',
+      body: JSON.stringify(data || {})
+    });
+  }
+
   async getFinanceOverview(params?: { month?: string }) {
     const filteredParams = params
       ? Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''))

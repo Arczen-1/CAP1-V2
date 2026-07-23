@@ -77,7 +77,8 @@ const CONTRACT_SELECT = [
 const currencyFormatter = new Intl.NumberFormat('en-PH', {
   style: 'currency',
   currency: 'PHP',
-  maximumFractionDigits: 0
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
 });
 
 const numberFormatter = new Intl.NumberFormat('en-PH');
@@ -154,6 +155,118 @@ const getTotalPaid = (contract) => sumBy(
   safeArray(contract.payments).filter((payment) => payment.status === 'completed'),
   (payment) => payment.amount
 );
+
+const MONEY_EPSILON = 0.005;
+const addMonths = (value, months) => {
+  const date = new Date(value);
+  date.setMonth(date.getMonth() + months);
+  return date;
+};
+
+// Ages an outstanding balance by the milestone currently owed: the down payment
+// (40% due 2 months after booking) if it is not yet satisfied, otherwise the
+// final balance (due 2 months before the event). This mirrors the collection
+// rules the compliance sweep enforces, so the aging report is defensible.
+const getReceivableAging = (contract, now = new Date()) => {
+  const total = Number(contract.totalContractValue) || 0;
+  const paid = getTotalPaid(contract);
+  const balance = Math.max(0, total - paid);
+  const rawDown = Number(contract.downPaymentPercent);
+  const rawFinal = Number(contract.finalPaymentPercent);
+  const fullPaymentPlan = rawDown >= 100 || rawFinal <= 0;
+  const downPercent = fullPaymentPlan
+    ? 100
+    : (Number.isFinite(rawDown) && rawDown > 0 && rawDown < 100 ? rawDown : 40);
+  const requiredDown = Math.round(total * downPercent) / 100;
+  const downSatisfied = paid + MONEY_EPSILON >= requiredDown;
+  const bookingDate = contract.bookingDate || contract.createdAt || now;
+  const fortyDueDate = addMonths(bookingDate, 2);
+  const finalDueDate = addMonths(new Date(contract.eventDate || now), -2);
+  const dueDate = downSatisfied ? finalDueDate : fortyDueDate;
+  const stage = downSatisfied
+    ? 'Final balance'
+    : (fullPaymentPlan ? 'Full payment' : `${downPercent}% down payment`);
+  const daysOverdue = Math.floor((startOfDay(now).getTime() - startOfDay(dueDate).getTime()) / (1000 * 60 * 60 * 24));
+
+  return { balance, stage, dueDate, daysOverdue };
+};
+
+const AGING_BUCKETS = [
+  { key: 'not_due', label: 'Not Yet Due', test: (days) => days <= 0 },
+  { key: '1_30', label: '1-30 Days', test: (days) => days >= 1 && days <= 30 },
+  { key: '31_60', label: '31-60 Days', test: (days) => days >= 31 && days <= 60 },
+  { key: '61_90', label: '61-90 Days', test: (days) => days >= 61 && days <= 90 },
+  { key: 'over_90', label: 'Over 90 Days', test: (days) => days > 90 }
+];
+
+const getAgingBucketLabel = (daysOverdue) => (
+  AGING_BUCKETS.find((bucket) => bucket.test(daysOverdue)) || AGING_BUCKETS[0]
+).label;
+
+const buildAgingSummary = (contracts, now = new Date()) => {
+  const owing = contracts
+    .map((contract) => ({ contract, aging: getReceivableAging(contract, now) }))
+    .filter((entry) => entry.aging.balance > MONEY_EPSILON);
+
+  const buckets = AGING_BUCKETS.map((bucket) => {
+    const rows = owing.filter((entry) => bucket.test(entry.aging.daysOverdue));
+    return {
+      key: bucket.key,
+      label: bucket.label,
+      count: rows.length,
+      amount: sumBy(rows, (row) => row.aging.balance)
+    };
+  });
+
+  return {
+    owing,
+    buckets,
+    totalOutstanding: sumBy(owing, (entry) => entry.aging.balance),
+    overdueAmount: sumBy(buckets.filter((bucket) => bucket.key !== 'not_due'), (bucket) => bucket.amount),
+    overdueCount: buckets.filter((bucket) => bucket.key !== 'not_due').reduce((sum, bucket) => sum + bucket.count, 0)
+  };
+};
+
+const buildAgingRows = (owing, limit = 15) => owing
+  .slice()
+  .sort((left, right) => right.aging.daysOverdue - left.aging.daysOverdue)
+  .slice(0, limit)
+  .map(({ contract, aging }) => ({
+    contractNumber: contract.contractNumber,
+    clientName: contract.clientName,
+    stage: aging.stage,
+    dueDate: formatDateLabel(aging.dueDate),
+    daysOverdue: aging.daysOverdue > 0 ? `${aging.daysOverdue} days` : 'Not yet due',
+    balance: formatCurrency(aging.balance),
+    bucket: getAgingBucketLabel(aging.daysOverdue)
+  }));
+
+// Trailing-N-month collection series so the report shows a trend, not just a
+// single-period total. Months with no collections are kept so the timeline is
+// continuous.
+const buildCollectionsTrend = (payments, end, months = 6) => {
+  const anchor = new Date(end.getFullYear(), end.getMonth(), 1);
+  const series = [];
+
+  for (let offset = months - 1; offset >= 0; offset -= 1) {
+    const monthStart = new Date(anchor.getFullYear(), anchor.getMonth() - offset, 1);
+    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0, 23, 59, 59, 999);
+    const collected = safeArray(payments)
+      .filter((payment) => payment.status === 'completed')
+      .filter((payment) => {
+        const date = payment.date ? new Date(payment.date) : null;
+        return date && date >= monthStart && date <= monthEnd;
+      })
+      .reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+
+    series.push({
+      label: new Intl.DateTimeFormat('en-PH', { month: 'short', year: '2-digit' }).format(monthStart),
+      value: Math.round(collected)
+    });
+  }
+
+  return series;
+};
 
 const getProcurementAmount = (request) => (
   Number(request.quote?.quotedTotal)
@@ -481,7 +594,7 @@ const buildSalesReport = ({ contracts, menuTastings, paymentContracts, start, en
   };
 };
 
-const buildAccountingReport = ({ contracts, procurementRequests, paymentContracts, start, end }) => {
+const buildAccountingReport = ({ contracts, procurementRequests, paymentContracts, receivableContracts = [], trendPayments = [], start, end }) => {
   const payments = getPaymentsInRange(paymentContracts, start, end);
   const completedPayments = payments.filter((payment) => payment.status === 'completed');
   const totalCollected = sumBy(completedPayments, (payment) => payment.amount);
@@ -496,17 +609,27 @@ const buildAccountingReport = ({ contracts, procurementRequests, paymentContract
   const availableOperatingBudget = totalCollected
     - procurementFinancials.confirmedExpenseAmount
     - procurementFinancials.approvedCommitmentAmount;
+  const aging = buildAgingSummary(receivableContracts);
+  const collectionsTrend = buildCollectionsTrend(trendPayments, end);
 
   return {
     title: 'Accounting / Finance Report',
-    subtitle: 'Financial position, collections, receivables, budget commitments, procurement expenses, and accounting action items.',
+    subtitle: 'Financial position, collections trend, receivables aging, budget commitments, procurement expenses, and accounting action items.',
     summaryCards: [
       makeCard('Contract Revenue', formatCurrency(contractValue), 'Projected revenue from contracts in range', 'success'),
       makeCard('Cash Collected', formatCurrency(totalCollected), `${formatPercent(collectionRate)} collection rate`, 'success'),
       makeCard('Accounts Receivable', formatCurrency(outstandingBalance), 'Uncollected client balance', outstandingBalance ? 'warning' : 'success'),
+      makeCard('Overdue A/R', formatCurrency(aging.overdueAmount), `${aging.overdueCount} contract(s) past a milestone due date`, aging.overdueAmount ? 'warning' : 'success'),
       makeCard('Available Budget Est.', formatCurrency(availableOperatingBudget), 'Collections less confirmed expenses and open commitments', availableOperatingBudget < 0 ? 'warning' : 'success')
     ],
     charts: [
+      {
+        id: 'collections-trend',
+        title: 'Monthly Collections Trend',
+        description: 'Completed client payments collected per month (trailing 6 months).',
+        items: collectionsTrend
+      },
+      makeChart('ar-aging', 'Accounts Receivable Aging', aging.buckets.map((bucket) => ({ label: bucket.label, value: Math.round(bucket.amount) })), 'Outstanding balance grouped by how overdue each milestone is.'),
       makeChart('finance-position', 'Financial Position', [
         { label: 'Collected', value: Math.round(totalCollected) },
         { label: 'Receivable', value: Math.round(outstandingBalance) },
@@ -518,6 +641,15 @@ const buildAccountingReport = ({ contracts, procurementRequests, paymentContract
       makeChart('procurement-status', 'Budget Request Status', mapToChartItems(countBy(procurementRequests, (request) => request.status)))
     ],
     sections: [
+      makeSection('ar-aging', 'Accounts Receivable Aging Schedule', 'Outstanding balances aged by the milestone currently owed (40% due 2 months after booking; final balance due 2 months before the event). Oldest balances first.', [
+        { key: 'contractNumber', label: 'Contract' },
+        { key: 'clientName', label: 'Client' },
+        { key: 'stage', label: 'Owed Milestone' },
+        { key: 'dueDate', label: 'Due Date' },
+        { key: 'daysOverdue', label: 'Days Overdue' },
+        { key: 'balance', label: 'Balance' },
+        { key: 'bucket', label: 'Aging Bucket' }
+      ], buildAgingRows(aging.owing), 'No outstanding receivables.'),
       makeSection('financial-position', 'Financial Position Summary', 'Accounting summary based on contract receivables, collections, procurement commitments, and confirmed purchasing expenses.', [
         { key: 'account', label: 'Account / Line Item' },
         { key: 'amount', label: 'Amount' },
@@ -860,13 +992,15 @@ const buildPurchasingReport = ({ procurementRequests, suppliers }) => {
   };
 };
 
-const buildAdminReport = ({ contracts, menuTastings, procurementRequests, incidents, paymentContracts, inventories, users, banquetStaff, drivers, trucks, suppliers, start, end }) => {
+const buildAdminReport = ({ contracts, menuTastings, procurementRequests, incidents, paymentContracts, receivableContracts = [], trendPayments = [], inventories, users, banquetStaff, drivers, trucks, suppliers, start, end }) => {
   const contractSummary = getContractSummary(contracts);
   const payments = getPaymentsInRange(paymentContracts, start, end).filter((payment) => payment.status === 'completed');
   const collectedAmount = sumBy(payments, (payment) => payment.amount);
   const totalPaidOnContracts = sumBy(contracts, getTotalPaid);
   const outstandingBalance = Math.max(0, contractSummary.totalValue - totalPaidOnContracts);
   const collectionRate = contractSummary.totalValue > 0 ? totalPaidOnContracts / contractSummary.totalValue : 0;
+  const aging = buildAgingSummary(receivableContracts);
+  const collectionsTrend = buildCollectionsTrend(trendPayments, end);
   const procurementFinancials = getProcurementFinancials(procurementRequests);
   const budgetQueue = procurementFinancials.pendingBudgetRequests;
   const expenseQueue = procurementRequests.filter((request) => request.status === 'proof_submitted');
@@ -889,6 +1023,13 @@ const buildAdminReport = ({ contracts, menuTastings, procurementRequests, incide
       makeCard('Inventory Alerts', inventoryTotals.lowStock + inventoryTotals.attention, 'Low stock or attention items', inventoryTotals.lowStock ? 'warning' : 'success')
     ],
     charts: [
+      {
+        id: 'collections-trend',
+        title: 'Monthly Collections Trend',
+        description: 'Completed client payments collected per month (trailing 6 months).',
+        items: collectionsTrend
+      },
+      makeChart('ar-aging', 'Accounts Receivable Aging', aging.buckets.map((bucket) => ({ label: bucket.label, value: Math.round(bucket.amount) })), 'Outstanding balance grouped by how overdue each milestone is.'),
       makeChart('contract-status', 'Contracts By Status', mapToChartItems(countBy(contracts, (contract) => contract.status))),
       makeChart('users-by-role', 'Users By Role', mapToChartItems(countBy(users, (user) => user.role))),
       makeChart('procurement-status', 'Procurement By Status', mapToChartItems(countBy(procurementRequests, (request) => request.status))),
@@ -924,6 +1065,15 @@ const buildAdminReport = ({ contracts, menuTastings, procurementRequests, incide
         { key: 'balance', label: 'Balance' },
         { key: 'paymentStatus', label: 'Payment Status' }
       ], buildReceivableRows(contracts)),
+      makeSection('ar-aging', 'Accounts Receivable Aging Schedule', 'All outstanding balances aged by the milestone currently owed (40% due 2 months after booking; final balance due 2 months before the event). Oldest balances first.', [
+        { key: 'contractNumber', label: 'Contract' },
+        { key: 'clientName', label: 'Client' },
+        { key: 'stage', label: 'Owed Milestone' },
+        { key: 'dueDate', label: 'Due Date' },
+        { key: 'daysOverdue', label: 'Days Overdue' },
+        { key: 'balance', label: 'Balance' },
+        { key: 'bucket', label: 'Aging Bucket' }
+      ], buildAgingRows(aging.owing), 'No outstanding receivables.'),
       makeSection('finance-procurement', 'Finance Procurement Budget Register', 'Purchasing requests that affect budget allocation, committed costs, and confirmed expenses.', [
         { key: 'requestNumber', label: 'Request' },
         { key: 'department', label: 'Department' },
@@ -986,10 +1136,14 @@ const buildAdminReport = ({ contracts, menuTastings, procurementRequests, incide
   };
 };
 
+const RECEIVABLE_STATUSES = ['submitted', 'accounting_review', 'approved', 'completed'];
+
 const buildContext = async (role, start, end) => {
   const contractQuery = { eventDate: { $gte: start, $lte: end } };
   const procurementQuery = { createdAt: { $gte: start, $lte: end } };
   const incidentQuery = { reportedAt: { $gte: start, $lte: end } };
+  // Trailing 6-month window (ending at the report's end date) for the trend.
+  const trendStart = new Date(end.getFullYear(), end.getMonth() - 5, 1, 0, 0, 0, 0);
 
   if (PROCUREMENT_DEPARTMENT_BY_ROLE[role]) {
     procurementQuery.department = PROCUREMENT_DEPARTMENT_BY_ROLE[role];
@@ -1011,7 +1165,9 @@ const buildContext = async (role, start, end) => {
     banquetStaff,
     drivers,
     trucks,
-    suppliers
+    suppliers,
+    receivableContracts,
+    trendContracts
   ] = await Promise.all([
     Contract.find(contractQuery).select(CONTRACT_SELECT).lean(),
     ['admin', 'sales'].includes(role)
@@ -1026,8 +1182,20 @@ const buildContext = async (role, start, end) => {
     ['admin', 'banquet_supervisor'].includes(role) ? BanquetStaff.find().lean() : [],
     ['admin', 'logistics'].includes(role) ? Driver.find().lean() : [],
     ['admin', 'logistics'].includes(role) ? Truck.find().lean() : [],
-    ['admin', 'purchasing'].includes(role) ? Supplier.find().lean() : []
+    ['admin', 'purchasing'].includes(role) ? Supplier.find().lean() : [],
+    ['admin', 'accounting'].includes(role)
+      ? Contract.find({ status: { $in: RECEIVABLE_STATUSES } })
+          .select('contractNumber clientName eventDate bookingDate createdAt totalContractValue paymentStatus payments downPaymentPercent finalPaymentPercent')
+          .lean()
+      : [],
+    ['admin', 'accounting'].includes(role)
+      ? Contract.find({ 'payments.date': { $gte: trendStart, $lte: end } })
+          .select('payments')
+          .lean()
+      : []
   ]);
+
+  const trendPayments = safeArray(trendContracts).flatMap((contract) => safeArray(contract.payments));
 
   const inventoryConfigs = getInventoryConfigs();
   const inventoryKeys = role === 'admin'
@@ -1060,6 +1228,8 @@ const buildContext = async (role, start, end) => {
     drivers,
     trucks,
     suppliers,
+    receivableContracts,
+    trendPayments,
     inventories: Object.fromEntries(inventoryEntries)
   };
 };

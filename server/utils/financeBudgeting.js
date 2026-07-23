@@ -123,6 +123,68 @@ const getBudgetUsage = async (periodMonth) => {
   };
 };
 
+// Builds a data-derived budget suggestion: each department's allocation is the
+// trailing 3-month average of its confirmed procurement spend. Categories with
+// no tracked spend history (kitchen, logistics, banquet, contingency, admin -
+// procurement only records creative/linen/stockroom) fall back to the standard
+// template amount. This gives Accounting a defensible answer to "what basis?".
+const getSuggestedMonthlyBudget = async (periodMonth, lookbackMonths = 3) => {
+  const { start } = getMonthRange(periodMonth);
+  const windowStart = new Date(start.getFullYear(), start.getMonth() - lookbackMonths, 1, 0, 0, 0, 0);
+  const windowEnd = new Date(start.getTime() - 1); // just before the target month
+
+  const spendRequests = await ProcurementRequest.find({
+    neededBy: { $gte: windowStart, $lte: windowEnd },
+    $or: [
+      { status: 'fulfilled' },
+      { 'fulfillment.confirmationStatus': 'confirmed' }
+    ]
+  }).lean();
+
+  const spendByDepartment = spendRequests.reduce((totals, request) => {
+    totals[request.department] = (totals[request.department] || 0) + getProcurementAmount(request);
+    return totals;
+  }, {});
+
+  const template = getDefaultMonthlyBudgetTemplate();
+  const monthLabel = (date) => new Intl.DateTimeFormat('en-PH', { month: 'short', year: 'numeric' }).format(date);
+  const basisWindowLabel = `${monthLabel(windowStart)} - ${monthLabel(windowEnd)}`;
+  const derivedDepartments = ['creative', 'linen', 'stockroom'];
+
+  const categories = template.categories.map((category) => {
+    const templateAmount = Number(category.allocatedAmount) || 0;
+    if (derivedDepartments.includes(category.key) && spendByDepartment[category.key] > 0) {
+      const average = Math.ceil((spendByDepartment[category.key] / lookbackMonths) / 100) * 100; // round up to nearest 100
+      return {
+        key: category.key,
+        label: category.label,
+        allocatedAmount: average,
+        notes: `Trailing ${lookbackMonths}-month average confirmed spend (${basisWindowLabel}).`
+      };
+    }
+
+    return {
+      key: category.key,
+      label: category.label,
+      allocatedAmount: templateAmount,
+      notes: 'Standard template amount (no tracked procurement spend for this category).'
+    };
+  });
+
+  const totalBudget = categories.reduce((sum, category) => sum + category.allocatedAmount, 0);
+
+  return {
+    periodMonth,
+    status: 'active',
+    sourceOfFunds: 'monthly_allocation',
+    lookbackMonths,
+    basisWindow: basisWindowLabel,
+    totalBudget,
+    notes: `Suggested from the trailing ${lookbackMonths}-month average of confirmed procurement spend (${basisWindowLabel}). Creative, linen, and stockroom are derived from actual spend; other categories use the standard template amount. Review and adjust before saving.`,
+    categories
+  };
+};
+
 const getBudgetCheckForRequest = async (request) => {
   const periodMonth = getPeriodMonth(request.neededBy || new Date());
   const usage = await getBudgetUsage(periodMonth);
@@ -184,6 +246,7 @@ module.exports = {
   DEFAULT_MONTHLY_BUDGET_TEMPLATE,
   FINANCE_BUDGET_CATEGORIES,
   getDefaultMonthlyBudgetTemplate,
+  getSuggestedMonthlyBudget,
   getBudgetUsage,
   getBudgetCheckForRequest,
   getMonthRange,

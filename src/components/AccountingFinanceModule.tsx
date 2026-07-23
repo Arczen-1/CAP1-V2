@@ -82,6 +82,15 @@ interface FinanceOverview {
     notes: string;
     categories: FinanceBudgetCategory[];
   };
+  budgetSuggestion?: {
+    totalBudget: number;
+    status: BudgetStatus;
+    sourceOfFunds: SourceOfFunds;
+    lookbackMonths: number;
+    basisWindow: string;
+    notes: string;
+    categories: FinanceBudgetCategory[];
+  };
   defaultCategories: Array<{ key: string; label: string }>;
   summary: {
     contractRevenue: number;
@@ -310,6 +319,21 @@ export default function AccountingFinanceModule() {
     toast.info('Standard amounts applied. Save the budget to make it official.');
   };
 
+  const handleApplySuggestion = () => {
+    if (!overview?.budgetSuggestion) {
+      return;
+    }
+
+    const suggestion = overview.budgetSuggestion;
+    setTotalBudget(String(Number(suggestion.totalBudget) || 0));
+    setStatus(suggestion.status || 'active');
+    setSourceOfFunds(suggestion.sourceOfFunds || 'monthly_allocation');
+    setNotes(suggestion.notes || '');
+    setCategoryForm(createCategoryForm(suggestion.categories));
+    setTemplateNotice(`Suggested amounts from the trailing ${suggestion.lookbackMonths}-month average (${suggestion.basisWindow}) were copied in. Review, then click Save Monthly Budget to make them official.`);
+    toast.info('Data-based suggestion applied. Review and save to make it official.');
+  };
+
   if (isLoading && !overview) {
     return (
       <Card>
@@ -431,16 +455,29 @@ export default function AccountingFinanceModule() {
           <CardContent className="space-y-4">
             <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="font-medium">Standard Monthly Budget Amounts</p>
+                <p className="font-medium">Set The Monthly Amounts</p>
                 <p className="text-muted-foreground">
-                  This resets the fields below to the normal department budget amounts. It does not save until Accounting clicks Save Monthly Budget.
+                  Start from the standard template, or from a data-based suggestion. Neither saves until Accounting clicks Save Monthly Budget.
                 </p>
               </div>
-              <Button type="button" variant="outline" onClick={handleApplyTemplate}>
-                <RotateCcw className="mr-2 h-4 w-4" />
-                Reset To Standard Amounts
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" onClick={handleApplyTemplate}>
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Standard Amounts
+                </Button>
+                {overview.budgetSuggestion ? (
+                  <Button type="button" variant="outline" onClick={handleApplySuggestion}>
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Suggest From Last 3 Months
+                  </Button>
+                ) : null}
+              </div>
             </div>
+            {overview.budgetSuggestion ? (
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium">Basis:</span> monthly budgets are set by Accounting each month. The suggestion derives Creative, Linen, and Stockroom from the trailing {overview.budgetSuggestion.lookbackMonths}-month average of confirmed procurement spend ({overview.budgetSuggestion.basisWindow}); other categories use the standard template amount.
+              </p>
+            ) : null}
             {templateNotice ? (
               <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
                 {templateNotice}

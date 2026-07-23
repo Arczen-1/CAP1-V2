@@ -136,6 +136,10 @@ export interface ProcurementRequest {
     fulfilledBy?: ProcurementUserSummary | null;
     inventoryUpdated?: boolean;
     inventoryUpdateSummary?: string;
+    rentalReturned?: boolean;
+    rentalReturnedAt?: string;
+    rentalReturnQuantity?: number;
+    rentalReturnNotes?: string;
   };
   createdBy?: ProcurementUserSummary | null;
   updatedBy?: ProcurementUserSummary | null;

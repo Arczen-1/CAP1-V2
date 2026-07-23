@@ -23,6 +23,9 @@ mongoose.connect(MONGODB_URI)
     // cancellation of events whose final balance was not collected in time.
     const { startPaymentComplianceSweep } = require('./paymentCompliance');
     startPaymentComplianceSweep();
+    // Keeps truck fleet status (available/in_use) in sync with actual bookings.
+    const { startLogisticsStatusSync } = require('./logisticsStatusSync');
+    startLogisticsStatusSync();
   })
   .catch(err => console.error('MongoDB connection error:', err));
 

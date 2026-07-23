@@ -153,37 +153,67 @@ router.delete('/:id', auth, requireRole(['admin']), async (req, res) => {
   }
 });
 
+// Only supervisory banquet staff should receive a system login, since the only
+// banquet system role is banquet_supervisor. Line staff (waiters, bussers, etc.)
+// are managed as records, not login users.
+const ACCOUNT_ELIGIBLE_STAFF_ROLES = ['event_manager', 'supervisor', 'head_captain', 'coordinator'];
+
 // Create account for staff
 router.post('/:id/create-account', auth, requireRole(['admin']), async (req, res) => {
   try {
     const staff = await BanquetStaff.findById(req.params.id);
-    
+
     if (!staff) {
       return res.status(404).json({ message: 'Staff not found' });
     }
-    
+
     if (staff.hasAccount) {
       return res.status(400).json({ message: 'Staff already has an account' });
     }
-    
-    // Create user account
+
+    if (!ACCOUNT_ELIGIBLE_STAFF_ROLES.includes(staff.role)) {
+      return res.status(400).json({
+        message: `Only supervisory banquet staff (${ACCOUNT_ELIGIBLE_STAFF_ROLES.join(', ')}) can be given a supervisor login. ${staff.fullName || 'This staff member'} is a ${staff.role}.`
+      });
+    }
+
+    const password = String(req.body.password || '').trim();
+    if (password.length < 6) {
+      return res.status(400).json({ message: 'Set a password of at least 6 characters for the new account' });
+    }
+
+    const email = String(req.body.email || staff.email || '').trim().toLowerCase();
+    if (!email) {
+      return res.status(400).json({ message: 'An email address is required to create the account' });
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: 'A user account with this email already exists' });
+    }
+
     const user = new User({
       name: staff.fullName,
-      email: req.body.email || staff.email,
-      password: req.body.password || 'password123',
-      role: 'banquet_supervisor', // or based on staff role
+      email,
+      password,
+      role: 'banquet_supervisor',
       department: 'Banquet Operations'
     });
-    
+
     await user.save();
-    
-    // Update staff record
+
     staff.hasAccount = true;
     staff.accountEmail = user.email;
     await staff.save();
-    
-    res.json({ message: 'Account created', user, staff });
+
+    const safeUser = user.toObject();
+    delete safeUser.password;
+
+    res.json({ message: 'Account created', user: safeUser, staff });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'A user account with this email already exists' });
+    }
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

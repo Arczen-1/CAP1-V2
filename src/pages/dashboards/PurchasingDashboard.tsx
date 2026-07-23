@@ -286,6 +286,20 @@ export default function PurchasingDashboard() {
     }
   };
 
+  const handleReturnRental = async (request: ProcurementRequest) => {
+    if (!window.confirm(`Mark ${request.requestNumber} (${request.itemName}) as returned to the supplier? This removes the rented units from inventory.`)) {
+      return;
+    }
+
+    try {
+      await api.returnRentalProcurementRequest(request._id);
+      toast.success('Rental returned and inventory reduced');
+      fetchRequests();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to mark rental as returned');
+    }
+  };
+
   const renderRequestCards = (
     requestList: ProcurementRequest[],
     emptyTitle: string,
@@ -602,7 +616,26 @@ export default function PurchasingDashboard() {
             {renderRequestCards(
               completedRequests,
               'No completed procurement yet',
-              'Finished requests will appear here after accounting confirms the expense.'
+              'Finished requests will appear here after accounting confirms the expense.',
+              (request) => (
+                request.status === 'fulfilled'
+                && request.requestType === 'rental'
+                && request.fulfillment?.inventoryUpdated
+                && !request.fulfillment?.rentalReturned
+                  ? (
+                    <Button variant="outline" onClick={() => handleReturnRental(request)}>
+                      <PackageCheck className="mr-2 h-4 w-4" />
+                      Mark Rental Returned
+                    </Button>
+                  )
+                  : request.fulfillment?.rentalReturned
+                    ? (
+                      <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                        Rental returned{request.fulfillment.rentalReturnedAt ? ` ${formatProcurementDate(request.fulfillment.rentalReturnedAt)}` : ''}
+                      </Badge>
+                    )
+                    : null
+              )
             )}
           </TabsContent>
 

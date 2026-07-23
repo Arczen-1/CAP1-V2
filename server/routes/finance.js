@@ -7,6 +7,7 @@ const {
   FINANCE_BUDGET_CATEGORIES,
   getBudgetCheckForRequest,
   getDefaultMonthlyBudgetTemplate,
+  getSuggestedMonthlyBudget,
   getBudgetUsage,
   getMonthRange,
   getPeriodMonth,
@@ -126,6 +127,7 @@ router.get('/overview', auth, requireRole(['accounting', 'admin']), async (req, 
       updatedAt: usage.budget.updatedAt
     } : null;
     const budgetTemplate = getDefaultMonthlyBudgetTemplate();
+    const budgetSuggestion = await getSuggestedMonthlyBudget(periodMonth);
 
     res.json({
       periodMonth,
@@ -133,6 +135,7 @@ router.get('/overview', auth, requireRole(['accounting', 'admin']), async (req, 
       dateRange: { startDate: start.toISOString(), endDate: end.toISOString() },
       budget,
       budgetTemplate,
+      budgetSuggestion,
       defaultCategories: FINANCE_BUDGET_CATEGORIES,
       summary: {
         contractRevenue,

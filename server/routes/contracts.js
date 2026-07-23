@@ -13,6 +13,7 @@ const StockroomInventory = require('../models/StockroomInventory');
 const BanquetStaff = require('../models/BanquetStaff');
 const User = require('../models/User');
 const { Driver, Truck } = require('../models/Logistics');
+const { reconcileTruckStatus } = require('../logisticsStatusSync');
 const { auth, requireRole } = require('../middleware/auth');
 
 const ACTIVE_CONTRACT_STATUSES = ['draft', 'pending_client_signature', 'submitted', 'accounting_review', 'approved'];
@@ -2649,6 +2650,9 @@ router.put('/:id/logistics-assignment', auth, requireRole(['logistics', 'admin']
       });
     }
 
+    const previousTruckId = contract.logisticsAssignment?.truck ? String(contract.logisticsAssignment.truck) : null;
+    const previousAssignmentStatus = contract.logisticsAssignment?.assignmentStatus || null;
+
     contract.logisticsAssignment = {
       ...(contract.logisticsAssignment ? contract.logisticsAssignment.toObject() : {}),
       driver: driverId || null,
@@ -2670,6 +2674,20 @@ router.put('/:id/logistics-assignment', auth, requireRole(['logistics', 'admin']
 
     await contract.save();
     await maybeNotifyPreparationComplete(contract);
+
+    // Keep truck fleet status honest: reconcile the newly-assigned truck and any
+    // truck that was just replaced, so the fleet board reflects real deployment.
+    const nextTruckId = contract.logisticsAssignment.truck ? String(contract.logisticsAssignment.truck) : null;
+    await reconcileTruckStatus(nextTruckId);
+    if (previousTruckId && previousTruckId !== nextTruckId) {
+      await reconcileTruckStatus(previousTruckId);
+    }
+    // Count the trip once, when logistics closes out the assignment.
+    if (nextTruckId
+      && contract.logisticsAssignment.assignmentStatus === 'completed'
+      && previousAssignmentStatus !== 'completed') {
+      await Truck.findByIdAndUpdate(nextTruckId, { $inc: { totalTrips: 1 } });
+    }
 
     const updatedContract = await Contract.findById(contract._id)
       .populate('logisticsAssignment.driver', 'driverId fullName status phone')

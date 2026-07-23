@@ -331,6 +331,34 @@ const applyInventoryUpdate = async (request, inventoryItem, receivedQuantity) =>
   };
 };
 
+// Reverses what applyInventoryUpdate added, used when a rental is returned to
+// the supplier. Quantities are floored at 0 so a return never drives stock
+// negative even if some of the rented units were already consumed.
+const reverseInventoryUpdate = async (request, inventoryItem, returnQuantity) => {
+  const previousQuantity = Number(inventoryItem.quantity) || 0;
+  const previousAvailableQuantity = Number(inventoryItem.availableQuantity) || 0;
+  const note = `Rental returned via ${request.requestNumber}${request.fulfillment?.rentalEndDate ? ` (due ${formatDateLabel(request.fulfillment.rentalEndDate)})` : ''}.`;
+
+  inventoryItem.quantity = Math.max(0, previousQuantity - returnQuantity);
+
+  if (request.department === 'stockroom') {
+    inventoryItem.notes = appendNote(inventoryItem.notes, note);
+    inventoryItem.updateAvailable();
+    await inventoryItem.save();
+  } else {
+    inventoryItem.availableQuantity = Math.max(0, previousAvailableQuantity - returnQuantity);
+    inventoryItem.notes = appendNote(inventoryItem.notes, note);
+    await inventoryItem.save();
+  }
+
+  return {
+    previousQuantity,
+    previousAvailableQuantity,
+    newQuantity: Number(inventoryItem.quantity) || 0,
+    newAvailableQuantity: Number(inventoryItem.availableQuantity) || 0
+  };
+};
+
 router.get('/', auth, async (req, res) => {
   try {
     const query = getScopedRequestQuery(req);
@@ -907,6 +935,99 @@ router.post('/:id/accounting-expense-review', auth, requireRole(['accounting', '
       message,
       contract: request.contract || undefined,
       priority: decision === 'confirmed' ? 'medium' : 'high',
+      actionUrl: getDepartmentWorkUrl(request.department),
+      actionLabel: 'View request status',
+      department: request.department
+    });
+
+    const populatedRequest = await populateProcurementRequest(
+      ProcurementRequest.findById(request._id)
+    );
+
+    res.json(populatedRequest);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Return a rented item to the supplier: removes the rented quantity from
+// inventory so rentals never permanently inflate on-hand stock.
+router.post('/:id/rental-return', auth, requireRole(['purchasing', 'admin']), async (req, res) => {
+  try {
+    const request = await ProcurementRequest.findById(req.params.id);
+
+    if (!request) {
+      return res.status(404).json({ message: 'Procurement request not found' });
+    }
+
+    if (request.requestType !== 'rental') {
+      return res.status(400).json({ message: 'Only rental requests can be returned' });
+    }
+
+    if (request.status !== 'fulfilled') {
+      return res.status(400).json({ message: 'Only fulfilled rentals can be marked as returned' });
+    }
+
+    if (!request.fulfillment?.inventoryUpdated) {
+      return res.status(400).json({ message: 'This rental never updated inventory, so there is nothing to return' });
+    }
+
+    if (request.fulfillment?.rentalReturned) {
+      return res.status(400).json({ message: 'This rental has already been returned' });
+    }
+
+    if (!request.inventoryItem) {
+      return res.status(400).json({ message: 'This rental is not linked to an inventory item' });
+    }
+
+    const departmentConfig = getDepartmentConfig(request.department);
+    const inventoryItem = await departmentConfig.model.findById(request.inventoryItem);
+
+    if (!inventoryItem) {
+      return res.status(404).json({ message: 'Linked inventory item was not found' });
+    }
+
+    const returnedFallback = Number(request.fulfillment.receivedQuantity) || request.requestedQuantity;
+    const returnQuantity = parseQuantity(req.body?.returnQuantity, returnedFallback);
+    if (!returnQuantity) {
+      return res.status(400).json({ message: 'Return quantity must be a whole number greater than 0' });
+    }
+
+    const snapshot = await reverseInventoryUpdate(request, inventoryItem, returnQuantity);
+
+    request.fulfillment = {
+      ...(request.fulfillment.toObject ? request.fulfillment.toObject() : request.fulfillment),
+      rentalReturned: true,
+      rentalReturnedAt: new Date(),
+      rentalReturnedBy: req.user._id,
+      rentalReturnQuantity: returnQuantity,
+      rentalReturnNotes: String(req.body?.notes || '').trim(),
+      inventoryUpdateSummary: appendNote(
+        request.fulfillment.inventoryUpdateSummary,
+        `${departmentConfig.label} inventory reduced from ${snapshot.previousQuantity} to ${snapshot.newQuantity} total units on rental return.`
+      )
+    };
+    request.updatedBy = req.user._id;
+
+    await request.save();
+
+    await notifyRoles(['accounting', 'admin'], {
+      type: 'task_assigned',
+      title: 'Rental returned',
+      message: `${request.requestNumber} (${request.itemName}) was returned to the supplier and removed from ${departmentConfig.label} inventory.`,
+      contract: request.contract || undefined,
+      priority: 'low',
+      actionUrl: '/accounting',
+      actionLabel: 'View request',
+      department: 'accounting'
+    });
+
+    await notifyRequestOwnerDepartment(request, {
+      type: 'task_assigned',
+      title: 'Rental returned',
+      message: `${request.requestNumber} (${request.itemName}) has been returned to the supplier.`,
+      contract: request.contract || undefined,
+      priority: 'low',
       actionUrl: getDepartmentWorkUrl(request.department),
       actionLabel: 'View request status',
       department: request.department
