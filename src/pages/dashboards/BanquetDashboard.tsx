@@ -19,8 +19,12 @@ interface Contract {
   totalPacks: number;
   clientType: string;
   currentDepartment: string;
-  assignedSupervisor?: { _id: string; name: string };
+  assignedSupervisor?: { _id: string; name: string } | null;
+  banquetAssignment?: { assignments?: unknown[] } | null;
 }
+
+const isBanquetStaffingComplete = (contract: Contract) =>
+  (contract.banquetAssignment?.assignments?.length || 0) > 0 && Boolean(contract.assignedSupervisor);
 
 const getBanquetStatusClassName = (status: string) => {
   switch (status) {
@@ -35,6 +39,7 @@ const getBanquetStatusClassName = (status: string) => {
 
 const getNextStepMeta = (contract: Contract) => {
   const daysUntil = getDaysUntilDate(contract.eventDate);
+  const staffingComplete = isBanquetStaffingComplete(contract);
 
   if (daysUntil < 0) {
     return {
@@ -44,26 +49,37 @@ const getNextStepMeta = (contract: Contract) => {
     };
   }
 
+  // Staffing not yet assigned/saved is the real outstanding action.
+  if (!staffingComplete) {
+    return {
+      title: daysUntil <= 7 ? 'Finalize day-of staffing' : 'Assign banquet staff',
+      note: daysUntil <= 7
+        ? 'Assign the banquet team and supervisor, then save the staffing form — the event is near.'
+        : 'Build the staffing plan, assign the team and supervisor, and save the banquet form.',
+      className: daysUntil <= 7 ? 'text-orange-800' : 'text-slate-700',
+    };
+  }
+
   if (daysUntil <= 1) {
     return {
       title: 'Event-day coordination',
-      note: 'Banquet oversight should be active now, including arrival times, venue setup, and service flow.',
+      note: 'Staffing is set. Banquet oversight should be active now — arrival times, venue setup, and service flow.',
       className: 'text-red-700',
     };
   }
 
   if (daysUntil <= 7) {
     return {
-      title: 'Finalize day-of staffing',
-      note: 'Use this window to recheck assignments, sequencing, and event execution readiness.',
+      title: 'Confirm day-of readiness',
+      note: 'Staffing is assigned and saved. Recheck sequencing and arrival times before the event.',
       className: 'text-orange-800',
     };
   }
 
   return {
-    title: 'Monitor event preparation',
-    note: 'The contract is already active. Banquet should stay aligned with operations as the date approaches.',
-    className: 'text-slate-700',
+    title: 'Staffing set — monitor preparation',
+    note: 'The banquet team is assigned. Stay aligned with operations as the date approaches.',
+    className: 'text-emerald-700',
   };
 };
 

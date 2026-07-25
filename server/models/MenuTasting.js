@@ -85,18 +85,26 @@ const menuTastingSchema = new mongoose.Schema({
     max: [10, 'Maximum 10 people for tasting']
   },
   
-  // Menu Items for Tasting
+  // Menu Items for Tasting (dishes the client will sample). Category is a free
+  // string so it can carry the real Juan Carlo menu categories (Beef, Pork,
+  // Chicken, ...) or legacy course-based labels.
   menuItems: [{
     category: {
       type: String,
-      enum: ['Appetizer', 'Soup', 'Salad', 'Main Course', 'Dessert', 'Beverage']
+      trim: true
     },
-    itemName: String,
+    itemName: {
+      type: String,
+      trim: true
+    },
     selected: {
       type: Boolean,
-      default: false
+      default: true
     },
-    notes: String
+    notes: {
+      type: String,
+      trim: true
+    }
   }],
   
   // Status

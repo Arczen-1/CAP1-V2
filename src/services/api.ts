@@ -125,6 +125,7 @@ class ApiService {
     comments?: string;
     itemsLiked?: string[];
     itemsToChange?: string[];
+    menuItems?: Array<{ itemName: string; notes?: string }>;
   }) {
     return this.request(`/menu-tastings/${id}/feedback`, {
       method: 'POST',
@@ -256,6 +257,13 @@ class ApiService {
   async autoAssignStaffTransport(id: string) {
     return this.request(`/contracts/${id}/staff-transport/auto-assign`, {
       method: 'POST'
+    });
+  }
+
+  async updateStaffTransport(id: string, data: { vehicles: Array<{ truckId: string; driverId?: string }>; notes?: string }) {
+    return this.request(`/contracts/${id}/staff-transport`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
     });
   }
 

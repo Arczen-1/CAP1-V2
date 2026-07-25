@@ -1737,6 +1737,24 @@ const buildOperationsSummary = async (contract) => {
             }
           : null
       })),
+      // Passenger-tagged vehicles offered for the (separate) staff transport
+      // booking, excluding the cargo truck already booked for this event.
+      staffTransportVehicles: activeTrucks
+        .filter((truck) => truck.passengerVehicle && String(truck._id) !== String(assignedTruckId || ''))
+        .map((truck) => ({
+          _id: truck._id,
+          truckId: truck.truckId,
+          plateNumber: truck.plateNumber,
+          truckType: truck.truckType,
+          passengerCapacity: getPassengerSeats(truck),
+          assignedDriver: truck.assignedDriver
+            ? {
+                _id: truck.assignedDriver._id,
+                fullName: truck.assignedDriver.fullName,
+                driverId: truck.assignedDriver.driverId
+              }
+            : null
+        })),
       recommendedTruck: recommendedTruck
         ? {
             _id: recommendedTruck._id,
@@ -1880,7 +1898,8 @@ router.get('/:id', auth, async (req, res) => {
       .populate('assignedSupervisor', 'name email')
       .populate('logisticsAssignment.driver', 'driverId fullName status phone')
       .populate('logisticsAssignment.truck', 'truckId plateNumber truckType status capacity assignedDriver')
-      .populate('staffTransport.vehicles.truck', 'truckId plateNumber truckType status passengerCapacity assignedDriver')
+      .populate('staffTransport.vehicles.truck', 'truckId plateNumber truckType status passengerVehicle passengerCapacity assignedDriver')
+      .populate('staffTransport.vehicles.driver', 'driverId fullName phone status')
       // Surface the tasting feedback/notes so the contract Preferences tab (kitchen)
       // can reflect what the client asked for during the menu tasting.
       .populate('menuTasting', 'tastingDate status feedback clientNotes internalNotes menuItems');
@@ -2790,6 +2809,28 @@ router.put('/:id/logistics-assignment', auth, requireRole(['logistics', 'admin']
 // event staff. Vehicles are chosen automatically from the available fleet by
 // passenger capacity, adding more vehicles until every staff member has a seat.
 // (staff transport auto-assign endpoint)
+// Fallback seat counts for passenger vehicles that predate the passengerCapacity
+// field, so auto-assign still works on older fleet records.
+const DEFAULT_PASSENGER_SEATS_BY_TYPE = {
+  coaster: 28,
+  shuttle_bus: 20,
+  passenger_van: 15,
+  suv: 6,
+  mini_truck: 6,
+  other: 4
+};
+const getPassengerSeats = (truck) => (
+  Number(truck.passengerCapacity) > 0
+    ? Number(truck.passengerCapacity)
+    : (DEFAULT_PASSENGER_SEATS_BY_TYPE[truck.truckType] || 4)
+);
+const getStaffHeadcount = (contract) => (
+  (contract.banquetAssignment?.assignments || []).length + (contract.assignedSupervisor ? 1 : 0)
+);
+const populateStaffTransport = (query) => query
+  .populate('staffTransport.vehicles.truck', 'truckId plateNumber truckType status passengerVehicle passengerCapacity assignedDriver')
+  .populate('staffTransport.vehicles.driver', 'driverId fullName phone status');
+
 router.post('/:id/staff-transport/auto-assign', auth, requireRole(['logistics', 'admin']), async (req, res) => {
   try {
     const contract = await Contract.findById(req.params.id);
@@ -2802,40 +2843,18 @@ router.post('/:id/staff-transport/auto-assign', auth, requireRole(['logistics', 
       return res.status(400).json({ message: 'Staff transportation can only be booked for approved events.' });
     }
 
-    // Headcount to transport: the assigned banquet team plus the supervisor.
-    const banquetStaffCount = (contract.banquetAssignment?.assignments || []).length;
-    const supervisorCount = contract.assignedSupervisor ? 1 : 0;
-    const staffCount = banquetStaffCount + supervisorCount;
-
+    const staffCount = getStaffHeadcount(contract);
     if (staffCount === 0) {
       return res.status(400).json({ message: 'Assign the banquet staff first — there is no one to transport yet.' });
     }
 
-    // Effective seat count for a vehicle. Existing fleet records may predate the
-    // passengerCapacity field, so fall back to a sensible default per vehicle type.
-    const DEFAULT_SEATS_BY_TYPE = {
-      closed_van: 14,
-      open_truck: 12,
-      mini_truck: 6,
-      wing_van: 3,
-      lorry: 3,
-      refrigerated: 2,
-      flatbed: 3,
-      other: 4
-    };
-    const getSeats = (truck) => (
-      Number(truck.passengerCapacity) > 0
-        ? Number(truck.passengerCapacity)
-        : (DEFAULT_SEATS_BY_TYPE[truck.truckType] || 3)
-    );
-
-    // Available vehicles, excluding the cargo truck already booked for this event,
-    // ordered by seats so we use the fewest vehicles possible.
+    // Only passenger-tagged vehicles carry staff — never the back of a cargo truck.
+    // Exclude the cargo truck already booked for this event; use the fewest seats first.
     const cargoTruckId = contract.logisticsAssignment?.truck ? String(contract.logisticsAssignment.truck) : null;
-    const candidates = (await Truck.find({ status: 'available' }))
+    const candidates = (await Truck.find({ status: { $in: ['available', 'in_use'] }, passengerVehicle: true }))
       .filter((truck) => String(truck._id) !== cargoTruckId)
-      .filter((truck) => getSeats(truck) > 0)
-      .sort((a, b) => getSeats(b) - getSeats(a));
+      .filter((truck) => getPassengerSeats(truck) > 0)
+      .sort((a, b) => getPassengerSeats(b) - getPassengerSeats(a));
 
     const chosen = [];
     let totalCapacity = 0;
@@ -2844,27 +2863,122 @@ router.post('/:id/staff-transport/auto-assign', auth, requireRole(['logistics', 
         break;
       }
       chosen.push(truck);
-      totalCapacity += getSeats(truck);
+      totalCapacity += getPassengerSeats(truck);
+    }
+
+    if (chosen.length === 0) {
+      return res.status(400).json({ message: 'No passenger vehicles are available. Tag vehicles as passenger vehicles (with seat capacity) in Drivers & Trucks, or book staff transport manually.' });
     }
 
     const seatsShort = Math.max(0, staffCount - totalCapacity);
 
     contract.staffTransport = {
-      vehicles: chosen.map((truck) => ({ truck: truck._id, passengerCapacity: getSeats(truck) })),
+      vehicles: chosen.map((truck) => ({
+        truck: truck._id,
+        driver: truck.assignedDriver || null,
+        passengerCapacity: getPassengerSeats(truck)
+      })),
       staffCount,
       totalCapacity,
-      assignmentStatus: chosen.length > 0 ? 'scheduled' : 'pending',
+      assignmentStatus: 'scheduled',
       autoAssignedAt: new Date(),
       notes: seatsShort > 0
-        ? `Not enough fleet seats: ${totalCapacity} seat(s) booked for ${staffCount} staff. Book ${seatsShort} more seat(s) via an external/rented vehicle.`
-        : `${chosen.length} vehicle(s) booked for ${staffCount} staff (${totalCapacity} seats).`
+        ? `Not enough passenger seats: ${totalCapacity} seat(s) booked for ${staffCount} staff. Add ${seatsShort} more seat(s) manually or via a rented passenger vehicle.`
+        : `${chosen.length} passenger vehicle(s) booked for ${staffCount} staff (${totalCapacity} seats).`
     };
 
     await contract.save();
 
-    const updated = await Contract.findById(contract._id)
-      .populate('staffTransport.vehicles.truck', 'truckId plateNumber truckType status passengerCapacity assignedDriver');
+    const updated = await populateStaffTransport(Contract.findById(contract._id));
+    res.json(updated.staffTransport);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
 
+// Manual staff transport booking: logistics picks specific passenger vehicles and
+// (optionally) a driver per vehicle. Only passenger-tagged vehicles are accepted.
+router.put('/:id/staff-transport', auth, requireRole(['logistics', 'admin']), async (req, res) => {
+  try {
+    const contract = await Contract.findById(req.params.id);
+
+    if (!contract) {
+      return res.status(404).json({ message: 'Contract not found' });
+    }
+
+    if (!['approved', 'completed'].includes(contract.status)) {
+      return res.status(400).json({ message: 'Staff transportation can only be booked for approved events.' });
+    }
+
+    const staffTransportHoldError = getPaymentHoldError(contract);
+    if (staffTransportHoldError) {
+      return res.status(400).json({ message: staffTransportHoldError });
+    }
+
+    const vehiclesInput = Array.isArray(req.body?.vehicles) ? req.body.vehicles : [];
+    const cargoTruckId = contract.logisticsAssignment?.truck ? String(contract.logisticsAssignment.truck) : null;
+    const staffCount = getStaffHeadcount(contract);
+
+    const seenTruckIds = new Set();
+    const vehicles = [];
+    for (const entry of vehiclesInput) {
+      const truckId = entry?.truckId ? String(entry.truckId) : '';
+      if (!mongoose.isValidObjectId(truckId)) {
+        return res.status(400).json({ message: 'Each staff transport vehicle must be valid.' });
+      }
+      if (seenTruckIds.has(truckId)) {
+        return res.status(400).json({ message: 'A vehicle can only be added once to staff transport.' });
+      }
+      seenTruckIds.add(truckId);
+
+      if (truckId === cargoTruckId) {
+        return res.status(400).json({ message: 'The cargo truck for this event cannot also carry staff. Choose a passenger vehicle.' });
+      }
+
+      const truck = await Truck.findById(truckId);
+      if (!truck) {
+        return res.status(404).json({ message: 'Selected vehicle was not found.' });
+      }
+      if (!truck.passengerVehicle) {
+        return res.status(400).json({ message: `${truck.plateNumber || 'This vehicle'} is not tagged as a passenger vehicle, so it cannot carry staff.` });
+      }
+
+      let driverId = null;
+      if (entry?.driverId) {
+        driverId = String(entry.driverId);
+        if (!mongoose.isValidObjectId(driverId)) {
+          return res.status(400).json({ message: 'Selected driver is invalid.' });
+        }
+        const driver = await Driver.findById(driverId);
+        if (!driver) {
+          return res.status(404).json({ message: 'Selected driver was not found.' });
+        }
+      }
+
+      vehicles.push({ truck: truck._id, driver: driverId, passengerCapacity: getPassengerSeats(truck) });
+    }
+
+    const totalCapacity = vehicles.reduce((sum, vehicle) => sum + (Number(vehicle.passengerCapacity) || 0), 0);
+    const seatsShort = Math.max(0, staffCount - totalCapacity);
+
+    contract.staffTransport = {
+      vehicles,
+      staffCount,
+      totalCapacity,
+      assignmentStatus: vehicles.length > 0 ? 'scheduled' : 'pending',
+      autoAssignedAt: contract.staffTransport?.autoAssignedAt,
+      notes: String(req.body?.notes || '').trim() || (
+        vehicles.length === 0
+          ? 'No staff transport vehicles booked yet.'
+          : seatsShort > 0
+            ? `Manually booked ${vehicles.length} vehicle(s): ${totalCapacity} seat(s) for ${staffCount} staff — ${seatsShort} seat(s) short.`
+            : `Manually booked ${vehicles.length} vehicle(s): ${totalCapacity} seat(s) for ${staffCount} staff.`
+      )
+    };
+
+    await contract.save();
+
+    const updated = await populateStaffTransport(Contract.findById(contract._id));
     res.json(updated.staffTransport);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });

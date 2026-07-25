@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ChefHat, Calendar, AlertTriangle, CheckCircle, Flame } from 'lucide-react';
+import { ChefHat, Calendar, AlertTriangle, CheckCircle, Flame, Printer } from 'lucide-react';
 import { getSortTimestamp } from '@/lib/worklist';
 import { toast } from 'sonner';
 
@@ -32,8 +32,22 @@ interface Contract {
   slaWarning: boolean;
 }
 
+interface MenuTasting {
+  _id: string;
+  contract?: string | { _id: string } | null;
+  menuItems?: Array<{ category?: string; itemName?: string; selected?: boolean; notes?: string }>;
+  clientNotes?: string;
+  feedback?: {
+    rating?: number;
+    comments?: string;
+    itemsLiked?: string[];
+    itemsToChange?: string[];
+  };
+}
+
 export default function KitchenDashboard() {
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [tastings, setTastings] = useState<MenuTasting[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -42,13 +56,98 @@ export default function KitchenDashboard() {
 
   const fetchData = async () => {
     try {
-      const contractsData = await api.getContracts();
+      const [contractsData, tastingsData] = await Promise.all([
+        api.getContracts(),
+        api.getMenuTastings().catch(() => []),
+      ]);
       setContracts(contractsData);
+      setTastings(Array.isArray(tastingsData) ? tastingsData : []);
     } catch (error) {
       toast.error('Failed to load data');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const getTastingForContract = (contractId: string) =>
+    tastings.find((tasting) => {
+      const linked = typeof tasting.contract === 'object' ? tasting.contract?._id : tasting.contract;
+      return linked && String(linked) === String(contractId);
+    }) || null;
+
+  const escapeHtml = (value?: string | number) =>
+    String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  const handlePrintKitchenChecklist = (contract: Contract) => {
+    const tasting = getTastingForContract(contract._id);
+    const printWindow = window.open('', '_blank', 'width=900,height=1100');
+    if (!printWindow) {
+      toast.error('Please allow pop-ups to print the kitchen checklist');
+      return;
+    }
+
+    const menuRows = (contract.menuDetails || []).map((item) => `
+      <tr>
+        <td style="text-align:center">${item.confirmed ? '☑' : '☐'}</td>
+        <td>${escapeHtml(item.item)}</td>
+        <td>${escapeHtml(item.category)}</td>
+        <td style="text-align:center">${escapeHtml(item.quantity)}</td>
+        <td></td>
+      </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:#888">No menu items saved.</td></tr>';
+
+    const itemNotes = (tasting?.menuItems || [])
+      .filter((item) => item.notes && item.notes.trim())
+      .map((item) => `<li><strong>${escapeHtml(item.itemName)}:</strong> ${escapeHtml(item.notes)}</li>`)
+      .join('');
+
+    const likes = (tasting?.feedback?.itemsLiked || []).filter(Boolean);
+    const changes = (tasting?.feedback?.itemsToChange || []).filter(Boolean);
+
+    const preferencesHtml = tasting ? `
+      <section>
+        <h2>Client Preferences (from Menu Tasting)</h2>
+        ${tasting.feedback?.rating ? `<p><strong>Tasting rating:</strong> ${tasting.feedback.rating} / 5</p>` : ''}
+        ${tasting.feedback?.comments ? `<p><strong>Comments:</strong> ${escapeHtml(tasting.feedback.comments)}</p>` : ''}
+        ${likes.length ? `<p><strong>Liked:</strong> ${likes.map(escapeHtml).join(', ')}</p>` : ''}
+        ${changes.length ? `<p><strong>Requested changes:</strong> ${changes.map(escapeHtml).join(', ')}</p>` : ''}
+        ${tasting.clientNotes ? `<p><strong>Client notes:</strong> ${escapeHtml(tasting.clientNotes)}</p>` : ''}
+        ${itemNotes ? `<p><strong>Per-dish preferences:</strong></p><ul>${itemNotes}</ul>` : ''}
+        ${(!tasting.feedback?.comments && !likes.length && !changes.length && !tasting.clientNotes && !itemNotes)
+          ? '<p style="color:#888">No preferences or comments were recorded in the menu tasting.</p>' : ''}
+      </section>` : `
+      <section>
+        <h2>Client Preferences (from Menu Tasting)</h2>
+        <p style="color:#888">No menu tasting is linked to this contract.</p>
+      </section>`;
+
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Kitchen Checklist - ${escapeHtml(contract.contractNumber)}</title>
+      <style>
+        body { font: 12pt/1.5 'Segoe UI', Arial, sans-serif; color: #1a1a1a; padding: 28px 34px; }
+        h1 { font-size: 18pt; color: #7a1f2b; margin: 0 0 2px; }
+        h2 { font-size: 13pt; color: #7a1f2b; border-bottom: 1px solid #d9c6ca; padding-bottom: 3px; margin: 22px 0 10px; }
+        .meta { color: #555; margin: 0 0 4px; font-size: 10.5pt; }
+        table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 11pt; }
+        th { background: #7a1f2b; color: #fff; text-align: left; padding: 6px 9px; font-size: 9.5pt; }
+        td { border: 1px solid #ddd; padding: 6px 9px; }
+        ul { margin: 4px 0 0 18px; }
+        @media print { button { display: none; } }
+      </style></head><body>
+      <h1>Kitchen Preparation Checklist</h1>
+      <p class="meta">${escapeHtml(contract.contractNumber)} · ${escapeHtml(contract.clientName)}</p>
+      <p class="meta">Event: ${new Date(contract.eventDate).toLocaleDateString()} · ${escapeHtml(contract.totalPacks)} pax · ${contract.cookingLocation === 'on_site' ? 'On-site' : 'Commissary'}</p>
+      <section>
+        <h2>Food Items To Prepare</h2>
+        <table>
+          <thead><tr><th style="width:36px">Done</th><th>Item</th><th>Category</th><th style="width:60px">Qty</th><th style="width:150px">Prep notes</th></tr></thead>
+          <tbody>${menuRows}</tbody>
+        </table>
+      </section>
+      ${preferencesHtml}
+      <p style="margin-top:28px;color:#888;font-size:9pt">Printed ${new Date().toLocaleString()} · Juan Carlos Catering</p>
+      </body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 250);
   };
 
   const getEventDaysAway = (eventDate: string) => {
@@ -178,6 +277,11 @@ export default function KitchenDashboard() {
                   Mark Ready
                 </Button>
               )}
+
+              <Button variant="outline" size="sm" onClick={() => handlePrintKitchenChecklist(contract)}>
+                <Printer className="mr-2 h-4 w-4" />
+                Print Checklist
+              </Button>
 
               <Button variant="outline" size="sm" asChild>
                 <Link to={`/contracts/${contract._id}`}>View Contract</Link>

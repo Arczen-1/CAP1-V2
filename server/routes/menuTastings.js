@@ -54,6 +54,24 @@ const tastingValidation = [
     .withMessage('Tasting pax must be between 1 and 10')
 ];
 
+// Keeps only well-formed dish rows: a non-empty item name, trimmed strings, and
+// a boolean selected flag. Silently drops junk so a bad payload never fails a booking.
+const sanitizeMenuItems = (value) => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => ({
+      category: typeof item?.category === 'string' ? item.category.trim() : '',
+      itemName: typeof item?.itemName === 'string' ? item.itemName.trim() : '',
+      selected: item?.selected !== false,
+      notes: typeof item?.notes === 'string' ? item.notes.trim() : ''
+    }))
+    .filter((item) => item.itemName.length > 0)
+    .slice(0, 60);
+};
+
 const getLinkedContractId = (tasting) => {
   if (!tasting?.contract) {
     return '';
@@ -188,9 +206,13 @@ router.post('/', auth, requireRole(['sales', 'admin']), tastingValidation, async
       });
     }
     
-    const tasting = new MenuTasting(req.body);
+    const tasting = new MenuTasting({
+      ...req.body,
+      menuItems: sanitizeMenuItems(req.body.menuItems),
+      clientNotes: typeof req.body.clientNotes === 'string' ? req.body.clientNotes.trim() : undefined
+    });
     await tasting.save();
-    
+
     res.status(201).json(tasting);
   } catch (error) {
     if (error.name === 'ValidationError') {
@@ -291,6 +313,28 @@ router.post('/:id/feedback', auth, requireRole(['sales', 'admin']), [
       itemsLiked: toTrimmedList(req.body.itemsLiked),
       itemsToChange: toTrimmedList(req.body.itemsToChange)
     };
+
+    // Per-dish notes captured during the tasting are merged onto the existing
+    // dish list (matched by name) so the kitchen checklist can print them.
+    // Merging rather than replacing means a partial payload can never drop dishes.
+    if (Array.isArray(req.body.menuItems) && (tasting.menuItems || []).length > 0) {
+      const notesByName = new Map(
+        req.body.menuItems
+          .filter((item) => item && typeof item.itemName === 'string')
+          .map((item) => [
+            item.itemName.trim().toLowerCase(),
+            typeof item.notes === 'string' ? item.notes.trim() : ''
+          ])
+      );
+
+      tasting.menuItems.forEach((dish) => {
+        const incomingNote = notesByName.get(String(dish.itemName || '').trim().toLowerCase());
+        if (incomingNote !== undefined) {
+          dish.notes = incomingNote;
+        }
+      });
+    }
+
     tasting.status = 'completed';
     await tasting.save();
 

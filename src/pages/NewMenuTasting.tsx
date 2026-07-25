@@ -15,9 +15,17 @@ import {
 } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Textarea } from '@/components/ui/textarea';
 import { addMonths, format, startOfDay } from 'date-fns';
-import { CalendarIcon, ArrowLeft, Save, User, Mail, Phone, MapPin, Users, Clock } from 'lucide-react';
+import { CalendarIcon, ArrowLeft, Save, User, Mail, Phone, MapPin, Users, Clock, Utensils, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { MENU_CATEGORIES, MENU_CATEGORY_ORDER } from '@/lib/menuCatalog';
+
+interface TastingDish {
+  category: string;
+  itemName: string;
+  notes: string;
+}
 
 const timeSlots = [
   '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', 
@@ -50,6 +58,44 @@ export default function NewMenuTasting() {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [menuItems, setMenuItems] = useState<TastingDish[]>([]);
+  const [customCategory, setCustomCategory] = useState('');
+  const [customDish, setCustomDish] = useState('');
+
+  const isDishSelected = (category: string, itemName: string) =>
+    menuItems.some((dish) => dish.category === category && dish.itemName.toLowerCase() === itemName.toLowerCase());
+
+  const toggleDish = (category: string, itemName: string) => {
+    setMenuItems((current) =>
+      isDishSelected(category, itemName)
+        ? current.filter((dish) => !(dish.category === category && dish.itemName.toLowerCase() === itemName.toLowerCase()))
+        : [...current, { category, itemName, notes: '' }]
+    );
+  };
+
+  const removeDish = (index: number) => {
+    setMenuItems((current) => current.filter((_, i) => i !== index));
+  };
+
+  const updateDishNote = (index: number, notes: string) => {
+    setMenuItems((current) => current.map((dish, i) => (i === index ? { ...dish, notes } : dish)));
+  };
+
+  const addCustomDish = () => {
+    const name = customDish.trim();
+    const category = customCategory.trim() || 'Other';
+    if (!name) {
+      toast.error('Enter a dish name to add');
+      return;
+    }
+    if (isDishSelected(category, name)) {
+      toast.info('That dish is already added');
+      setCustomDish('');
+      return;
+    }
+    setMenuItems((current) => [...current, { category, itemName: name, notes: '' }]);
+    setCustomDish('');
+  };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -172,7 +218,13 @@ export default function NewMenuTasting() {
         tastingDate: tastingDate!.toISOString(),
         preferredEventDate: preferredEventDate!.toISOString(),
         expectedGuests: parseInt(formData.expectedGuests),
-        numberOfPax: parseInt(formData.numberOfPax)
+        numberOfPax: parseInt(formData.numberOfPax),
+        menuItems: menuItems.map((dish) => ({
+          category: dish.category,
+          itemName: dish.itemName,
+          selected: true,
+          notes: dish.notes,
+        })),
       };
 
       await api.createMenuTasting(tastingData);
@@ -502,6 +554,113 @@ export default function NewMenuTasting() {
                 <p className="text-sm text-muted-foreground">
                   Maximum 10 people allowed for tasting session
                 </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Menu Items for Tasting */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Utensils className="h-5 w-5" />
+                Menu Items for Tasting
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Select the dishes the client will sample during the session. This guides the kitchen and gives the client concrete options to react to. You can also add custom dishes.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {MENU_CATEGORY_ORDER.map((key) => {
+                const category = MENU_CATEGORIES[key];
+                return (
+                  <div key={key} className="space-y-2">
+                    <Label className="text-sm">{category.name}</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {category.options.map((option) => {
+                        const selected = isDishSelected(category.name, option.name);
+                        return (
+                          <button
+                            key={option.name}
+                            type="button"
+                            onClick={() => toggleDish(category.name, option.name)}
+                            className={`rounded-full border px-3 py-1.5 text-sm transition ${
+                              selected
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'border-slate-200 bg-background hover:border-primary/60'
+                            }`}
+                          >
+                            {option.name}
+                            {option.cost > 0 ? <span className={`ml-1 text-xs ${selected ? 'opacity-80' : 'text-muted-foreground'}`}>+₱{option.cost}</span> : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Custom dish */}
+              <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+                <Label className="text-sm">Add a custom dish</Label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    value={customCategory}
+                    onChange={(e) => setCustomCategory(e.target.value)}
+                    placeholder="Category (e.g. Appetizer)"
+                    className="sm:w-52"
+                  />
+                  <Input
+                    value={customDish}
+                    onChange={(e) => setCustomDish(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomDish(); } }}
+                    placeholder="Dish name (e.g. Lumpiang Sariwa)"
+                    className="flex-1"
+                  />
+                  <Button type="button" variant="outline" onClick={addCustomDish}>
+                    <Plus className="mr-1 h-4 w-4" />
+                    Add
+                  </Button>
+                </div>
+              </div>
+
+              {/* Selected summary */}
+              <div className="space-y-2">
+                <Label className="text-sm">Selected for tasting ({menuItems.length})</Label>
+                {menuItems.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No dishes selected yet. Tap dishes above to add them.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {menuItems.map((dish, index) => (
+                      <div key={`${dish.category}-${dish.itemName}-${index}`} className="flex flex-col gap-2 rounded-lg border p-2 sm:flex-row sm:items-center">
+                        <div className="min-w-[180px]">
+                          <p className="text-sm font-medium">{dish.itemName}</p>
+                          <p className="text-xs text-muted-foreground">{dish.category}</p>
+                        </div>
+                        <Input
+                          value={dish.notes}
+                          onChange={(e) => updateDishNote(index, e.target.value)}
+                          placeholder="Preference / note (optional, e.g. less spicy)"
+                          className="flex-1"
+                        />
+                        <Button type="button" variant="ghost" size="icon" onClick={() => removeDish(index)} aria-label="Remove dish">
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Tasting notes */}
+              <div className="space-y-2">
+                <Label htmlFor="clientNotes">Tasting Notes / Special Requests</Label>
+                <Textarea
+                  id="clientNotes"
+                  value={formData.clientNotes}
+                  onChange={(e) => handleInputChange('clientNotes', e.target.value)}
+                  placeholder="Dietary restrictions, allergies, theme, or anything the kitchen should know for the tasting."
+                  rows={3}
+                />
               </div>
             </CardContent>
           </Card>

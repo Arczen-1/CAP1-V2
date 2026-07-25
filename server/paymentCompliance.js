@@ -146,8 +146,10 @@ const runPaymentComplianceSweep = async () => {
       // "full payment" for corporate 100/0 plans, and the real percent otherwise.
       const dpLabel = milestones.fullPaymentPlan ? 'full payment' : `${milestones.downPaymentPercent}%`;
 
-      // Post-event: once the event day passes, remind every involved department
-      // to record its return checks so accounting can close the contract.
+      // Post-event: once the event day passes, tell the departments that actually
+      // handle returned items that they can begin their post-event inventory
+      // checks. Accounting is not included here - it gets a separate "ready to
+      // close" alert once every check is completed.
       if (contract.status === 'approved' && now > endOfDay(contract.eventDate)) {
         const departmentsWithItems = [
           ['creativeAssets', 'creative'],
@@ -157,15 +159,17 @@ const runPaymentComplianceSweep = async () => {
           .filter(([section]) => (contract[section] || []).length > 0)
           .map(([, role]) => role);
 
-        const sent = await notifyRolesOnce({
-          contract,
-          roles: [...departmentsWithItems, 'logistics', 'accounting'],
-          type: 'deadline_reminder',
-          title: `Post-event checks due: ${contract.contractNumber}`,
-          message: `${contract.clientName}'s event on ${formatDate(contract.eventDate)} has ended. Record the post-event return checks for your department (and report any incidents) so accounting can settle the remaining balance and close the contract.`,
-          priority: 'high'
-        });
-        if (sent) summary.notified += 1;
+        if (departmentsWithItems.length > 0) {
+          const sent = await notifyRolesOnce({
+            contract,
+            roles: departmentsWithItems,
+            type: 'deadline_reminder',
+            title: `Post-event checks ready: ${contract.contractNumber}`,
+            message: `${contract.clientName}'s event on ${formatDate(contract.eventDate)} has ended. You can now begin your post-event inventory checks for the returned items (and report any incidents). Accounting will close the contract once all checks are complete.`,
+            priority: 'high'
+          });
+          if (sent) summary.notified += 1;
+        }
       }
 
       // Milestone 1 follow-up: alert collections 1 month before the down payment due date.

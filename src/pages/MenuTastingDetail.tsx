@@ -74,6 +74,30 @@ interface MenuTasting {
   };
 }
 
+// A dish verdict mirrors what the kitchen checklist prints: dishes the client
+// liked, dishes they want changed, and the per-dish note explaining why.
+type DishVerdict = 'liked' | 'change' | 'none';
+
+interface DishFeedbackRow {
+  category: string;
+  itemName: string;
+  verdict: DishVerdict;
+  notes: string;
+}
+
+const DISH_VERDICT_META: Record<Exclude<DishVerdict, 'none'>, { label: string; activeClassName: string; badgeClassName: string }> = {
+  liked: {
+    label: 'Liked',
+    activeClassName: 'border-emerald-500 bg-emerald-500 text-white',
+    badgeClassName: 'border-emerald-200 bg-emerald-100 text-emerald-800',
+  },
+  change: {
+    label: 'Needs change',
+    activeClassName: 'border-amber-500 bg-amber-500 text-white',
+    badgeClassName: 'border-amber-200 bg-amber-100 text-amber-900',
+  },
+};
+
 export default function MenuTastingDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -91,6 +115,8 @@ export default function MenuTastingDetail() {
   const [feedbackComments, setFeedbackComments] = useState('');
   const [feedbackItemsLiked, setFeedbackItemsLiked] = useState('');
   const [feedbackItemsToChange, setFeedbackItemsToChange] = useState('');
+  // Per-dish verdicts recorded against the dishes actually served at the tasting.
+  const [dishFeedback, setDishFeedback] = useState<DishFeedbackRow[]>([]);
   const tastingService = useMock ? mockApi : api;
 
   useEffect(() => {
@@ -199,11 +225,41 @@ export default function MenuTastingDetail() {
     setFeedbackComments(tasting?.feedback?.comments || '');
     setFeedbackItemsLiked((tasting?.feedback?.itemsLiked || []).join(', '));
     setFeedbackItemsToChange((tasting?.feedback?.itemsToChange || []).join(', '));
+
+    // Seed one row per dish served, restoring any verdict/note already recorded
+    // so re-opening the dialog shows the previous answers instead of a blank form.
+    const likedNames = new Set((tasting?.feedback?.itemsLiked || []).map((name) => name.trim().toLowerCase()));
+    const changeNames = new Set((tasting?.feedback?.itemsToChange || []).map((name) => name.trim().toLowerCase()));
+    setDishFeedback((tasting?.menuItems || []).map((dish) => {
+      const key = String(dish.itemName || '').trim().toLowerCase();
+      return {
+        category: dish.category || '',
+        itemName: dish.itemName || '',
+        verdict: likedNames.has(key) ? 'liked' : changeNames.has(key) ? 'change' : 'none',
+        notes: dish.notes || '',
+      };
+    }));
+
     setFeedbackDialogOpen(true);
   };
 
   const parseFeedbackList = (value: string) =>
     value.split(',').map((item) => item.trim()).filter(Boolean);
+
+  const setDishVerdict = (index: number, verdict: DishVerdict) => {
+    setDishFeedback((current) => current.map((dish, i) => (
+      // Tapping the active verdict again clears it back to "no verdict".
+      i === index ? { ...dish, verdict: dish.verdict === verdict ? 'none' : verdict } : dish
+    )));
+  };
+
+  const setDishNote = (index: number, notes: string) => {
+    setDishFeedback((current) => current.map((dish, i) => (i === index ? { ...dish, notes } : dish)));
+  };
+
+  const hasDishFeedback = dishFeedback.length > 0;
+  const likedDishCount = dishFeedback.filter((dish) => dish.verdict === 'liked').length;
+  const changeDishCount = dishFeedback.filter((dish) => dish.verdict === 'change').length;
 
   const handleSubmitFeedback = async () => {
     if (!tasting) return;
@@ -213,14 +269,26 @@ export default function MenuTastingDetail() {
       return;
     }
 
+    // Dish verdicts are the source of truth when the tasting has a dish list;
+    // older bookings without dishes keep the free-text fields.
+    const payload = hasDishFeedback
+      ? {
+          rating: feedbackRating,
+          comments: feedbackComments.trim(),
+          itemsLiked: dishFeedback.filter((dish) => dish.verdict === 'liked').map((dish) => dish.itemName),
+          itemsToChange: dishFeedback.filter((dish) => dish.verdict === 'change').map((dish) => dish.itemName),
+          menuItems: dishFeedback.map((dish) => ({ itemName: dish.itemName, notes: dish.notes.trim() })),
+        }
+      : {
+          rating: feedbackRating,
+          comments: feedbackComments.trim(),
+          itemsLiked: parseFeedbackList(feedbackItemsLiked),
+          itemsToChange: parseFeedbackList(feedbackItemsToChange),
+        };
+
     try {
       setIsSubmittingFeedback(true);
-      const updatedTasting = await tastingService.submitMenuTastingFeedback(tasting._id, {
-        rating: feedbackRating,
-        comments: feedbackComments.trim(),
-        itemsLiked: parseFeedbackList(feedbackItemsLiked),
-        itemsToChange: parseFeedbackList(feedbackItemsToChange)
-      });
+      const updatedTasting = await tastingService.submitMenuTastingFeedback(tasting._id, payload);
       setTasting(updatedTasting);
       setFeedbackDialogOpen(false);
       toast.success('Feedback saved and tasting marked as completed.');
@@ -503,23 +571,39 @@ export default function MenuTastingDetail() {
               </CardHeader>
               <CardContent>
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {tasting.menuItems.map((item, index) => (
-                    <div
-                      key={index}
-                      className={`p-4 rounded-lg border ${
-                        item.selected ? 'border-green-500 bg-green-50' : 'border-gray-200'
-                      }`}
-                    >
-                      <p className="text-sm text-muted-foreground">{item.category}</p>
-                      <p className="font-medium">{item.itemName}</p>
-                      {item.selected && (
-                        <Badge className="mt-2 bg-green-100 text-green-800">Selected</Badge>
-                      )}
-                      {item.notes && (
-                        <p className="text-sm text-muted-foreground mt-2">{item.notes}</p>
-                      )}
-                    </div>
-                  ))}
+                  {tasting.menuItems.map((item, index) => {
+                    // Mirror the recorded verdict so this card reads the same way
+                    // the kitchen checklist prints it.
+                    const dishKey = String(item.itemName || '').trim().toLowerCase();
+                    const liked = (tasting.feedback?.itemsLiked || []).some((name) => name.trim().toLowerCase() === dishKey);
+                    const needsChange = (tasting.feedback?.itemsToChange || []).some((name) => name.trim().toLowerCase() === dishKey);
+
+                    return (
+                      <div
+                        key={index}
+                        className={`p-4 rounded-lg border ${
+                          liked
+                            ? 'border-emerald-500 bg-emerald-50'
+                            : needsChange
+                              ? 'border-amber-500 bg-amber-50'
+                              : 'border-gray-200'
+                        }`}
+                      >
+                        <p className="text-sm text-muted-foreground">{item.category}</p>
+                        <p className="font-medium">{item.itemName}</p>
+                        {liked ? (
+                          <Badge variant="outline" className={`mt-2 ${DISH_VERDICT_META.liked.badgeClassName}`}>Liked</Badge>
+                        ) : needsChange ? (
+                          <Badge variant="outline" className={`mt-2 ${DISH_VERDICT_META.change.badgeClassName}`}>Needs change</Badge>
+                        ) : item.selected ? (
+                          <Badge className="mt-2 bg-green-100 text-green-800">Selected</Badge>
+                        ) : null}
+                        {item.notes && (
+                          <p className="text-sm text-muted-foreground mt-2">{item.notes}</p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -581,14 +665,14 @@ export default function MenuTastingDetail() {
         </div>
 
         <Dialog open={feedbackDialogOpen} onOpenChange={setFeedbackDialogOpen}>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>Record Tasting Feedback</DialogTitle>
               <DialogDescription>
-                Capture how the tasting went. Saving the feedback marks this booking as completed.
+                Capture how the tasting went, dish by dish. What you record here is what the kitchen sees on the preparation checklist. Saving marks this booking as completed.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
               <div className="space-y-2">
                 <Label>Rating</Label>
                 <div className="flex items-center gap-1">
@@ -622,24 +706,83 @@ export default function MenuTastingDetail() {
                   rows={3}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="feedback-items-liked">Items Liked</Label>
-                <Input
-                  id="feedback-items-liked"
-                  value={feedbackItemsLiked}
-                  onChange={(e) => setFeedbackItemsLiked(e.target.value)}
-                  placeholder="Separate items with commas"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="feedback-items-to-change">Items To Change</Label>
-                <Input
-                  id="feedback-items-to-change"
-                  value={feedbackItemsToChange}
-                  onChange={(e) => setFeedbackItemsToChange(e.target.value)}
-                  placeholder="Separate items with commas"
-                />
-              </div>
+              {hasDishFeedback ? (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label>Dish-by-dish feedback</Label>
+                    <div className="flex items-center gap-2 text-xs">
+                      <Badge variant="outline" className={DISH_VERDICT_META.liked.badgeClassName}>{likedDishCount} liked</Badge>
+                      <Badge variant="outline" className={DISH_VERDICT_META.change.badgeClassName}>{changeDishCount} to change</Badge>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Mark each dish the client tasted. Notes you add here print on the kitchen preparation checklist for the event.
+                  </p>
+                  <div className="space-y-2">
+                    {dishFeedback.map((dish, index) => (
+                      <div key={`${dish.itemName}-${index}`} className="rounded-lg border p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium">{dish.itemName}</p>
+                            {dish.category ? <p className="text-xs text-muted-foreground">{dish.category}</p> : null}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {(['liked', 'change'] as const).map((verdict) => {
+                              const meta = DISH_VERDICT_META[verdict];
+                              const active = dish.verdict === verdict;
+                              return (
+                                <button
+                                  key={verdict}
+                                  type="button"
+                                  onClick={() => setDishVerdict(index, verdict)}
+                                  aria-pressed={active}
+                                  className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                                    active ? meta.activeClassName : 'border-slate-200 bg-background text-muted-foreground hover:border-slate-400'
+                                  }`}
+                                >
+                                  {meta.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <Input
+                          value={dish.notes}
+                          onChange={(e) => setDishNote(index, e.target.value)}
+                          placeholder={dish.verdict === 'change'
+                            ? 'What should change? (e.g. less spicy, more sauce)'
+                            : 'Note for the kitchen (optional)'}
+                          className="mt-2 h-8 text-sm"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                    No dishes were selected for this tasting, so list the items manually below.
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="feedback-items-liked">Items Liked</Label>
+                    <Input
+                      id="feedback-items-liked"
+                      value={feedbackItemsLiked}
+                      onChange={(e) => setFeedbackItemsLiked(e.target.value)}
+                      placeholder="Separate items with commas"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="feedback-items-to-change">Items To Change</Label>
+                    <Input
+                      id="feedback-items-to-change"
+                      value={feedbackItemsToChange}
+                      onChange={(e) => setFeedbackItemsToChange(e.target.value)}
+                      placeholder="Separate items with commas"
+                    />
+                  </div>
+                </>
+              )}
             </div>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setFeedbackDialogOpen(false)} disabled={isSubmittingFeedback}>

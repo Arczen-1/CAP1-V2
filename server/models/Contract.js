@@ -250,6 +250,11 @@ const staffTransportVehicleSchema = new mongoose.Schema({
     ref: 'Truck',
     default: null
   },
+  driver: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Driver',
+    default: null
+  },
   passengerCapacity: {
     type: Number,
     default: 0

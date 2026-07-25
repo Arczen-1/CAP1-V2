@@ -111,9 +111,25 @@ const truckSchema = new mongoose.Schema({
       'flatbed',          // Flatbed
       'mini_truck',       // Small truck
       'lorry',            // Large lorry
+      // Passenger vehicles for staff transport
+      'coaster',          // Coaster / mini bus
+      'passenger_van',    // Passenger van (e.g. Hiace)
+      'shuttle_bus',      // Shuttle bus
+      'suv',              // SUV
       'other'
     ],
     required: true
+  },
+  // Staff transport: seats and whether this vehicle is suitable for carrying
+  // people (so passengers are never assigned to the back of a cargo truck).
+  passengerVehicle: {
+    type: Boolean,
+    default: false
+  },
+  passengerCapacity: {
+    type: Number,
+    default: 0,
+    min: 0
   },
   brand: {
     type: String,

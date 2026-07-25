@@ -298,6 +298,8 @@ function App() {
         <Toaster
           position="top-center"
           duration={5000}
+          expand
+          visibleToasts={5}
           toastOptions={{
             style: {
               background: 'hsl(var(--primary))',

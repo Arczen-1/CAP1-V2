@@ -184,7 +184,7 @@ router.get('/trucks/:id', auth, requireLogisticsAccess, async (req, res) => {
 // Create truck
 router.post('/trucks', auth, requireLogisticsAccess, [
   body('plateNumber').notEmpty().trim().toUpperCase(),
-  body('truckType').isIn(['closed_van', 'open_truck', 'refrigerated', 'wing_van', 'flatbed', 'mini_truck', 'lorry', 'other'])
+  body('truckType').isIn(['closed_van', 'open_truck', 'refrigerated', 'wing_van', 'flatbed', 'mini_truck', 'lorry', 'coaster', 'passenger_van', 'shuttle_bus', 'suv', 'other'])
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -303,6 +303,10 @@ router.get('/trucks/types/list', auth, requireLogisticsAccess, async (req, res) 
       { value: 'flatbed', label: 'Flatbed' },
       { value: 'mini_truck', label: 'Mini Truck' },
       { value: 'lorry', label: 'Lorry' },
+      { value: 'coaster', label: 'Coaster (Passenger)' },
+      { value: 'passenger_van', label: 'Passenger Van' },
+      { value: 'shuttle_bus', label: 'Shuttle Bus' },
+      { value: 'suv', label: 'SUV (Passenger)' },
       { value: 'other', label: 'Other' }
     ];
     res.json(types);

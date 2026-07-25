@@ -24,6 +24,10 @@ const truckTypes = [
   { value: 'flatbed', label: 'Flatbed' },
   { value: 'mini_truck', label: 'Mini Truck' },
   { value: 'lorry', label: 'Lorry' },
+  { value: 'coaster', label: 'Coaster (Passenger)' },
+  { value: 'passenger_van', label: 'Passenger Van' },
+  { value: 'shuttle_bus', label: 'Shuttle Bus' },
+  { value: 'suv', label: 'SUV (Passenger)' },
   { value: 'other', label: 'Other' }
 ];
 
@@ -57,6 +61,8 @@ interface Truck {
     volume?: number;
     dimensions?: { length?: number; width?: number; height?: number };
   };
+  passengerVehicle?: boolean;
+  passengerCapacity?: number;
   assignedDriver?: Driver;
   images: { url: string; caption: string; isPrimary: boolean }[];
 }
@@ -138,7 +144,9 @@ export default function LogisticsManagement() {
     length: '',
     width: '',
     height: '',
-    imageUrl: ''
+    imageUrl: '',
+    passengerVehicle: false,
+    passengerCapacity: ''
   });
 
   useEffect(() => {
@@ -226,6 +234,8 @@ export default function LogisticsManagement() {
             height: truckForm.height ? parseFloat(truckForm.height) : undefined
           }
         },
+        passengerVehicle: truckForm.passengerVehicle,
+        passengerCapacity: truckForm.passengerVehicle && truckForm.passengerCapacity ? parseInt(truckForm.passengerCapacity, 10) : 0,
         images: truckForm.imageUrl ? [{ url: truckForm.imageUrl, caption: 'Primary', isPrimary: true }] : []
       });
       toast.success('Truck added successfully');
@@ -273,7 +283,9 @@ export default function LogisticsManagement() {
             width: truckForm.width ? parseFloat(truckForm.width) : undefined,
             height: truckForm.height ? parseFloat(truckForm.height) : undefined
           }
-        }
+        },
+        passengerVehicle: truckForm.passengerVehicle,
+        passengerCapacity: truckForm.passengerVehicle && truckForm.passengerCapacity ? parseInt(truckForm.passengerCapacity, 10) : 0
       });
       toast.success('Truck updated successfully');
       setIsEditTruckOpen(false);
@@ -347,7 +359,9 @@ export default function LogisticsManagement() {
       length: truck.capacity?.dimensions?.length?.toString() || '',
       width: truck.capacity?.dimensions?.width?.toString() || '',
       height: truck.capacity?.dimensions?.height?.toString() || '',
-      imageUrl: truck.images[0]?.url || ''
+      imageUrl: truck.images[0]?.url || '',
+      passengerVehicle: Boolean(truck.passengerVehicle),
+      passengerCapacity: truck.passengerCapacity ? String(truck.passengerCapacity) : ''
     });
     setIsEditTruckOpen(true);
   };
@@ -377,7 +391,9 @@ export default function LogisticsManagement() {
       length: '',
       width: '',
       height: '',
-      imageUrl: ''
+      imageUrl: '',
+      passengerVehicle: false,
+      passengerCapacity: ''
     });
   };
 
@@ -736,6 +752,29 @@ export default function LogisticsManagement() {
                         placeholder="https://example.com/truck.jpg"
                       />
                     </div>
+                    <div className="space-y-2 rounded-lg border p-3">
+                      <label className="flex items-center gap-2 text-sm font-medium">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={truckForm.passengerVehicle}
+                          onChange={(e) => setTruckForm({ ...truckForm, passengerVehicle: e.target.checked })}
+                        />
+                        Passenger vehicle (can carry event staff)
+                      </label>
+                      {truckForm.passengerVehicle ? (
+                        <div className="space-y-1">
+                          <Label>Passenger seats</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            placeholder="e.g. 15"
+                            value={truckForm.passengerCapacity}
+                            onChange={(e) => setTruckForm({ ...truckForm, passengerCapacity: e.target.value })}
+                          />
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setIsAddTruckOpen(false)}>Cancel</Button>
@@ -928,6 +967,29 @@ export default function LogisticsManagement() {
                   <Label>Volume (m³)</Label>
                   <Input type="number" value={truckForm.volume} onChange={(e) => setTruckForm({ ...truckForm, volume: e.target.value })} />
                 </div>
+              </div>
+              <div className="space-y-2 rounded-lg border p-3">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={truckForm.passengerVehicle}
+                    onChange={(e) => setTruckForm({ ...truckForm, passengerVehicle: e.target.checked })}
+                  />
+                  Passenger vehicle (can carry event staff)
+                </label>
+                {truckForm.passengerVehicle ? (
+                  <div className="space-y-1">
+                    <Label>Passenger seats</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      placeholder="e.g. 15"
+                      value={truckForm.passengerCapacity}
+                      onChange={(e) => setTruckForm({ ...truckForm, passengerCapacity: e.target.value })}
+                    />
+                  </div>
+                ) : null}
               </div>
             </div>
             <DialogFooter>

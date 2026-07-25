@@ -232,7 +232,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="flex items-center justify-between gap-3 px-2 py-1.5">
           <div>
             <DropdownMenuLabel className="p-0">Department Notifications</DropdownMenuLabel>
-            <p className="text-xs text-muted-foreground">Contract actions that need your attention.</p>
+            <p className="text-xs text-muted-foreground">Updates and tasks for your department.</p>
           </div>
           {unreadCount > 0 ? (
             <Button variant="ghost" size="sm" onClick={handleMarkAllNotificationsRead}>
@@ -258,8 +258,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold">{notification.title}</p>
-                    <p className="mt-1 max-h-10 overflow-hidden text-xs leading-relaxed text-muted-foreground">{notification.message}</p>
+                    <p className="text-sm font-semibold">{notification.title}</p>
+                    <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{notification.message}</p>
                   </div>
                   {!notification.isRead ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" /> : null}
                 </div>
@@ -361,7 +361,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="min-w-0">
             <p className="text-sm font-medium">Notifications</p>
             <p className="text-xs text-muted-foreground">
-              {unreadCount > 0 ? `${unreadCount} pending action${unreadCount === 1 ? '' : 's'}` : 'No pending actions'}
+              {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
             </p>
           </div>
           <NotificationMenu />

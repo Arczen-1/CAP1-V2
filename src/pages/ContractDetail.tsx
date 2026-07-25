@@ -303,6 +303,11 @@ interface Contract {
         truckType?: string;
         passengerCapacity?: number;
       } | null;
+      driver?: {
+        _id: string;
+        driverId?: string;
+        fullName?: string;
+      } | null;
       passengerCapacity?: number;
     }>;
     staffCount?: number;
@@ -404,6 +409,18 @@ interface OperationsSummary {
       truckType: string;
       status: string;
       capacityVolume: number;
+      assignedDriver?: {
+        _id: string;
+        fullName: string;
+        driverId: string;
+      } | null;
+    }>;
+    staffTransportVehicles?: Array<{
+      _id: string;
+      truckId: string;
+      plateNumber: string;
+      truckType: string;
+      passengerCapacity: number;
       assignedDriver?: {
         _id: string;
         fullName: string;
@@ -778,6 +795,8 @@ export default function ContractDetail() {
   const [isSavingEsignatures, setIsSavingEsignatures] = useState(false);
   const [isClosingContract, setIsClosingContract] = useState(false);
   const [isAssigningStaffTransport, setIsAssigningStaffTransport] = useState(false);
+  // Manual staff-transport selection: truckId -> chosen driverId ('' = none yet).
+  const [staffTransportDraft, setStaffTransportDraft] = useState<Record<string, string>>({});
   const [logisticsSubTab, setLogisticsSubTab] = useState<'booking' | 'staff' | 'manifest'>('booking');
   const [isDeletingContract, setIsDeletingContract] = useState(false);
   const [isCancellingContract, setIsCancellingContract] = useState(false);
@@ -923,6 +942,14 @@ export default function ContractDetail() {
           || resolveFinalPaymentPercent(contractData.downPaymentPercent, contractData.finalPaymentPercent) <= 0
           ? 'full'
           : 'split'
+      );
+      // Seed the manual staff-transport picker from the saved booking.
+      setStaffTransportDraft(
+        Object.fromEntries(
+          (contractData.staffTransport?.vehicles || [])
+            .filter((vehicle: any) => vehicle?.truck?._id)
+            .map((vehicle: any) => [String(vehicle.truck._id), vehicle.driver?._id ? String(vehicle.driver._id) : ''])
+        )
       );
       applySavedLogisticsAssignment(contractData);
       setSignatureForm(getSignatureFormState(contractData));
@@ -1566,6 +1593,46 @@ export default function ContractDetail() {
       fetchContractData();
     } catch (error: any) {
       toast.error(error.message || 'Failed to auto-assign staff transportation');
+    } finally {
+      setIsAssigningStaffTransport(false);
+    }
+  };
+
+  // Manual staff-transport picker: map of truckId -> selected driverId ('' = none).
+  const toggleStaffTransportVehicle = (truckId: string) => {
+    setStaffTransportDraft((current) => {
+      const next = { ...current };
+      if (truckId in next) {
+        delete next[truckId];
+      } else {
+        next[truckId] = '';
+      }
+      return next;
+    });
+  };
+
+  const setStaffTransportDriver = (truckId: string, driverId: string) => {
+    setStaffTransportDraft((current) => ({ ...current, [truckId]: driverId }));
+  };
+
+  const handleSaveStaffTransport = async () => {
+    if (!contract || !['approved', 'completed'].includes(contract.status)) {
+      toast.error('Staff transportation can only be booked for approved events');
+      return;
+    }
+
+    const vehicles = Object.entries(staffTransportDraft).map(([truckId, driverId]) => ({
+      truckId,
+      ...(driverId ? { driverId } : {}),
+    }));
+
+    setIsAssigningStaffTransport(true);
+    try {
+      const result: any = await api.updateStaffTransport(id!, { vehicles });
+      toast.success(result?.notes || 'Staff transportation saved');
+      fetchContractData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save staff transportation');
     } finally {
       setIsAssigningStaffTransport(false);
     }
@@ -3633,7 +3700,11 @@ export default function ContractDetail() {
   // Kitchen has no pull-out inventory responsibilities, so the Inventory tab is
   // not applicable for kitchen-role users (admins/sales still see it for oversight).
   const isKitchenFocusedContractView = isKitchen() && !isAdmin() && !isSales();
-  const canViewInventoryTab = (useBanquetFocusedContractView || isKitchenFocusedContractView) ? false : true;
+  // Logistics transports items but does not do the pull-out/return inventory
+  // checks, so the Inventory tab is not applicable to logistics-only users
+  // (the Logistics tab already shows the load manifest of what to bring).
+  const isLogisticsFocusedContractView = isLogistics() && !isAdmin() && !isSales();
+  const canViewInventoryTab = (useBanquetFocusedContractView || isKitchenFocusedContractView || isLogisticsFocusedContractView) ? false : true;
   const canViewPaymentsTab = !useRestrictedDepartmentContractView && (isAdmin() || isAccounting() || isSales());
   const canViewBanquetTab = isOperationalPreparationStage && (useBanquetFocusedContractView || (!useInventoryFocusedContractView && (isAdmin() || isBanquet() || isSales())));
   const canViewLogisticsTab = isOperationalPreparationStage && !useRestrictedDepartmentContractView && (isAdmin() || isLogistics() || isBanquet() || isSales());
@@ -4075,18 +4146,22 @@ export default function ContractDetail() {
   const creativeReturnsRemaining = (contract.creativeAssets || []).filter(item => !isPostEventClosed(item.postEventStatus, item.status)).length;
   const linenReturnsRemaining = (contract.linenRequirements || []).filter(item => !isPostEventClosed(item.postEventStatus, item.status)).length;
   const stockroomReturnsRemaining = (contract.equipmentChecklist || []).filter(item => !isPostEventClosed(item.postEventStatus, item.status)).length;
+  // Least privilege: only finance-facing roles see the exact outstanding amount.
+  const canSeeFinancialDetails = isAdmin() || isAccounting() || isSales();
   const closureIssues: string[] = [];
 
   if (!eventHasPassed) {
-    closureIssues.push('Available only after the event date has passed.');
+    closureIssues.push('The contract can be closed only after the event date has passed.');
   }
 
   if (!fullyPaid) {
-    closureIssues.push(`Outstanding balance of ${formatCurrency(remainingBalance)} must be settled.`);
+    closureIssues.push(canSeeFinancialDetails
+      ? `Outstanding balance of ${formatCurrency(remainingBalance)} must be settled before closing.`
+      : 'The final balance still needs to be settled with Accounting.');
   }
 
   if (!logisticsClosedOut) {
-    closureIssues.push('Logistics booking must be marked completed.');
+    closureIssues.push('Logistics transport must be marked completed.');
   }
 
   if (creativeReturnsRemaining > 0) {
@@ -4986,36 +5061,42 @@ export default function ContractDetail() {
     {
       key: 'booking' as const,
       order: 1,
-      title: 'Book Transport',
+      title: 'Inventory Transport',
+      informational: false,
       done: logisticsStepBookingDone,
       detail: logisticsStepBookingDone
-        ? 'Truck and driver are booked for this event.'
+        ? 'Truck and driver are booked to carry the event inventory.'
         : `Assign a truck and driver sized to the estimated load (${logisticsEstimatedLoad || 0} m³).`,
     },
     {
       key: 'staff' as const,
       order: 2,
-      title: 'Book Staff Transport',
+      title: 'Staff Transport',
+      informational: false,
       done: logisticsStepStaffDone,
       detail: !logisticsStaffNeeded
         ? 'No event staff assigned yet, so no staff transport is required.'
         : logisticsStepStaffDone
           ? `Vehicles booked to seat all ${logisticsStaffCount} staff.`
-          : `Auto-assign vehicles to seat the ${logisticsStaffCount || 'assigned'} event staff.`,
+          : `Book passenger vehicles to seat the ${logisticsStaffCount || 'assigned'} event staff.`,
     },
     {
       key: 'manifest' as const,
       order: 3,
       title: 'Load & Dispatch',
+      informational: true,
       done: logisticsStepDispatchDone,
       detail: logisticsStepDispatchDone
         ? 'Items loaded, dispatched, and the trip is marked completed.'
-        : 'Confirm every department is ready, load, dispatch, then mark completed after the event.',
+        : 'Informational — confirm every department is ready, load, dispatch, then mark completed after the event.',
     },
   ];
-  const logisticsStepsDoneCount = logisticsWorkflowSteps.filter((step) => step.done).length;
-  const logisticsFullyDone = logisticsStepsDoneCount === logisticsWorkflowSteps.length;
-  const logisticsWorkflowPercent = Math.round((logisticsStepsDoneCount / logisticsWorkflowSteps.length) * 100);
+  // Load & Dispatch is informational (it just tracks the day-of hand-off), so
+  // logistics completion is measured against the two real booking steps only.
+  const logisticsCountedSteps = logisticsWorkflowSteps.filter((step) => !step.informational);
+  const logisticsStepsDoneCount = logisticsCountedSteps.filter((step) => step.done).length;
+  const logisticsFullyDone = logisticsStepsDoneCount === logisticsCountedSteps.length;
+  const logisticsWorkflowPercent = Math.round((logisticsStepsDoneCount / logisticsCountedSteps.length) * 100);
 
   return (
     <Layout>
@@ -6536,7 +6617,7 @@ export default function ContractDetail() {
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <CardTitle className="text-base">Logistics Workflow</CardTitle>
                           <Badge className={logisticsFullyDone ? 'border-green-200 bg-green-100 text-green-800' : 'border-amber-200 bg-amber-100 text-amber-900'}>
-                            {logisticsFullyDone ? 'Logistics Complete (100%)' : `${logisticsStepsDoneCount} of ${logisticsWorkflowSteps.length} steps done`}
+                            {logisticsFullyDone ? 'Logistics Complete (100%)' : `${logisticsStepsDoneCount} of ${logisticsCountedSteps.length} steps done`}
                           </Badge>
                         </div>
                         <Progress value={logisticsWorkflowPercent} className="mt-3 h-2" />
@@ -6552,10 +6633,15 @@ export default function ContractDetail() {
                             <div className="flex items-center gap-2">
                               {step.done ? (
                                 <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
+                              ) : step.informational ? (
+                                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[10px] font-semibold text-slate-400">i</span>
                               ) : (
                                 <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-400 text-[10px] font-semibold text-slate-500">{step.order}</span>
                               )}
                               <p className="text-sm font-semibold">{step.title}</p>
+                              {step.informational ? (
+                                <span className="text-[10px] font-medium uppercase tracking-wide text-slate-400">info</span>
+                              ) : null}
                             </div>
                             <p className="mt-1 text-xs text-muted-foreground">{step.detail}</p>
                           </button>
@@ -6565,9 +6651,9 @@ export default function ContractDetail() {
 
                     <Tabs value={logisticsSubTab} onValueChange={(value) => setLogisticsSubTab(value as 'booking' | 'staff' | 'manifest')} className="w-full">
                       <TabsList>
-                        <TabsTrigger value="booking">1. Book Transport{logisticsStepBookingDone ? ' ✓' : ''}</TabsTrigger>
+                        <TabsTrigger value="booking">1. Inventory Transport{logisticsStepBookingDone ? ' ✓' : ''}</TabsTrigger>
                         <TabsTrigger value="staff">2. Staff Transport{logisticsStepStaffDone ? ' ✓' : ''}</TabsTrigger>
-                        <TabsTrigger value="manifest">3. Load &amp; Dispatch{logisticsStepDispatchDone ? ' ✓' : ''}</TabsTrigger>
+                        <TabsTrigger value="manifest">Load &amp; Dispatch (info){logisticsStepDispatchDone ? ' ✓' : ''}</TabsTrigger>
                       </TabsList>
 
                       <TabsContent value="manifest" className="mt-4 space-y-4">
@@ -6613,7 +6699,7 @@ export default function ContractDetail() {
                       </CardHeader>
                       <CardContent className="space-y-5">
                         {([
-                          { title: 'Kitchen & Food', rows: (contract.menuDetails || []).map((item: any) => ({ name: item.item || 'Food item', code: item.category || '-', quantity: Number(item.quantity) || 0, status: contract.ingredientStatus === 'prepared' ? 'prepared' : 'pending' })) },
+                          { title: 'Kitchen & Food', rows: (contract.menuDetails || []).map((item: any) => ({ name: item.item || 'Food item', code: item.category || '-', quantity: Number(item.quantity) || 0, status: (item.confirmed || contract.ingredientStatus === 'prepared') ? 'prepared' : 'pending' })) },
                           { title: 'Stockroom & Equipment', rows: (contract.equipmentChecklist || []).map((item: any) => ({ name: item.item || 'Equipment item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0, status: item.status || 'pending' })) },
                           { title: 'Linen', rows: (contract.linenRequirements || []).map((item: any) => ({ name: item.type || 'Linen item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0, status: item.status || 'pending' })) },
                           { title: 'Creative & Decor', rows: (contract.creativeAssets || []).map((item: any) => ({ name: item.item || 'Creative item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0, status: item.status || 'pending' })) },
@@ -6656,37 +6742,94 @@ export default function ContractDetail() {
                       </TabsContent>
 
                       <TabsContent value="staff" className="mt-4 space-y-4">
+                    {(() => {
+                      const staffHeadcount = (contract.banquetAssignment?.assignments?.length || 0) + (contract.assignedSupervisor ? 1 : 0);
+                      const staffVehicleOptions = operationsSummary?.logistics.staffTransportVehicles || [];
+                      const staffDriverOptions = operationsSummary?.logistics.availableDrivers || [];
+                      const selectedSeats = staffVehicleOptions
+                        .filter((vehicle) => vehicle._id in staffTransportDraft)
+                        .reduce((sum, vehicle) => sum + (vehicle.passengerCapacity || 0), 0);
+                      const seatsShort = Math.max(0, staffHeadcount - selectedSeats);
+                      return (
                     <Card className="border-slate-200" data-print-hide="true">
                       <CardHeader className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                           <CardTitle className="text-base">Staff Transportation</CardTitle>
                           <p className="text-sm text-muted-foreground">
-                            A separate booking that carries the event staff. Vehicles are auto-selected from the available fleet by headcount and seat capacity, adding more vehicles until everyone has a seat.
+                            A separate booking that carries the event staff in passenger vehicles (never in a cargo truck). Pick vehicles and drivers manually, or auto-assign to seat everyone.
                           </p>
                         </div>
                         {canManageLogistics ? (
                           <Button size="sm" variant="outline" onClick={handleAutoAssignStaffTransport} disabled={isAssigningStaffTransport}>
                             <Users className="mr-2 h-4 w-4" />
-                            {isAssigningStaffTransport
-                              ? 'Assigning...'
-                              : (contract.staffTransport?.vehicles?.length ? 'Re-Assign Vehicles' : 'Auto-Assign Vehicles')}
+                            {isAssigningStaffTransport ? 'Working...' : 'Auto-Assign'}
                           </Button>
                         ) : null}
                       </CardHeader>
-                      <CardContent className="space-y-3">
+                      <CardContent className="space-y-4">
+                        <div className="flex flex-wrap gap-x-6 gap-y-2 rounded-lg border bg-muted/30 px-4 py-3 text-sm">
+                          <div><span className="text-muted-foreground">Staff to transport: </span><strong>{staffHeadcount}</strong></div>
+                          <div><span className="text-muted-foreground">Seats selected: </span><strong className={seatsShort > 0 ? 'text-red-700' : 'text-emerald-700'}>{selectedSeats}</strong></div>
+                          {seatsShort > 0 ? <div className="font-medium text-red-700">{seatsShort} seat(s) short</div> : <div className="font-medium text-emerald-700">Everyone has a seat</div>}
+                        </div>
+
+                        {staffHeadcount === 0 ? (
+                          <p className="text-sm text-muted-foreground">Assign the banquet team first — there is no one to transport yet.</p>
+                        ) : canManageLogistics ? (
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium">Passenger vehicles</p>
+                            {staffVehicleOptions.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">
+                                No passenger vehicles are available. Tag vehicles as passenger vehicles (with seat capacity) under Drivers &amp; Trucks.
+                              </p>
+                            ) : (
+                              <div className="space-y-2">
+                                {staffVehicleOptions.map((vehicle) => {
+                                  const selected = vehicle._id in staffTransportDraft;
+                                  return (
+                                    <div key={vehicle._id} className={`rounded-lg border p-3 ${selected ? 'border-primary bg-primary/5' : 'border-slate-200'}`}>
+                                      <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <label className="flex items-center gap-3">
+                                          <input type="checkbox" checked={selected} onChange={() => toggleStaffTransportVehicle(vehicle._id)} className="h-4 w-4" />
+                                          <span>
+                                            <span className="font-medium">{vehicle.plateNumber}</span>
+                                            <span className="text-muted-foreground"> · {(vehicle.truckType || '').replace(/_/g, ' ')} · {vehicle.passengerCapacity} seats</span>
+                                          </span>
+                                        </label>
+                                        {selected ? (
+                                          <select
+                                            value={staffTransportDraft[vehicle._id] || ''}
+                                            onChange={(event) => setStaffTransportDriver(vehicle._id, event.target.value)}
+                                            className="rounded-md border border-slate-300 bg-background px-2 py-1 text-sm"
+                                          >
+                                            <option value="">Driver: unassigned{vehicle.assignedDriver ? ` (default ${vehicle.assignedDriver.fullName})` : ''}</option>
+                                            {staffDriverOptions.map((driver) => (
+                                              <option key={driver._id} value={driver._id}>{driver.fullName || driver.driverId}</option>
+                                            ))}
+                                          </select>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                <Button size="sm" onClick={handleSaveStaffTransport} disabled={isAssigningStaffTransport}>
+                                  {isAssigningStaffTransport ? 'Saving...' : 'Save Staff Transport'}
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
+
                         {contract.staffTransport?.vehicles?.length ? (
-                          <>
-                            <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
-                              <div><span className="text-muted-foreground">Staff to transport: </span><strong>{contract.staffTransport.staffCount ?? 0}</strong></div>
-                              <div><span className="text-muted-foreground">Seats booked: </span><strong>{contract.staffTransport.totalCapacity ?? 0}</strong></div>
-                              <div><span className="text-muted-foreground">Vehicles: </span><strong>{contract.staffTransport.vehicles.length}</strong></div>
-                            </div>
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium">Booked vehicles</p>
                             <div className="overflow-x-auto rounded-lg border">
                               <table className="w-full text-sm">
                                 <thead>
                                   <tr className="border-b bg-muted/50 text-left">
                                     <th className="px-3 py-2 font-medium">Vehicle</th>
                                     <th className="px-3 py-2 font-medium">Plate</th>
+                                    <th className="px-3 py-2 font-medium">Driver</th>
                                     <th className="px-3 py-2 font-medium">Seats</th>
                                   </tr>
                                 </thead>
@@ -6694,10 +6837,11 @@ export default function ContractDetail() {
                                   {contract.staffTransport.vehicles.map((vehicle, index) => (
                                     <tr key={vehicle.truck?._id || index} className="border-b last:border-b-0">
                                       <td className="px-3 py-2">
-                                        {vehicle.truck?.truckId || 'Vehicle'}
+                                        {vehicle.truck?.plateNumber || 'Vehicle'}
                                         {vehicle.truck?.truckType ? ` (${vehicle.truck.truckType.replace(/_/g, ' ')})` : ''}
                                       </td>
                                       <td className="px-3 py-2 text-muted-foreground">{vehicle.truck?.plateNumber || '-'}</td>
+                                      <td className="px-3 py-2 text-muted-foreground">{vehicle.driver?.fullName || 'Unassigned'}</td>
                                       <td className="px-3 py-2 font-semibold">{vehicle.passengerCapacity ?? vehicle.truck?.passengerCapacity ?? 0}</td>
                                     </tr>
                                   ))}
@@ -6709,15 +6853,12 @@ export default function ContractDetail() {
                                 {contract.staffTransport.notes}
                               </p>
                             ) : null}
-                          </>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">
-                            No staff transportation booked yet.{canManageLogistics ? ' Use Auto-Assign Vehicles to book based on the assigned staff count.' : ''}
-                          </p>
-                        )}
+                          </div>
+                        ) : null}
                       </CardContent>
                     </Card>
-
+                      );
+                    })()}
                       </TabsContent>
 
                       <TabsContent value="booking" className="mt-4 space-y-4">
