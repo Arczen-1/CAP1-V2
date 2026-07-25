@@ -50,9 +50,17 @@ const notificationSchema = new mongoose.Schema({
     type: String,
     enum: ['low', 'medium', 'high'],
     default: 'medium'
-  }
+  },
+  // Optional self-destruct timestamp. Set when a contract is closed so its
+  // notifications clear out of inboxes a short while afterwards. MongoDB's TTL
+  // monitor removes the document once this time passes (see index below).
+  expiresAt: Date
 }, {
   timestamps: true
 });
+
+// TTL index: documents are deleted when expiresAt is reached. Notifications with
+// no expiresAt (the default) are never auto-removed.
+notificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 module.exports = mongoose.model('Notification', notificationSchema);

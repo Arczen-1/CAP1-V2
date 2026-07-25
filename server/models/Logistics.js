@@ -132,6 +132,13 @@ const truckSchema = new mongoose.Schema({
       height: Number
     }
   },
+  // How many people the vehicle can seat, used when auto-booking staff
+  // transportation (separate from the cargo capacity above).
+  passengerCapacity: {
+    type: Number,
+    default: 3,
+    min: 0
+  },
   // Ownership
   ownership: {
     type: String,

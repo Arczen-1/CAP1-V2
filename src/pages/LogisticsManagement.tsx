@@ -602,7 +602,7 @@ export default function LogisticsManagement() {
                                 <User className="h-4 w-4" />
                               </div>
                               <div>
-                                <p className="font-medium text-sm">{driver.fullName}</p>
+                                <p className="font-medium text-sm">{driver.fullName || driver.driverId}</p>
                                 <p className="text-xs text-muted-foreground">{driver.driverId}</p>
                               </div>
                             </div>
@@ -773,7 +773,7 @@ export default function LogisticsManagement() {
                     {truck.assignedDriver && (
                       <div className="flex items-center gap-2 text-sm mb-3">
                         <User className="h-4 w-4 text-muted-foreground" />
-                        <span>{truck.assignedDriver.fullName}</span>
+                        <span>{truck.assignedDriver.fullName || truck.assignedDriver.driverId}</span>
                       </div>
                     )}
                     <div className="flex items-center justify-between">
@@ -955,7 +955,7 @@ export default function LogisticsManagement() {
                   </SelectTrigger>
                   <SelectContent>
                     {drivers.map(driver => (
-                      <SelectItem key={driver._id} value={driver._id}>{driver.fullName}</SelectItem>
+                      <SelectItem key={driver._id} value={driver._id}>{driver.fullName || driver.driverId}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

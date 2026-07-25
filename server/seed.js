@@ -536,6 +536,7 @@ const demoTrucks = [
       volume: 15,
       dimensions: { length: 450, width: 200, height: 220 }
     },
+    passengerCapacity: 14,
     status: 'available'
   },
   {
@@ -546,6 +547,7 @@ const demoTrucks = [
       volume: 25,
       dimensions: { length: 600, width: 240, height: 250 }
     },
+    passengerCapacity: 2,
     status: 'available'
   }
 ];

@@ -49,7 +49,8 @@ import {
   Shirt,
   Box,
   Truck,
-  Trash2
+  Trash2,
+  Utensils
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getContractStage } from '@/lib/contractStage';
@@ -218,6 +219,25 @@ interface Contract {
     colorPalette?: string[];
   };
   specialRequests: string;
+  menuTasting?: {
+    _id?: string;
+    tastingDate?: string;
+    status?: string;
+    clientNotes?: string;
+    internalNotes?: string;
+    feedback?: {
+      rating?: number;
+      comments?: string;
+      itemsLiked?: string[];
+      itemsToChange?: string[];
+    };
+    menuItems?: Array<{
+      category?: string;
+      itemName?: string;
+      selected?: boolean;
+      notes?: string;
+    }>;
+  } | null;
   packagePrice: number;
   totalContractValue: number;
   paymentStatus: string;
@@ -274,6 +294,23 @@ interface Contract {
     notes?: string;
       checkedAt?: string;
   };
+  staffTransport?: {
+    vehicles?: Array<{
+      truck?: {
+        _id: string;
+        truckId: string;
+        plateNumber: string;
+        truckType?: string;
+        passengerCapacity?: number;
+      } | null;
+      passengerCapacity?: number;
+    }>;
+    staffCount?: number;
+    totalCapacity?: number;
+    assignmentStatus?: string;
+    autoAssignedAt?: string;
+    notes?: string;
+  } | null;
   assignedSupervisor?: {
     _id: string;
     name: string;
@@ -740,6 +777,8 @@ export default function ContractDetail() {
   const [isSendingForSignature, setIsSendingForSignature] = useState(false);
   const [isSavingEsignatures, setIsSavingEsignatures] = useState(false);
   const [isClosingContract, setIsClosingContract] = useState(false);
+  const [isAssigningStaffTransport, setIsAssigningStaffTransport] = useState(false);
+  const [logisticsSubTab, setLogisticsSubTab] = useState<'booking' | 'staff' | 'manifest'>('booking');
   const [isDeletingContract, setIsDeletingContract] = useState(false);
   const [isCancellingContract, setIsCancellingContract] = useState(false);
   const [incidentDialogOpen, setIncidentDialogOpen] = useState(false);
@@ -1510,6 +1549,28 @@ export default function ContractDetail() {
     }
   };
 
+  const handleAutoAssignStaffTransport = async () => {
+    if (!contract || !['approved', 'completed'].includes(contract.status)) {
+      toast.error('Staff transportation can only be booked for approved events');
+      return;
+    }
+
+    setIsAssigningStaffTransport(true);
+    try {
+      const result: any = await api.autoAssignStaffTransport(id!);
+      if (result?.notes) {
+        toast.success(result.notes);
+      } else {
+        toast.success('Staff transportation vehicles auto-assigned');
+      }
+      fetchContractData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to auto-assign staff transportation');
+    } finally {
+      setIsAssigningStaffTransport(false);
+    }
+  };
+
   const handleUpdateInventoryItemStatus = async (section: InventorySectionKey, index: number, status: string) => {
     if (!contract || contract.status !== 'approved') {
       toast.error('Only approved contracts can update checklist statuses');
@@ -1823,6 +1884,12 @@ export default function ContractDetail() {
   const handleExportPdf = () => {
     if (!contract) return;
 
+    // Package price, total contract value, and payment figures are financial
+    // details only Sales and Accounting (and admins) should see. Other
+    // departments that can also export the contract PDF get a version without
+    // the money section.
+    const canSeeFinancials = isSales() || isAccounting() || isAdmin();
+
     const paymentRows = contract.payments?.length
       ? contract.payments.map(payment => `
           <tr>
@@ -1938,6 +2005,7 @@ export default function ContractDetail() {
             </table>
           </section>
 
+          ${canSeeFinancials ? `
           <section class="document-section">
             <h3 class="section-heading">Payments</h3>
             <table>
@@ -1957,7 +2025,7 @@ export default function ContractDetail() {
               <div class="grand"><span>Total Contract Value</span><span>${formatCurrency(contract.totalContractValue)}</span></div>
               <div><span class="muted">Remaining Balance</span><span>${formatCurrency(remainingBalance)}</span></div>
             </div>
-          </section>
+          </section>` : ''}
 
           <section class="document-section">
             <h3 class="section-heading">Notes</h3>
@@ -2032,9 +2100,15 @@ export default function ContractDetail() {
           <title>${escapeHtml(contract.contractNumber)} - ${escapeHtml(documentTitle)}</title>
           <style>
             ${PRINT_DOCUMENT_STYLES}
+            .doc-toolbar { position: sticky; top: 0; display: flex; justify-content: flex-end; gap: 8px; padding: 12px 0; background: #fff; z-index: 10; }
+            .doc-toolbar button { cursor: pointer; border: 1px solid #0f172a; background: #0f172a; color: #fff; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; }
+            @media print { .doc-toolbar { display: none !important; } }
           </style>
         </head>
         <body>
+          <div class="doc-toolbar">
+            <button type="button" onclick="window.print()">Download / Print as PDF</button>
+          </div>
           ${getPrintHeaderHtml(
             documentTitle,
             documentSubtitle,
@@ -2496,6 +2570,12 @@ export default function ContractDetail() {
 
     const manifestSections: Array<{ title: string; rows: Array<{ name: string; code: string; quantity: number }> }> = [
       {
+        title: 'Kitchen & Food',
+        rows: (contract.menuDetails || []).map((item: any) => ({
+          name: item.item || 'Food item', code: item.category || '-', quantity: Number(item.quantity) || 0,
+        })),
+      },
+      {
         title: 'Stockroom & Equipment',
         rows: (contract.equipmentChecklist || []).map((item: any) => ({
           name: item.item || 'Equipment item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0,
@@ -2670,6 +2750,117 @@ export default function ContractDetail() {
           </div>
         </div>
       </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
+
+  // Per-department pickup/handover checklist for the driver: what to collect from
+  // kitchen and each inventory department, with a released-by / received-by
+  // sign-off so it's clear how each department's items reach logistics.
+  const handlePrintDriverPickupChecklist = () => {
+    if (!contract) {
+      return;
+    }
+
+    const pickupSections: Array<{ title: string; rows: Array<{ name: string; code: string; quantity: number }> }> = [
+      {
+        title: 'Kitchen & Food',
+        rows: (contract.menuDetails || []).map((item: any) => ({
+          name: item.item || 'Food item', code: item.category || '-', quantity: Number(item.quantity) || 0,
+        })),
+      },
+      {
+        title: 'Stockroom & Equipment',
+        rows: (contract.equipmentChecklist || []).map((item: any) => ({
+          name: item.item || 'Equipment item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0,
+        })),
+      },
+      {
+        title: 'Linen',
+        rows: (contract.linenRequirements || []).map((item: any) => ({
+          name: item.type || 'Linen item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0,
+        })),
+      },
+      {
+        title: 'Creative & Decor',
+        rows: (contract.creativeAssets || []).map((item: any) => ({
+          name: item.item || 'Creative item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0,
+        })),
+      },
+    ].filter((section) => section.rows.length > 0);
+
+    if (pickupSections.length === 0) {
+      toast.error('No items are assigned to this contract yet, so there is nothing to pick up.');
+      return;
+    }
+
+    const driverName = (contract.logisticsAssignment?.driver?.fullName || contract.logisticsAssignment?.driver?.driverId || '');
+
+    const sectionsHtml = pickupSections.map((section) => `
+      <section class="document-section">
+        <h3 class="section-heading">${escapeHtml(section.title)} - Pickup</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:44%">Item</th>
+              <th>Code</th>
+              <th>Qty To Collect</th>
+              <th style="width:16%">Collected</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${section.rows.map((row) => `
+              <tr>
+                <td>${escapeHtml(row.name)}</td>
+                <td>${escapeHtml(row.code)}</td>
+                <td>${row.quantity}</td>
+                <td>&#9744;</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div class="info-grid" style="margin-top:8px">
+          <div>Released by (${escapeHtml(section.title)}): ____________________</div>
+          <div>Received by Driver: ____________________</div>
+        </div>
+      </section>
+    `).join('');
+
+    const printWindow = window.open('', '_blank', 'width=960,height=1080');
+    if (!printWindow) {
+      toast.error('Please allow pop-ups to print the driver pickup checklist');
+      return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${escapeHtml(contract.contractNumber)} - Driver Pickup Checklist</title>
+          <style>${PRINT_DOCUMENT_STYLES}</style>
+        </head>
+        <body>
+          ${getPrintHeaderHtml(
+            'Driver Pickup Checklist',
+            'Items to collect from each department for transport to the venue. Confirm each item and record the handover sign-off per department.',
+            [
+              { label: 'Contract Number', value: contract.contractNumber },
+              { label: 'Client', value: contract.clientName },
+              { label: 'Event Date', value: new Date(contract.eventDate).toLocaleDateString() },
+              { label: 'Driver', value: driverName || 'Unassigned' },
+            ]
+          )}
+          ${sectionsHtml}
+          <div class="document-note">
+            Printed from the logistics section for ${COMPANY_NAME}. Each department releases its items to the driver against this checklist.
+          </div>
         </body>
       </html>
     `);
@@ -3439,7 +3630,10 @@ export default function ContractDetail() {
   const isOperationalPreparationStage = ['approved', 'completed'].includes(contract?.status || '');
   const canViewDetailsTab = useBanquetFocusedContractView || !useInventoryFocusedContractView;
   const canViewMenuTab = !useRestrictedDepartmentContractView && (isAdmin() || isSales() || isKitchen() || isBanquet());
-  const canViewInventoryTab = useBanquetFocusedContractView ? false : true;
+  // Kitchen has no pull-out inventory responsibilities, so the Inventory tab is
+  // not applicable for kitchen-role users (admins/sales still see it for oversight).
+  const isKitchenFocusedContractView = isKitchen() && !isAdmin() && !isSales();
+  const canViewInventoryTab = (useBanquetFocusedContractView || isKitchenFocusedContractView) ? false : true;
   const canViewPaymentsTab = !useRestrictedDepartmentContractView && (isAdmin() || isAccounting() || isSales());
   const canViewBanquetTab = isOperationalPreparationStage && (useBanquetFocusedContractView || (!useInventoryFocusedContractView && (isAdmin() || isBanquet() || isSales())));
   const canViewLogisticsTab = isOperationalPreparationStage && !useRestrictedDepartmentContractView && (isAdmin() || isLogistics() || isBanquet() || isSales());
@@ -4778,6 +4972,51 @@ export default function ContractDetail() {
         }
       : null;
 
+  // Logistics workflow: three sequential steps that must all be complete for
+  // logistics to be 100% done on this contract. Kept aligned with the contract's
+  // real state (booked truck/driver, staff transport vehicles, dispatch closeout).
+  const logisticsStaffNeeded = (contract.banquetAssignment?.assignments?.length || 0) > 0 || Boolean(contract.assignedSupervisor);
+  const logisticsStaffCount = contract.staffTransport?.staffCount ?? 0;
+  const logisticsStaffSeats = contract.staffTransport?.totalCapacity ?? 0;
+  const logisticsStepBookingDone = Boolean(contract.logisticsAssignment?.truck && contract.logisticsAssignment?.driver);
+  const logisticsStepStaffDone = !logisticsStaffNeeded
+    || (Boolean(contract.staffTransport?.vehicles?.length) && logisticsStaffSeats >= logisticsStaffCount);
+  const logisticsStepDispatchDone = contract.logisticsAssignment?.assignmentStatus === 'completed';
+  const logisticsWorkflowSteps = [
+    {
+      key: 'booking' as const,
+      order: 1,
+      title: 'Book Transport',
+      done: logisticsStepBookingDone,
+      detail: logisticsStepBookingDone
+        ? 'Truck and driver are booked for this event.'
+        : `Assign a truck and driver sized to the estimated load (${logisticsEstimatedLoad || 0} m³).`,
+    },
+    {
+      key: 'staff' as const,
+      order: 2,
+      title: 'Book Staff Transport',
+      done: logisticsStepStaffDone,
+      detail: !logisticsStaffNeeded
+        ? 'No event staff assigned yet, so no staff transport is required.'
+        : logisticsStepStaffDone
+          ? `Vehicles booked to seat all ${logisticsStaffCount} staff.`
+          : `Auto-assign vehicles to seat the ${logisticsStaffCount || 'assigned'} event staff.`,
+    },
+    {
+      key: 'manifest' as const,
+      order: 3,
+      title: 'Load & Dispatch',
+      done: logisticsStepDispatchDone,
+      detail: logisticsStepDispatchDone
+        ? 'Items loaded, dispatched, and the trip is marked completed.'
+        : 'Confirm every department is ready, load, dispatch, then mark completed after the event.',
+    },
+  ];
+  const logisticsStepsDoneCount = logisticsWorkflowSteps.filter((step) => step.done).length;
+  const logisticsFullyDone = logisticsStepsDoneCount === logisticsWorkflowSteps.length;
+  const logisticsWorkflowPercent = Math.round((logisticsStepsDoneCount / logisticsWorkflowSteps.length) * 100);
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -4879,6 +5118,18 @@ export default function ContractDetail() {
                   Mark Client Signed
                 </Button>
               </>
+            )}
+
+            {/* Dedicated access to the Signature-Ready PDF for viewing/downloading,
+                available whenever the e-sign document has been prepared. */}
+            {Boolean(contract.signatureAssets?.client) && (isSales() || isAccounting() || isAdmin()) && (
+              <Button
+                variant="outline"
+                onClick={() => handleExportSignaturePacket('esign', formatStatusLabel(contract.status) || undefined, contract.signatureAssets)}
+              >
+                <FileDown className="mr-2 h-4 w-4" />
+                View Signature-Ready PDF
+              </Button>
             )}
 
             {contract.status === 'submitted' && (isAccounting() || isAdmin()) && (
@@ -6202,6 +6453,10 @@ export default function ContractDetail() {
                     <Printer className="mr-2 h-4 w-4" />
                     Print Trip Ticket
                   </Button>
+                  <Button variant="outline" size="sm" data-print-hide="true" onClick={handlePrintDriverPickupChecklist}>
+                    <Printer className="mr-2 h-4 w-4" />
+                    Driver Pickup Checklist
+                  </Button>
                   {isPreSignatureStage ? renderReferenceBadge() : null}
                   {renderTabEditButton('event')}
                 </div>
@@ -6274,6 +6529,81 @@ export default function ContractDetail() {
                       </div>
                     </div>
 
+                    {/* Logistics workflow: complete all three steps, in order, to
+                        finish logistics for this contract. */}
+                    <Card className="border-slate-200 bg-slate-50/60" data-print-hide="true">
+                      <CardHeader className="pb-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <CardTitle className="text-base">Logistics Workflow</CardTitle>
+                          <Badge className={logisticsFullyDone ? 'border-green-200 bg-green-100 text-green-800' : 'border-amber-200 bg-amber-100 text-amber-900'}>
+                            {logisticsFullyDone ? 'Logistics Complete (100%)' : `${logisticsStepsDoneCount} of ${logisticsWorkflowSteps.length} steps done`}
+                          </Badge>
+                        </div>
+                        <Progress value={logisticsWorkflowPercent} className="mt-3 h-2" />
+                      </CardHeader>
+                      <CardContent className="grid gap-3 sm:grid-cols-3">
+                        {logisticsWorkflowSteps.map((step) => (
+                          <button
+                            type="button"
+                            key={step.key}
+                            onClick={() => setLogisticsSubTab(step.key)}
+                            className={`rounded-xl border p-3 text-left transition ${logisticsSubTab === step.key ? 'border-slate-400 bg-white shadow-sm' : 'border-slate-200 bg-white/60 hover:bg-white'}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              {step.done ? (
+                                <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
+                              ) : (
+                                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-400 text-[10px] font-semibold text-slate-500">{step.order}</span>
+                              )}
+                              <p className="text-sm font-semibold">{step.title}</p>
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">{step.detail}</p>
+                          </button>
+                        ))}
+                      </CardContent>
+                    </Card>
+
+                    <Tabs value={logisticsSubTab} onValueChange={(value) => setLogisticsSubTab(value as 'booking' | 'staff' | 'manifest')} className="w-full">
+                      <TabsList>
+                        <TabsTrigger value="booking">1. Book Transport{logisticsStepBookingDone ? ' ✓' : ''}</TabsTrigger>
+                        <TabsTrigger value="staff">2. Staff Transport{logisticsStepStaffDone ? ' ✓' : ''}</TabsTrigger>
+                        <TabsTrigger value="manifest">3. Load &amp; Dispatch{logisticsStepDispatchDone ? ' ✓' : ''}</TabsTrigger>
+                      </TabsList>
+
+                      <TabsContent value="manifest" className="mt-4 space-y-4">
+                    <Card className="border-slate-200">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Department Load Readiness</CardTitle>
+                        <p className="text-sm text-muted-foreground">
+                          Pick-up readiness for every department that hands items or food to logistics. Departments marked Ready can be loaded early (the day before) even while others are still preparing.
+                        </p>
+                      </CardHeader>
+                      <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        {(() => {
+                          const loadReadinessItems = [
+                            ...((contract.menuDetails?.length || 0) > 0 ? [kitchenReadiness] : []),
+                            ...(hasStockroomReadinessItems ? [stockroomReadiness] : []),
+                            ...(hasLinenReadinessItems ? [linenReadiness] : []),
+                            ...(hasCreativeReadinessItems ? [creativeReadiness] : []),
+                          ];
+
+                          if (loadReadinessItems.length === 0) {
+                            return <p className="text-sm text-muted-foreground">No departments have items to load for this event yet.</p>;
+                          }
+
+                          return loadReadinessItems.map((item) => (
+                            <div key={item.key} className={`rounded-xl border p-4 ${READINESS_STATUS_META[item.status].cardClassName}`}>
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="font-semibold">{item.label}</p>
+                                <Badge className={READINESS_STATUS_META[item.status].badgeClassName}>{READINESS_STATUS_META[item.status].label}</Badge>
+                              </div>
+                              <p className="mt-1 text-sm text-muted-foreground">{item.detail}</p>
+                            </div>
+                          ));
+                        })()}
+                      </CardContent>
+                    </Card>
+
                     <Card className="border-slate-200">
                       <CardHeader className="pb-3">
                         <CardTitle className="text-base">Load Manifest - What To Bring</CardTitle>
@@ -6283,6 +6613,7 @@ export default function ContractDetail() {
                       </CardHeader>
                       <CardContent className="space-y-5">
                         {([
+                          { title: 'Kitchen & Food', rows: (contract.menuDetails || []).map((item: any) => ({ name: item.item || 'Food item', code: item.category || '-', quantity: Number(item.quantity) || 0, status: contract.ingredientStatus === 'prepared' ? 'prepared' : 'pending' })) },
                           { title: 'Stockroom & Equipment', rows: (contract.equipmentChecklist || []).map((item: any) => ({ name: item.item || 'Equipment item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0, status: item.status || 'pending' })) },
                           { title: 'Linen', rows: (contract.linenRequirements || []).map((item: any) => ({ name: item.type || 'Linen item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0, status: item.status || 'pending' })) },
                           { title: 'Creative & Decor', rows: (contract.creativeAssets || []).map((item: any) => ({ name: item.item || 'Creative item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0, status: item.status || 'pending' })) },
@@ -6317,12 +6648,79 @@ export default function ContractDetail() {
                             </div>
                           </div>
                         ))}
-                        {((contract.equipmentChecklist || []).length + (contract.linenRequirements || []).length + (contract.creativeAssets || []).length) === 0 && (
+                        {((contract.menuDetails || []).length + (contract.equipmentChecklist || []).length + (contract.linenRequirements || []).length + (contract.creativeAssets || []).length) === 0 && (
                           <p className="text-sm text-muted-foreground">No inventory items are assigned to this contract yet.</p>
                         )}
                       </CardContent>
                     </Card>
+                      </TabsContent>
 
+                      <TabsContent value="staff" className="mt-4 space-y-4">
+                    <Card className="border-slate-200" data-print-hide="true">
+                      <CardHeader className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <CardTitle className="text-base">Staff Transportation</CardTitle>
+                          <p className="text-sm text-muted-foreground">
+                            A separate booking that carries the event staff. Vehicles are auto-selected from the available fleet by headcount and seat capacity, adding more vehicles until everyone has a seat.
+                          </p>
+                        </div>
+                        {canManageLogistics ? (
+                          <Button size="sm" variant="outline" onClick={handleAutoAssignStaffTransport} disabled={isAssigningStaffTransport}>
+                            <Users className="mr-2 h-4 w-4" />
+                            {isAssigningStaffTransport
+                              ? 'Assigning...'
+                              : (contract.staffTransport?.vehicles?.length ? 'Re-Assign Vehicles' : 'Auto-Assign Vehicles')}
+                          </Button>
+                        ) : null}
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {contract.staffTransport?.vehicles?.length ? (
+                          <>
+                            <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+                              <div><span className="text-muted-foreground">Staff to transport: </span><strong>{contract.staffTransport.staffCount ?? 0}</strong></div>
+                              <div><span className="text-muted-foreground">Seats booked: </span><strong>{contract.staffTransport.totalCapacity ?? 0}</strong></div>
+                              <div><span className="text-muted-foreground">Vehicles: </span><strong>{contract.staffTransport.vehicles.length}</strong></div>
+                            </div>
+                            <div className="overflow-x-auto rounded-lg border">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b bg-muted/50 text-left">
+                                    <th className="px-3 py-2 font-medium">Vehicle</th>
+                                    <th className="px-3 py-2 font-medium">Plate</th>
+                                    <th className="px-3 py-2 font-medium">Seats</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {contract.staffTransport.vehicles.map((vehicle, index) => (
+                                    <tr key={vehicle.truck?._id || index} className="border-b last:border-b-0">
+                                      <td className="px-3 py-2">
+                                        {vehicle.truck?.truckId || 'Vehicle'}
+                                        {vehicle.truck?.truckType ? ` (${vehicle.truck.truckType.replace(/_/g, ' ')})` : ''}
+                                      </td>
+                                      <td className="px-3 py-2 text-muted-foreground">{vehicle.truck?.plateNumber || '-'}</td>
+                                      <td className="px-3 py-2 font-semibold">{vehicle.passengerCapacity ?? vehicle.truck?.passengerCapacity ?? 0}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            {contract.staffTransport.notes ? (
+                              <p className={`text-sm ${(contract.staffTransport.totalCapacity ?? 0) < (contract.staffTransport.staffCount ?? 0) ? 'font-medium text-red-700' : 'text-muted-foreground'}`}>
+                                {contract.staffTransport.notes}
+                              </p>
+                            ) : null}
+                          </>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            No staff transportation booked yet.{canManageLogistics ? ' Use Auto-Assign Vehicles to book based on the assigned staff count.' : ''}
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                      </TabsContent>
+
+                      <TabsContent value="booking" className="mt-4 space-y-4">
                     <div className="space-y-4">
                       <Card className="border-slate-200 bg-slate-50/50">
                         <CardHeader className="pb-3">
@@ -6505,6 +6903,8 @@ export default function ContractDetail() {
                         </CardContent>
                       </Card>
                     </div>
+                      </TabsContent>
+                    </Tabs>
 
                     <div className="hidden">
                       <Card>
@@ -6514,7 +6914,7 @@ export default function ContractDetail() {
                         <CardContent className="space-y-3">
                           {operationsSummary.logistics.recommendedDriver && (
                             <div className="rounded-md border bg-green-50 p-3 text-sm text-green-900">
-                              Suggested driver for this event: <strong>{operationsSummary.logistics.recommendedDriver.fullName}</strong>
+                              Suggested driver for this event: <strong>{operationsSummary.logistics.recommendedDriver.fullName || operationsSummary.logistics.recommendedDriver.driverId}</strong>
                             </div>
                           )}
                           {canManageLogistics && (
@@ -6531,7 +6931,7 @@ export default function ContractDetail() {
                                   <SelectItem value="__none__">No driver assigned</SelectItem>
                                   {operationsSummary.logistics.availableDrivers.map(driver => (
                                     <SelectItem key={driver._id} value={driver._id}>
-                                      {driver.fullName} ({driver.driverId})
+                                      {driver.fullName || driver.driverId} ({driver.driverId})
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -6543,7 +6943,7 @@ export default function ContractDetail() {
                               operationsSummary.logistics.availableDrivers.map(driver => (
                                 <div key={driver._id} className="flex items-center justify-between rounded-md border p-3 text-sm">
                                   <div>
-                                    <p className="font-medium">{driver.fullName}</p>
+                                    <p className="font-medium">{driver.fullName || driver.driverId}</p>
                                     <p className="text-muted-foreground">{driver.driverId}</p>
                                   </div>
                                   <Badge variant="outline">{driver.status}</Badge>
@@ -6694,6 +7094,70 @@ export default function ContractDetail() {
                   <p className="font-medium">{contract.specialRequests || '-'}</p>
                 </div>
               </CardContent>
+              </Card>
+
+              {/* Menu tasting comments linked to this contract. This is the primary
+                  preference reference for the kitchen team. */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Utensils className="h-5 w-5" />
+                    Menu Tasting Feedback
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {contract.menuTasting ? (
+                    <>
+                      {typeof contract.menuTasting.feedback?.rating === 'number' ? (
+                        <div>
+                          <span className="text-muted-foreground">Client Rating</span>
+                          <p className="font-medium">{contract.menuTasting.feedback.rating} / 5</p>
+                        </div>
+                      ) : null}
+                      <div>
+                        <span className="text-muted-foreground">Tasting Comments</span>
+                        <p className="font-medium whitespace-pre-line">{contract.menuTasting.feedback?.comments || '-'}</p>
+                      </div>
+                      {(contract.menuTasting.feedback?.itemsLiked?.length || 0) > 0 ? (
+                        <div>
+                          <span className="text-muted-foreground">Items Liked</span>
+                          <p className="font-medium">{contract.menuTasting.feedback?.itemsLiked?.join(', ')}</p>
+                        </div>
+                      ) : null}
+                      {(contract.menuTasting.feedback?.itemsToChange?.length || 0) > 0 ? (
+                        <div>
+                          <span className="text-muted-foreground">Items To Change</span>
+                          <p className="font-medium">{contract.menuTasting.feedback?.itemsToChange?.join(', ')}</p>
+                        </div>
+                      ) : null}
+                      {(contract.menuTasting.menuItems || []).some((item) => item.notes) ? (
+                        <div className="space-y-2">
+                          <span className="text-muted-foreground">Item Notes</span>
+                          <ul className="space-y-1">
+                            {(contract.menuTasting.menuItems || [])
+                              .filter((item) => item.notes)
+                              .map((item, index) => (
+                                <li key={`${item.itemName || 'item'}-${index}`} className="text-sm">
+                                  <span className="font-medium">{[item.category, item.itemName].filter(Boolean).join(' · ') || 'Item'}:</span>{' '}
+                                  <span className="text-muted-foreground">{item.notes}</span>
+                                </li>
+                              ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {contract.menuTasting.clientNotes ? (
+                        <div>
+                          <span className="text-muted-foreground">Client Notes</span>
+                          <p className="font-medium whitespace-pre-line">{contract.menuTasting.clientNotes}</p>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No menu tasting is linked to this contract yet, so there are no tasting comments to reference.
+                    </p>
+                  )}
+                </CardContent>
               </Card>
             </div>
           </TabsContent>

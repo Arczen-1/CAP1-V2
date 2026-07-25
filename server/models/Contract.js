@@ -241,6 +241,40 @@ const logisticsAssignmentSchema = new mongoose.Schema({
   }
 });
 
+// Staff transportation: a second logistics booking (separate from the cargo
+// truck above) that carries the event staff. Vehicles are auto-selected based on
+// the staff headcount, vehicle availability, and passenger capacity.
+const staffTransportVehicleSchema = new mongoose.Schema({
+  truck: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Truck',
+    default: null
+  },
+  passengerCapacity: {
+    type: Number,
+    default: 0
+  }
+}, { _id: false });
+
+const staffTransportAssignmentSchema = new mongoose.Schema({
+  vehicles: [staffTransportVehicleSchema],
+  staffCount: {
+    type: Number,
+    default: 0
+  },
+  totalCapacity: {
+    type: Number,
+    default: 0
+  },
+  assignmentStatus: {
+    type: String,
+    enum: ['pending', 'scheduled', 'completed'],
+    default: 'pending'
+  },
+  autoAssignedAt: Date,
+  notes: String
+}, { _id: false });
+
 const BANQUET_ASSIGNMENT_ROLES = [
   'head_captain',
   'service_staff',
@@ -546,6 +580,7 @@ const contractSchema = new mongoose.Schema({
   estimatedWaiters: Number,
   estimatedVehicles: Number,
   logisticsAssignment: logisticsAssignmentSchema,
+  staffTransport: staffTransportAssignmentSchema,
   equipmentChecklist: [equipmentChecklistItemSchema],
 
   // Kitchen

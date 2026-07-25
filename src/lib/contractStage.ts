@@ -2,11 +2,21 @@ interface SectionConfirmation {
   confirmed?: boolean;
 }
 
+interface PostEventItem {
+  postEventStatus?: string;
+  status?: string;
+}
+
 export interface ContractStageSource {
   status: string;
-  creativeAssets?: unknown[];
-  linenRequirements?: unknown[];
-  equipmentChecklist?: unknown[];
+  creativeAssets?: PostEventItem[];
+  linenRequirements?: PostEventItem[];
+  equipmentChecklist?: PostEventItem[];
+  logisticsAssignment?: {
+    truck?: unknown;
+    driver?: unknown;
+    assignmentStatus?: string;
+  };
   sectionConfirmations?: {
     payments?: SectionConfirmation;
     creative?: SectionConfirmation;
@@ -150,6 +160,18 @@ const getPostDraftStage = (contract: ContractStageSource): ContractStage => {
         const daysUntilEvent = Math.ceil((eventDate.setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000);
 
         if (new Date() > endOfEventDay) {
+          // Once every department has completed its post-event checks (and the
+          // logistics booking is closed out), the contract is only waiting on
+          // Accounting to formally close it.
+          if (arePostEventChecksComplete(contract)) {
+            return {
+              key: 'awaiting_contract_close',
+              label: 'Awaiting Contract Close',
+              badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+              owner: 'Accounting',
+            };
+          }
+
           return {
             key: 'post_event_checks',
             label: 'Post-Event Checks',
@@ -197,6 +219,41 @@ const getPostDraftStage = (contract: ContractStageSource): ContractStage => {
     default:
       return { key: contract.status, label: contract.status.replace(/_/g, ' ') };
   }
+};
+
+// Mirrors ContractDetail's isPostEventClosed: an item's post-event check is done
+// when it is checked_ok / incident_reported (or the legacy "returned" status).
+const isItemPostEventClosed = (item: PostEventItem): boolean => {
+  const value = item?.postEventStatus;
+  if (value === 'checked_ok' || value === 'incident_reported') {
+    return true;
+  }
+  if (value === 'pending_check') {
+    return false;
+  }
+  return item?.status === 'returned';
+};
+
+// True when every department's post-event checks are complete and the logistics
+// booking (if any) is closed out — i.e. the contract is ready for Accounting to
+// close. Payment settlement is handled separately by the closure action.
+const arePostEventChecksComplete = (contract: ContractStageSource): boolean => {
+  const sections = [
+    contract.creativeAssets || [],
+    contract.linenRequirements || [],
+    contract.equipmentChecklist || [],
+  ];
+  const allItemsChecked = sections.every((items) => items.every(isItemPostEventClosed));
+
+  const logistics = contract.logisticsAssignment;
+  const hasLogisticsBooking = Boolean(
+    logistics?.truck
+    || logistics?.driver
+    || (logistics?.assignmentStatus && logistics.assignmentStatus !== 'pending')
+  );
+  const logisticsClosedOut = !hasLogisticsBooking || logistics?.assignmentStatus === 'completed';
+
+  return allItemsChecked && logisticsClosedOut;
 };
 
 // Mirrors the backend milestone rule: the down payment (40% by default, full

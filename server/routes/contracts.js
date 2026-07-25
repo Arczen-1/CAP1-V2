@@ -215,6 +215,11 @@ const CONTRACT_SECTION_ACTION_TABS = {
   purchasing: 'inventory'
 };
 
+// How long a closed contract's notifications stick around before they auto-clear
+// from inboxes. Kept short (a couple of hours) on purpose — once a contract is
+// closed its alerts are no longer actionable.
+const CLOSED_CONTRACT_NOTIFICATION_TTL_MS = 2 * 60 * 60 * 1000;
+
 const buildContractActionUrl = (contract, tab = 'details') => (
   `/contracts/${contract._id}${tab ? `?tab=${tab}` : ''}`
 );
@@ -1250,6 +1255,63 @@ const getContractClosureChecklist = (contract) => {
   };
 };
 
+// True once the event has passed and every department's post-event checks are
+// recorded (and the logistics booking, if any, is closed out). Payment settlement
+// is intentionally excluded — this is about the operational checks being done.
+const arePostEventChecksComplete = (contract) => {
+  const now = new Date();
+  if (!contract.eventDate || now <= endOfDay(contract.eventDate)) {
+    return false;
+  }
+
+  if (countPendingPostEventChecks(contract.creativeAssets || [])) return false;
+  if (countPendingPostEventChecks(contract.linenRequirements || [])) return false;
+  if (countPendingPostEventChecks(contract.equipmentChecklist || [])) return false;
+
+  const hasLogisticsBooking = Boolean(
+    contract.logisticsAssignment?.driver
+    || contract.logisticsAssignment?.truck
+    || (contract.logisticsAssignment?.assignmentStatus && contract.logisticsAssignment.assignmentStatus !== 'pending')
+  );
+  if (hasLogisticsBooking && contract.logisticsAssignment?.assignmentStatus !== 'completed') {
+    return false;
+  }
+
+  return true;
+};
+
+// One-shot alert to Accounting the moment all post-event checks are complete, so
+// they know the contract is now awaiting close (settle any remaining balance and
+// close it). Fires exactly once per contract.
+const maybeNotifyReadyToClose = async (contract) => {
+  if (contract.status !== 'approved' || !arePostEventChecksComplete(contract)) {
+    return;
+  }
+
+  const title = `Ready to close: ${contract.contractNumber}`;
+  const alreadySent = await Notification.exists({ contract: contract._id, type: 'deadline_reminder', title });
+  if (alreadySent) {
+    return;
+  }
+
+  const milestones = getPaymentMilestones(contract);
+  const balanceNote = milestones.fullyPaid
+    ? 'The balance is fully settled, so it can be closed now.'
+    : `Settle the remaining balance of ${formatCurrencyForNotification(milestones.remainingBalance)} before closing.`;
+
+  await notifyRolesForContract({
+    contract,
+    roles: ['accounting', 'admin'],
+    type: 'deadline_reminder',
+    title,
+    message: `All post-event checks for ${contract.clientName}'s event on ${formatDateLabel(contract.eventDate)} are complete. This contract is awaiting close. ${balanceNote}`,
+    priority: 'high',
+    actionUrl: buildContractActionUrl(contract, 'timeline'),
+    actionLabel: 'Close contract',
+    department: 'accounting'
+  });
+};
+
 const buildOperationsSummary = async (contract) => {
   const eventStart = startOfDay(contract.eventDate);
   const eventEnd = endOfDay(contract.eventDate);
@@ -1817,7 +1879,11 @@ router.get('/:id', auth, async (req, res) => {
     const contract = await Contract.findById(req.params.id)
       .populate('assignedSupervisor', 'name email')
       .populate('logisticsAssignment.driver', 'driverId fullName status phone')
-      .populate('logisticsAssignment.truck', 'truckId plateNumber truckType status capacity assignedDriver');
+      .populate('logisticsAssignment.truck', 'truckId plateNumber truckType status capacity assignedDriver')
+      .populate('staffTransport.vehicles.truck', 'truckId plateNumber truckType status passengerCapacity assignedDriver')
+      // Surface the tasting feedback/notes so the contract Preferences tab (kitchen)
+      // can reflect what the client asked for during the menu tasting.
+      .populate('menuTasting', 'tastingDate status feedback clientNotes internalNotes menuItems');
 
     if (!contract) {
       return res.status(404).json({ message: 'Contract not found' });
@@ -2433,7 +2499,11 @@ router.post('/:id/approve', auth, requireRole(['accounting', 'admin']), async (r
       ...getInventoryValidationDepartments(contract)
     ];
     const preparationMessages = {
-      kitchen: 'Kitchen can now complete the menu checklist and preparation status for this approved event.',
+      // Kitchen can only BEGIN food prep within 7 days of the event, so this
+      // approval alert should not imply they can start cooking right away. It
+      // asks them to review the menu now; the prep-window reminders (2 weeks and
+      // 7 days out) tell them when to source ingredients and begin preparations.
+      kitchen: `${contract.clientName}'s event on ${formatDateLabel(contract.eventDate)} is approved. Review and confirm the menu checklist now. You'll get a reminder about two weeks out to start sourcing ingredients, and another once the event is within 7 days when you can begin preparing the food.`,
       banquet: 'Banquet can now prepare the staffing plan and print the staff attendance sheet.',
       logistics: 'Logistics can now assign the truck, driver, dispatch details, and post-event transport updates.',
       creative: 'Creative can now prepare the assigned decor items and update the inventory checklist.',
@@ -2441,11 +2511,17 @@ router.post('/:id/approve', auth, requireRole(['accounting', 'admin']), async (r
       stockroom: 'Stockroom can now prepare the assigned equipment and supplies and update the inventory checklist.'
     };
 
+    // Kitchen gets a clearer, prep-timeline-aware title; other departments keep
+    // the standard "ready for <department>" heading.
+    const preparationTitles = {
+      kitchen: `Approved event - review menu for ${contract.contractNumber}`
+    };
+
     await Promise.all([...new Set(preparationDepartments)].map((department) => notifyRolesForContract({
       contract,
       roles: DEPARTMENT_NOTIFICATION_ROLES[department] || [],
       type: 'contract_approved',
-      title: `Approved event ready for ${department}: ${contract.contractNumber}`,
+      title: preparationTitles[department] || `Approved event ready for ${department}: ${contract.contractNumber}`,
       message: preparationMessages[department] || `${contract.clientName}'s approved event is ready for your department action.`,
       priority: 'high',
       actionUrl: buildContractActionUrl(contract, CONTRACT_SECTION_ACTION_TABS[department] || 'details'),
@@ -2510,6 +2586,15 @@ router.post('/:id/complete', auth, requireRole(['accounting', 'admin']), async (
       actionLabel: 'View contract',
       excludeUserId: req.user._id
     });
+
+    // Give this contract's notifications a short lifetime now that it's closed:
+    // they auto-clear from inboxes shortly afterwards (MongoDB TTL removes them
+    // once expiresAt passes) instead of lingering forever.
+    const closedNotificationExpiry = new Date(Date.now() + CLOSED_CONTRACT_NOTIFICATION_TTL_MS);
+    await Notification.updateMany(
+      { contract: contract._id, expiresAt: { $exists: false } },
+      { $set: { expiresAt: closedNotificationExpiry } }
+    );
 
     res.json(contract);
   } catch (error) {
@@ -2674,6 +2759,8 @@ router.put('/:id/logistics-assignment', auth, requireRole(['logistics', 'admin']
 
     await contract.save();
     await maybeNotifyPreparationComplete(contract);
+    // Closing out the logistics booking can be the final post-event step.
+    await maybeNotifyReadyToClose(contract);
 
     // Keep truck fleet status honest: reconcile the newly-assigned truck and any
     // truck that was just replaced, so the fleet board reflects real deployment.
@@ -2694,6 +2781,91 @@ router.put('/:id/logistics-assignment', auth, requireRole(['logistics', 'admin']
       .populate('logisticsAssignment.truck', 'truckId plateNumber truckType status capacity assignedDriver');
 
     res.json(updatedContract);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Auto-book staff transportation: a second logistics booking that carries the
+// event staff. Vehicles are chosen automatically from the available fleet by
+// passenger capacity, adding more vehicles until every staff member has a seat.
+// (staff transport auto-assign endpoint)
+router.post('/:id/staff-transport/auto-assign', auth, requireRole(['logistics', 'admin']), async (req, res) => {
+  try {
+    const contract = await Contract.findById(req.params.id);
+
+    if (!contract) {
+      return res.status(404).json({ message: 'Contract not found' });
+    }
+
+    if (!['approved', 'completed'].includes(contract.status)) {
+      return res.status(400).json({ message: 'Staff transportation can only be booked for approved events.' });
+    }
+
+    // Headcount to transport: the assigned banquet team plus the supervisor.
+    const banquetStaffCount = (contract.banquetAssignment?.assignments || []).length;
+    const supervisorCount = contract.assignedSupervisor ? 1 : 0;
+    const staffCount = banquetStaffCount + supervisorCount;
+
+    if (staffCount === 0) {
+      return res.status(400).json({ message: 'Assign the banquet staff first — there is no one to transport yet.' });
+    }
+
+    // Effective seat count for a vehicle. Existing fleet records may predate the
+    // passengerCapacity field, so fall back to a sensible default per vehicle type.
+    const DEFAULT_SEATS_BY_TYPE = {
+      closed_van: 14,
+      open_truck: 12,
+      mini_truck: 6,
+      wing_van: 3,
+      lorry: 3,
+      refrigerated: 2,
+      flatbed: 3,
+      other: 4
+    };
+    const getSeats = (truck) => (
+      Number(truck.passengerCapacity) > 0
+        ? Number(truck.passengerCapacity)
+        : (DEFAULT_SEATS_BY_TYPE[truck.truckType] || 3)
+    );
+
+    // Available vehicles, excluding the cargo truck already booked for this event,
+    // ordered by seats so we use the fewest vehicles possible.
+    const cargoTruckId = contract.logisticsAssignment?.truck ? String(contract.logisticsAssignment.truck) : null;
+    const candidates = (await Truck.find({ status: 'available' }))
+      .filter((truck) => String(truck._id) !== cargoTruckId)
+      .filter((truck) => getSeats(truck) > 0)
+      .sort((a, b) => getSeats(b) - getSeats(a));
+
+    const chosen = [];
+    let totalCapacity = 0;
+    for (const truck of candidates) {
+      if (totalCapacity >= staffCount) {
+        break;
+      }
+      chosen.push(truck);
+      totalCapacity += getSeats(truck);
+    }
+
+    const seatsShort = Math.max(0, staffCount - totalCapacity);
+
+    contract.staffTransport = {
+      vehicles: chosen.map((truck) => ({ truck: truck._id, passengerCapacity: getSeats(truck) })),
+      staffCount,
+      totalCapacity,
+      assignmentStatus: chosen.length > 0 ? 'scheduled' : 'pending',
+      autoAssignedAt: new Date(),
+      notes: seatsShort > 0
+        ? `Not enough fleet seats: ${totalCapacity} seat(s) booked for ${staffCount} staff. Book ${seatsShort} more seat(s) via an external/rented vehicle.`
+        : `${chosen.length} vehicle(s) booked for ${staffCount} staff (${totalCapacity} seats).`
+    };
+
+    await contract.save();
+
+    const updated = await Contract.findById(contract._id)
+      .populate('staffTransport.vehicles.truck', 'truckId plateNumber truckType status passengerCapacity assignedDriver');
+
+    res.json(updated.staffTransport);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -2951,6 +3123,9 @@ router.put('/:id/inventory-post-event-status', auth, async (req, res) => {
     }
 
     await contract.save();
+    // If this was the last outstanding post-event check, tell Accounting the
+    // contract is now awaiting close.
+    await maybeNotifyReadyToClose(contract);
     res.json(contract);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -3044,6 +3219,9 @@ router.post('/:id/inventory-incident', auth, async (req, res) => {
       ? `${parsedAffectedQuantity} item(s) affected. ${String(description).trim()}`
       : String(description).trim();
     await contract.save();
+    // Reporting an incident also completes this item's post-event check, so this
+    // may be the point at which everything is done and the contract can close.
+    await maybeNotifyReadyToClose(contract);
 
     await incident.populate('contract', 'contractNumber clientName');
     await incident.populate('reportedBy', 'name');
@@ -3223,6 +3401,10 @@ router.delete('/:id', auth, requireRole(['admin']), async (req, res) => {
         contractCreated: false
       }
     });
+
+    // Remove any notifications tied to this contract so they don't linger in
+    // recipients' inboxes pointing at a contract that no longer exists.
+    await Notification.deleteMany({ contract: contract._id });
 
     await Contract.findByIdAndDelete(req.params.id);
     res.json({ message: 'Contract deleted' });

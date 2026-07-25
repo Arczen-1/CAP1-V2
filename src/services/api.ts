@@ -253,6 +253,12 @@ class ApiService {
     });
   }
 
+  async autoAssignStaffTransport(id: string) {
+    return this.request(`/contracts/${id}/staff-transport/auto-assign`, {
+      method: 'POST'
+    });
+  }
+
   async addPayment(id: string, payment: any) {
     return this.request(`/contracts/${id}/payment`, {
       method: 'POST',

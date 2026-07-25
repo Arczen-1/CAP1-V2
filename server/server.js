@@ -26,6 +26,10 @@ mongoose.connect(MONGODB_URI)
     // Keeps truck fleet status (available/in_use) in sync with actual bookings.
     const { startLogisticsStatusSync } = require('./logisticsStatusSync');
     startLogisticsStatusSync();
+    // Kitchen prep heads-ups: sources-ingredients alert 2 weeks out and a
+    // begin-preparations alert once the event is within 7 days.
+    const { startKitchenPrepSweep } = require('./kitchenPrepNotifications');
+    startKitchenPrepSweep();
   })
   .catch(err => console.error('MongoDB connection error:', err));
 

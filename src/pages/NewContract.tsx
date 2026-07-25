@@ -3460,7 +3460,11 @@ export default function NewContract() {
                       <div className="flex justify-between gap-4">
                         <span className="text-muted-foreground">Payment Term</span>
                         <span className="text-right font-medium">
-                          {isFullPaymentPlan ? 'Full payment' : `${paymentPlanConfig.downPaymentPercent}% / ${paymentPlanConfig.finalPaymentPercent}% split`}
+                          {/* The payment term is not chosen at creation — Accounting confirms it
+                              (split vs. full) after signing, so show N/A until then. */}
+                          {isEditMode
+                            ? (isFullPaymentPlan ? 'Full payment' : `${paymentPlanConfig.downPaymentPercent}% / ${paymentPlanConfig.finalPaymentPercent}% split`)
+                            : 'N/A — confirmed after signing'}
                         </span>
                       </div>
                       <div className="flex justify-between gap-4">
