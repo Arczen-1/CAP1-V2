@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ChangeEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import { api } from '@/services/api';
 import AccountingProcurementQueue from '@/components/AccountingProcurementQueue';
@@ -413,7 +413,24 @@ const getNextStepMeta = (contract: Contract) => {
   };
 };
 
+const ACCOUNTING_TABS = ['list', 'finance', 'procurement', 'reports'];
+
 export default function AccountingDashboard() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Notifications deep-link straight to a tab (e.g. ?tab=procurement).
+  const requestedTab = searchParams.get('tab') || '';
+  const activeTab = ACCOUNTING_TABS.includes(requestedTab) ? requestedTab : 'list';
+
+  const handleTabChange = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', value);
+    if (value !== 'procurement') {
+      next.delete('queue');
+      next.delete('request');
+    }
+    setSearchParams(next, { replace: true });
+  };
+
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [stats, setStats] = useState({
     totalRevenue: 0,
@@ -851,7 +868,7 @@ export default function AccountingDashboard() {
           </CardContent>
         </Card>
 
-        <Tabs defaultValue="list" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
           <TabsList>
             <TabsTrigger value="list">List View</TabsTrigger>
             <TabsTrigger value="finance">Finance</TabsTrigger>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import { api } from '@/services/api';
 import { Badge } from '@/components/ui/badge';
@@ -68,6 +69,8 @@ const buildEmptyFulfillmentForm = () => ({
   attachmentUrl: '',
 });
 
+const PURCHASING_TABS = ['queue', 'approval', 'approved', 'proof', 'completed', 'suppliers'];
+
 export default function PurchasingDashboard() {
   const { user } = useAuth();
   const [requests, setRequests] = useState<ProcurementRequest[]>([]);
@@ -82,6 +85,18 @@ export default function PurchasingDashboard() {
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [requisitionTypeFilter, setRequisitionTypeFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState<'needed_asc' | 'needed_desc' | 'created_desc' | 'created_asc'>('needed_asc');
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Notifications deep-link to a specific tab and request (?tab=approved&request=...).
+  const requestedTab = searchParams.get('tab') || '';
+  const activeTab = PURCHASING_TABS.includes(requestedTab) ? requestedTab : 'queue';
+  const highlightRequestId = searchParams.get('request') || '';
+
+  const handleTabChange = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', value);
+    next.delete('request');
+    setSearchParams(next, { replace: true });
+  };
 
   const fetchRequests = async () => {
     try {
@@ -102,6 +117,20 @@ export default function PurchasingDashboard() {
   useEffect(() => {
     fetchRequests();
   }, []);
+
+  // Scroll a notification's deep-linked request into view once the list renders.
+  useEffect(() => {
+    if (!highlightRequestId || requests.length === 0) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      document
+        .querySelector(`[data-request-id="${highlightRequestId}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [highlightRequestId, requests, activeTab]);
 
   const sortedRequests = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -361,7 +390,11 @@ export default function PurchasingDashboard() {
           const reviewBasis = getProcurementReviewBasis(request);
 
           return (
-            <Card key={request._id} className={daysAway !== null && daysAway <= 3 ? 'border-orange-300' : ''}>
+            <Card
+              key={request._id}
+              data-request-id={request._id}
+              className={`${daysAway !== null && daysAway <= 3 ? 'border-orange-300' : ''} ${request._id === highlightRequestId ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+            >
               <CardContent className="space-y-4 p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="space-y-2">
@@ -646,7 +679,7 @@ export default function PurchasingDashboard() {
           </CardContent>
         </Card>
 
-        <Tabs defaultValue="queue" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
           <TabsList>
             <TabsTrigger value="queue">Needs Budget Request ({queueRequests.length})</TabsTrigger>
             <TabsTrigger value="approval">Waiting Budget Approval ({waitingAccounting.length})</TabsTrigger>

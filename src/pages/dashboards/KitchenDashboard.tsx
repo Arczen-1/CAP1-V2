@@ -24,6 +24,7 @@ interface Contract {
     category: string;
     item: string;
     quantity: number;
+    notes?: string;
     confirmed: boolean;
   }>;
   cookingLocation: string;
@@ -86,34 +87,44 @@ export default function KitchenDashboard() {
       return;
     }
 
-    const menuRows = (contract.menuDetails || []).map((item) => `
+    const chosenItems = contract.menuDetails || [];
+    // Only dishes actually on the contract matter to the kitchen. Tasting notes
+    // are matched by dish name so comments about dishes the client did NOT order
+    // never reach the checklist.
+    const normalize = (value?: string) => String(value || '').trim().toLowerCase();
+    const chosenNames = new Set(chosenItems.map((item) => normalize(item.item)));
+    const tastingNoteFor = (itemName?: string) => (tasting?.menuItems || [])
+      .find((dish) => normalize(dish.itemName) === normalize(itemName) && dish.notes?.trim())?.notes || '';
+
+    const menuRows = chosenItems.map((item) => {
+      // The contract's own comment wins; otherwise fall back to the tasting note
+      // recorded for that same dish.
+      const note = (item.notes || '').trim() || tastingNoteFor(item.item);
+      return `
       <tr>
         <td style="text-align:center">${item.confirmed ? '☑' : '☐'}</td>
         <td>${escapeHtml(item.item)}</td>
         <td>${escapeHtml(item.category)}</td>
         <td style="text-align:center">${escapeHtml(item.quantity)}</td>
-        <td></td>
-      </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:#888">No menu items saved.</td></tr>';
+        <td>${note ? `<span class="note">${escapeHtml(note)}</span>` : ''}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="5" style="text-align:center;color:#888">No menu items saved.</td></tr>';
 
-    const itemNotes = (tasting?.menuItems || [])
-      .filter((item) => item.notes && item.notes.trim())
-      .map((item) => `<li><strong>${escapeHtml(item.itemName)}:</strong> ${escapeHtml(item.notes)}</li>`)
-      .join('');
-
-    const likes = (tasting?.feedback?.itemsLiked || []).filter(Boolean);
-    const changes = (tasting?.feedback?.itemsToChange || []).filter(Boolean);
+    // General tasting feedback is filtered to the chosen dishes for the same reason.
+    const likes = (tasting?.feedback?.itemsLiked || []).filter((name) => chosenNames.has(normalize(name)));
+    const changes = (tasting?.feedback?.itemsToChange || []).filter((name) => chosenNames.has(normalize(name)));
 
     const preferencesHtml = tasting ? `
       <section>
         <h2>Client Preferences (from Menu Tasting)</h2>
+        <p class="hint">Only covers dishes selected for this event. Per-dish comments appear in the Prep notes column above.</p>
         ${tasting.feedback?.rating ? `<p><strong>Tasting rating:</strong> ${tasting.feedback.rating} / 5</p>` : ''}
         ${tasting.feedback?.comments ? `<p><strong>Comments:</strong> ${escapeHtml(tasting.feedback.comments)}</p>` : ''}
         ${likes.length ? `<p><strong>Liked:</strong> ${likes.map(escapeHtml).join(', ')}</p>` : ''}
         ${changes.length ? `<p><strong>Requested changes:</strong> ${changes.map(escapeHtml).join(', ')}</p>` : ''}
         ${tasting.clientNotes ? `<p><strong>Client notes:</strong> ${escapeHtml(tasting.clientNotes)}</p>` : ''}
-        ${itemNotes ? `<p><strong>Per-dish preferences:</strong></p><ul>${itemNotes}</ul>` : ''}
-        ${(!tasting.feedback?.comments && !likes.length && !changes.length && !tasting.clientNotes && !itemNotes)
-          ? '<p style="color:#888">No preferences or comments were recorded in the menu tasting.</p>' : ''}
+        ${(!tasting.feedback?.comments && !likes.length && !changes.length && !tasting.clientNotes)
+          ? '<p style="color:#888">No general preferences were recorded for the selected dishes.</p>' : ''}
       </section>` : `
       <section>
         <h2>Client Preferences (from Menu Tasting)</h2>
@@ -130,6 +141,8 @@ export default function KitchenDashboard() {
         th { background: #7a1f2b; color: #fff; text-align: left; padding: 6px 9px; font-size: 9.5pt; }
         td { border: 1px solid #ddd; padding: 6px 9px; }
         ul { margin: 4px 0 0 18px; }
+        .note { font-size: 10pt; color: #7a1f2b; }
+        .hint { font-size: 9.5pt; color: #777; margin: 0 0 8px; }
         @media print { button { display: none; } }
       </style></head><body>
       <h1>Kitchen Preparation Checklist</h1>

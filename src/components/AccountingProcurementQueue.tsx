@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '@/services/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { CheckCircle2, Clock3, FileCheck2, ReceiptText, RotateCcw, XCircle } from 'lucide-react';
@@ -81,6 +82,12 @@ export default function AccountingProcurementQueue() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [reviewChecklist, setReviewChecklist] = useState<ProcurementReviewBasis>(createEmptyChecklist());
   const [sortOrder, setSortOrder] = useState<'created_desc' | 'created_asc' | 'event_asc' | 'needed_asc'>('created_desc');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeQueue, setActiveQueue] = useState<'budget' | 'expense'>(
+    searchParams.get('queue') === 'expense' ? 'expense' : 'budget'
+  );
+  // Deep-linked request from a notification: scroll to it and highlight it briefly.
+  const highlightRequestId = searchParams.get('request') || '';
 
   const fetchRequests = async () => {
     try {
@@ -134,6 +141,56 @@ export default function AccountingProcurementQueue() {
     () => requests.filter((request) => request.sla?.status === 'rush' || request.sla?.status === 'blocked').length,
     [requests]
   );
+
+  // When arriving from a notification, open the queue that actually holds the
+  // request and scroll it into view.
+  useEffect(() => {
+    if (!highlightRequestId || requests.length === 0) {
+      return;
+    }
+
+    const target = requests.find((request) => request._id === highlightRequestId);
+    if (target) {
+      setActiveQueue(target.status === 'proof_submitted' ? 'expense' : 'budget');
+    }
+
+    const timer = window.setTimeout(() => {
+      document
+        .querySelector(`[data-request-id="${highlightRequestId}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [highlightRequestId, requests, activeQueue]);
+
+  const handleQueueChange = (value: string) => {
+    const nextQueue = value === 'expense' ? 'expense' : 'budget';
+    setActiveQueue(nextQueue);
+    const next = new URLSearchParams(searchParams);
+    next.set('queue', nextQueue);
+    next.delete('request');
+    setSearchParams(next, { replace: true });
+  };
+
+  const renderSortControl = () => (
+    <div className="space-y-1">
+      <Label className="text-xs">Sort by</Label>
+      <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as typeof sortOrder)}>
+        <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="created_desc">Newest first</SelectItem>
+          <SelectItem value="created_asc">Oldest first</SelectItem>
+          <SelectItem value="event_asc">Event date (soonest)</SelectItem>
+          <SelectItem value="needed_asc">Needed by (soonest)</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
+  // Shared card props so a deep-linked request stands out when scrolled to.
+  const getCardProps = (requestId: string) => ({
+    'data-request-id': requestId,
+    ...(requestId === highlightRequestId ? { className: 'ring-2 ring-primary ring-offset-2' } : {}),
+  });
 
   const openBudgetDialog = (request: ProcurementRequest, nextDecision: 'approved' | 'rejected') => {
     setSelectedRequest(request);
@@ -263,6 +320,13 @@ export default function AccountingProcurementQueue() {
         </Card>
       </div>
 
+      <Tabs value={activeQueue} onValueChange={handleQueueChange} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="budget">Budget Approval Queue ({budgetRequests.length})</TabsTrigger>
+          <TabsTrigger value="expense">Expense Confirmation Queue ({expenseRequests.length})</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="budget" className="space-y-4">
       <Card>
         <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
@@ -272,18 +336,7 @@ export default function AccountingProcurementQueue() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Sort by</Label>
-              <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as typeof sortOrder)}>
-                <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="created_desc">Newest first</SelectItem>
-                  <SelectItem value="created_asc">Oldest first</SelectItem>
-                  <SelectItem value="event_asc">Event date (soonest)</SelectItem>
-                  <SelectItem value="needed_asc">Needed by (soonest)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {renderSortControl()}
             <Badge variant="outline">{budgetRequests.length} waiting</Badge>
           </div>
         </CardContent>
@@ -301,7 +354,7 @@ export default function AccountingProcurementQueue() {
           const supplierProfile = request.quote?.supplier;
 
           return (
-            <Card key={request._id}>
+            <Card key={request._id} {...getCardProps(request._id)}>
               <CardHeader className="space-y-3">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div className="space-y-1">
@@ -409,15 +462,21 @@ export default function AccountingProcurementQueue() {
         })
       )}
 
+        </TabsContent>
+
+        <TabsContent value="expense" className="space-y-4">
       <Card>
-        <CardContent className="flex flex-col gap-2 p-4 md:flex-row md:items-center md:justify-between">
+        <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <h2 className="text-lg font-semibold">Expense Confirmation Queue</h2>
             <p className="text-sm text-muted-foreground">
               Confirm the uploaded receipt or purchase proof after Purchasing records the completed acquisition.
             </p>
           </div>
-          <Badge variant="outline">{expenseRequests.length} waiting</Badge>
+          <div className="flex items-center gap-3">
+            {renderSortControl()}
+            <Badge variant="outline">{expenseRequests.length} waiting</Badge>
+          </div>
         </CardContent>
       </Card>
 
@@ -429,7 +488,7 @@ export default function AccountingProcurementQueue() {
         </Card>
       ) : (
         expenseRequests.map((request) => (
-          <Card key={request._id}>
+          <Card key={request._id} {...getCardProps(request._id)}>
             <CardHeader className="space-y-3">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="space-y-1">
@@ -530,6 +589,8 @@ export default function AccountingProcurementQueue() {
           </Card>
         ))
       )}
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl">

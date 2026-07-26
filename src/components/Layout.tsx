@@ -60,6 +60,8 @@ interface AppNotification {
   actionLabel?: string;
   department?: string;
   createdAt: string;
+  // Server-computed: the action this notification asked for is already resolved.
+  actionDone?: boolean;
   contract?: {
     _id: string;
     contractNumber?: string;
@@ -70,13 +72,22 @@ interface AppNotification {
     departmentProgress?: Record<string, number>;
     paymentHold?: { active?: boolean };
   };
+  procurementRequest?: {
+    _id: string;
+    requestNumber?: string;
+    status?: string;
+  };
 }
 
 // Whether an action-required notification's task is already resolved, so the UI
-// can show a green "Done" instead of a red "High". Only returns true for clearly
-// resolvable cases; ambiguous ones stay flagged. Derived from the linked
-// contract's current state.
+// can show a green "Done" instead of a red "High". The server computes this for
+// both contract- and procurement-backed notifications; the local checks below are
+// a fallback for anything served before that field existed.
 const isNotificationActionDone = (notification: AppNotification): boolean => {
+  if (typeof notification.actionDone === 'boolean') {
+    return notification.actionDone;
+  }
+
   const contract = notification.contract;
   if (!contract || !contract.status) {
     return false;

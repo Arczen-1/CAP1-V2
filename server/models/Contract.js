@@ -70,6 +70,13 @@ const menuItemSchema = new mongoose.Schema({
   category: String,
   item: String,
   quantity: Number,
+  // Client preference for this specific dish (e.g. "less spicy"). Seeded from the
+  // matching menu-tasting dish when the contract is created, and printed on the
+  // kitchen preparation checklist.
+  notes: {
+    type: String,
+    trim: true
+  },
   confirmed: {
     type: Boolean,
     default: false

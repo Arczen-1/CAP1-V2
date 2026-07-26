@@ -186,6 +186,7 @@ interface MenuTasting {
   eventType: string;
   expectedGuests: number;
   preferredEventDate: string;
+  menuItems?: Array<{ category?: string; itemName?: string; notes?: string }>;
 }
 
 interface CreativeItem {
@@ -796,6 +797,11 @@ export default function NewContract() {
   // Package & Menu Selection
   const [selectedPackage, setSelectedPackage] = useState('');
   const [menuSelections, setMenuSelections] = useState<Record<string, string[]>>({});
+  // Per-dish client preferences keyed by dish name. Seeded from the linked menu
+  // tasting so comments the client already gave carry into the contract, and
+  // printed on the kitchen checklist.
+  const [menuItemNotes, setMenuItemNotes] = useState<Record<string, string>>({});
+  const [tastingNotesByItem, setTastingNotesByItem] = useState<Record<string, string>>({});
 
   // Creative & Linen with pricing
   const [creativeAssets, setCreativeAssets] = useState<CreativeAssetEntry[]>([]);
@@ -945,6 +951,16 @@ export default function NewContract() {
         const preferredEventDate = startOfDay(new Date(data.preferredEventDate));
         setEventDate(preferredEventDate < minimumEventDate ? minimumEventDate : preferredEventDate);
       }
+
+      // Carry the tasting's per-dish comments across so any dish the client also
+      // picks for the contract keeps the preference they already gave.
+      setTastingNotesByItem(
+        Object.fromEntries(
+          (data.menuItems || [])
+            .filter((dish) => dish?.itemName && dish?.notes)
+            .map((dish) => [dish.itemName as string, dish.notes as string])
+        )
+      );
     } catch (error) {
       toast.error('Failed to load tasting data');
     }
@@ -1005,6 +1021,14 @@ export default function NewContract() {
 
         selectionMap[categoryKey] = [...(selectionMap[categoryKey] || []), item.item];
         return selectionMap;
+      }, {}));
+      // Keep any per-dish comments already saved on the contract so editing and
+      // re-saving never wipes them.
+      setMenuItemNotes((contract.menuDetails || []).reduce((noteMap: Record<string, string>, item: any) => {
+        if (item?.item && item?.notes) {
+          noteMap[item.item] = item.notes;
+        }
+        return noteMap;
       }, {}));
       setCreativeAssets((contract.creativeAssets || []).map((asset: any) => ({
         itemId: asset.itemId || '',
@@ -1077,12 +1101,19 @@ export default function NewContract() {
     };
   };
 
+  // A dish's comment: what the user typed, else the note carried over from the
+  // menu tasting for that same dish.
+  const getMenuItemNote = (item: string) => (
+    menuItemNotes[item] !== undefined ? menuItemNotes[item] : (tastingNotesByItem[item] || '')
+  );
+
   const buildMenuDetails = () => {
     return Object.entries(menuSelections).flatMap(([category, selections]) =>
       selections.map(item => ({
         category: MENU_CATEGORIES[category as keyof typeof MENU_CATEGORIES]?.name || category,
         item,
         quantity: totalGuests,
+        notes: getMenuItemNote(item).trim(),
         confirmed: false,
       }))
     );
@@ -2874,6 +2905,46 @@ export default function NewContract() {
                       </div>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Per-dish client preferences (printed on the kitchen checklist) */}
+            {selectedPackage && buildMenuDetails().length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Utensils className="h-5 w-5" />
+                    Comments On Chosen Dishes (optional)
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Client preferences for the dishes selected above. These print on the kitchen preparation checklist.
+                    {Object.keys(tastingNotesByItem).length > 0
+                      ? ' Comments from the linked menu tasting are filled in automatically for matching dishes.'
+                      : ''}
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {buildMenuDetails().map((dish) => {
+                    const carriedOver = Boolean(tastingNotesByItem[dish.item]) && menuItemNotes[dish.item] === undefined;
+                    return (
+                      <div key={`${dish.category}-${dish.item}`} className="flex flex-col gap-2 rounded-lg border p-2 sm:flex-row sm:items-center">
+                        <div className="min-w-[190px]">
+                          <p className="text-sm font-medium">{dish.item}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {dish.category}
+                            {carriedOver ? ' · from tasting' : ''}
+                          </p>
+                        </div>
+                        <Input
+                          value={getMenuItemNote(dish.item)}
+                          onChange={(event) => setMenuItemNotes((current) => ({ ...current, [dish.item]: event.target.value }))}
+                          placeholder="e.g. less spicy, no peanuts, serve well done"
+                          className="flex-1"
+                        />
+                      </div>
+                    );
+                  })}
                 </CardContent>
               </Card>
             )}

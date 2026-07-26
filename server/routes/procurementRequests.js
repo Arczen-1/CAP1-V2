@@ -518,8 +518,9 @@ router.post('/', auth, async (req, res) => {
       title: `New ${departmentConfig.label} procurement request`,
       message: `${request.requestNumber} needs ${request.requestedQuantity} ${request.itemName} by ${formatDateLabel(request.neededBy)}.`,
       contract: request.contract || undefined,
+      procurementRequest: request._id,
       priority: request.source === 'contract_shortage' ? 'high' : 'medium',
-      actionUrl: '/purchasing',
+      actionUrl: `/purchasing?tab=queue&request=${request._id}`,
       actionLabel: 'Prepare report',
       department: 'purchasing'
     });
@@ -625,8 +626,9 @@ router.put('/:id/quote', auth, requireRole(['purchasing', 'admin']), async (req,
       title: `Budget approval needed`,
       message: `${request.requestNumber} is ready for accounting budget approval.`,
       contract: request.contract || undefined,
+      procurementRequest: request._id,
       priority: 'high',
-      actionUrl: '/accounting',
+      actionUrl: `/accounting?tab=procurement&queue=budget&request=${request._id}`,
       actionLabel: 'Review budget',
       department: 'accounting'
     });
@@ -636,8 +638,9 @@ router.put('/:id/quote', auth, requireRole(['purchasing', 'admin']), async (req,
       title: `Budget request submitted`,
       message: `${request.requestNumber} has been submitted to accounting for budget approval.`,
       contract: request.contract || undefined,
+      procurementRequest: request._id,
       priority: 'medium',
-      actionUrl: getDepartmentWorkUrl(request.department),
+      actionUrl: `${getDepartmentWorkUrl(request.department)}?request=${request._id}`,
       actionLabel: 'View request status',
       department: request.department
     });
@@ -740,8 +743,9 @@ router.post('/:id/accounting-review', auth, requireRole(['accounting', 'admin'])
       title: decisionTitle,
       message: decisionMessage,
       contract: request.contract || undefined,
+      procurementRequest: request._id,
       priority: decision === 'approved' ? 'high' : 'medium',
-      actionUrl: '/purchasing',
+      actionUrl: `/purchasing?tab=${decision === 'approved' ? 'approved' : 'queue'}&request=${request._id}`,
       actionLabel: decision === 'approved' ? 'Record purchase proof' : 'Revise report',
       department: 'purchasing'
     });
@@ -751,8 +755,9 @@ router.post('/:id/accounting-review', auth, requireRole(['accounting', 'admin'])
       title: decisionTitle,
       message: decisionMessage,
       contract: request.contract || undefined,
+      procurementRequest: request._id,
       priority: decision === 'approved' ? 'high' : 'medium',
-      actionUrl: getDepartmentWorkUrl(request.department),
+      actionUrl: `${getDepartmentWorkUrl(request.department)}?request=${request._id}`,
       actionLabel: 'View request status',
       department: request.department
     });
@@ -851,8 +856,9 @@ router.post('/:id/fulfill', auth, requireRole(['purchasing', 'admin']), async (r
       title: 'Expense confirmation needed',
       message: `${request.requestNumber} now has proof of purchase and is waiting for accounting confirmation.`,
       contract: request.contract || undefined,
+      procurementRequest: request._id,
       priority: 'high',
-      actionUrl: '/accounting',
+      actionUrl: `/accounting?tab=procurement&queue=expense&request=${request._id}`,
       actionLabel: 'Confirm expense',
       department: 'accounting'
     });
@@ -862,8 +868,9 @@ router.post('/:id/fulfill', auth, requireRole(['purchasing', 'admin']), async (r
       title: `Proof of purchase submitted`,
       message: `${request.requestNumber} now has purchasing proof on file and is waiting for accounting confirmation.`,
       contract: request.contract || undefined,
+      procurementRequest: request._id,
       priority: 'medium',
-      actionUrl: getDepartmentWorkUrl(request.department),
+      actionUrl: `${getDepartmentWorkUrl(request.department)}?request=${request._id}`,
       actionLabel: 'View proof status',
       department: request.department
     });
@@ -923,8 +930,9 @@ router.post('/:id/accounting-expense-review', auth, requireRole(['accounting', '
       title,
       message,
       contract: request.contract || undefined,
+      procurementRequest: request._id,
       priority: decision === 'confirmed' ? 'medium' : 'high',
-      actionUrl: '/purchasing',
+      actionUrl: `/purchasing?tab=${decision === 'confirmed' ? 'completed' : 'approved'}&request=${request._id}`,
       actionLabel: decision === 'confirmed' ? 'View completed request' : 'Update proof',
       department: 'purchasing'
     });
@@ -934,8 +942,9 @@ router.post('/:id/accounting-expense-review', auth, requireRole(['accounting', '
       title,
       message,
       contract: request.contract || undefined,
+      procurementRequest: request._id,
       priority: decision === 'confirmed' ? 'medium' : 'high',
-      actionUrl: getDepartmentWorkUrl(request.department),
+      actionUrl: `${getDepartmentWorkUrl(request.department)}?request=${request._id}`,
       actionLabel: 'View request status',
       department: request.department
     });
@@ -1016,8 +1025,9 @@ router.post('/:id/rental-return', auth, requireRole(['purchasing', 'admin']), as
       title: 'Rental returned',
       message: `${request.requestNumber} (${request.itemName}) was returned to the supplier and removed from ${departmentConfig.label} inventory.`,
       contract: request.contract || undefined,
+      procurementRequest: request._id,
       priority: 'low',
-      actionUrl: '/accounting',
+      actionUrl: `/accounting?tab=procurement&queue=expense&request=${request._id}`,
       actionLabel: 'View request',
       department: 'accounting'
     });
@@ -1027,8 +1037,9 @@ router.post('/:id/rental-return', auth, requireRole(['purchasing', 'admin']), as
       title: 'Rental returned',
       message: `${request.requestNumber} (${request.itemName}) has been returned to the supplier.`,
       contract: request.contract || undefined,
+      procurementRequest: request._id,
       priority: 'low',
-      actionUrl: getDepartmentWorkUrl(request.department),
+      actionUrl: `${getDepartmentWorkUrl(request.department)}?request=${request._id}`,
       actionLabel: 'View request status',
       department: request.department
     });

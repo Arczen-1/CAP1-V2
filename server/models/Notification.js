@@ -38,6 +38,12 @@ const notificationSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Contract'
   },
+  // Procurement notifications resolve against the request, not the contract, so
+  // the link is stored here for deep-linking and "already done" detection.
+  procurementRequest: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ProcurementRequest'
+  },
   actionUrl: String,
   actionLabel: String,
   department: String,
