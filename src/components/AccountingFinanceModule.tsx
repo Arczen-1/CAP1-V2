@@ -465,7 +465,7 @@ export default function AccountingFinanceModule() {
                   <RotateCcw className="mr-2 h-4 w-4" />
                   Standard Amounts
                 </Button>
-                {overview.budgetSuggestion ? (
+                {overview?.budgetSuggestion ? (
                   <Button type="button" variant="outline" onClick={handleApplySuggestion}>
                     <RotateCcw className="mr-2 h-4 w-4" />
                     Suggest From Last 3 Months
@@ -473,7 +473,7 @@ export default function AccountingFinanceModule() {
                 ) : null}
               </div>
             </div>
-            {overview.budgetSuggestion ? (
+            {overview?.budgetSuggestion ? (
               <p className="text-xs text-muted-foreground">
                 <span className="font-medium">Basis:</span> monthly budgets are set by Accounting each month. The suggestion derives Creative, Linen, and Stockroom from the trailing {overview.budgetSuggestion.lookbackMonths}-month average of confirmed procurement spend ({overview.budgetSuggestion.basisWindow}); other categories use the standard template amount.
               </p>
