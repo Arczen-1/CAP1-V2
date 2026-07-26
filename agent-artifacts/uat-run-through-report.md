@@ -33,12 +33,14 @@
 
 ## Part 3 — Findings (bugs / gaps / improvements)
 
-### F1 — Tasting slot can be double-booked · **[Sales · Menu Booking]** · **[Scenario: two same bookings]** · Medium
+### F1 — Tasting slot can be double-booked · **[Sales · Menu Booking]** · **[Scenario: two same bookings]** · Medium · ✅ FIXED (2026-07-26)
+> Fixed: `POST /api/menu-tastings` now rejects a booking whose date+time slot is already booked/confirmed (`server/routes/menuTastings.js`). Syntax-checked.
 `POST /api/menu-tastings` validates a duplicate **email** but does **not** check the requested **date + time slot** against existing bookings. `GET /slots/available` computes free slots for the UI only. Two different clients (or a direct API call / race) can book the same date+time.
 - **Evidence:** `server/routes/menuTastings.js:196-207` (email check only), `:373-400` (slots advisory).
 - **Better:** on create, reject if `tastingDate` + `tastingTime` is already `booked`/`confirmed` (reuse the `slots/available` query) — mirrors the same-day conflict pattern already used for venue/vehicles.
 
-### F2 — Banquet 7-day roster freeze not enforced server-side · **[Banquet · Pre-event]** · **[Scenario: banquet staffing]** · Medium
+### F2 — Banquet 7-day roster freeze not enforced server-side · **[Banquet · Pre-event]** · **[Scenario: banquet staffing]** · Medium · ✅ FIXED (2026-07-26)
+> Fixed: `PUT /:id/banquet-assignment` now blocks non-admin roster changes within 7 days of the event (reuses `isMaterialFreezeActive`), matching the material freeze; admin can override for late replacements. Syntax-checked. Note: this also blocks first-time roster setup inside the window for non-admins (by design; admin can do it).
 The one-week banquet roster freeze is shown as UI labels ("Roster Frozen / Freeze Required") but the `PUT /:id/banquet-assignment` route does not block roster changes inside the 7-day window — unlike the **material freeze**, which *is* enforced (`isMaterialFreezeActive`, contracts.js:2031/3223).
 - **Evidence:** banquet-assignment route validates supervisor + payment hold only; no freeze check.
 - **Better:** enforce like the material freeze (block roster edits within 7 days unless admin/management override with a recorded reason). Appendix H documents freeze/SLA rules.
