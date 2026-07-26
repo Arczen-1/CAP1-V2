@@ -2939,6 +2939,116 @@ export default function ContractDetail() {
     }, 250);
   };
 
+  // Return leg (post-event): items to COLLECT BACK from the venue — the reusable,
+  // non-consumable inventory (stockroom/linen/creative). Food is consumed and
+  // excluded. The status column doubles as the loaded-vs-returned reconciliation.
+  const handlePrintReturnPickupChecklist = () => {
+    if (!contract) {
+      return;
+    }
+
+    const returnSections: Array<{ title: string; rows: Array<{ name: string; code: string; quantity: number; status: string }> }> = [
+      {
+        title: 'Stockroom & Equipment',
+        rows: (contract.equipmentChecklist || []).map((item: any) => ({
+          name: item.item || 'Equipment item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0,
+          status: getPostEventStatusLabel(item.postEventStatus, item.status),
+        })),
+      },
+      {
+        title: 'Linen',
+        rows: (contract.linenRequirements || []).map((item: any) => ({
+          name: item.type || 'Linen item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0,
+          status: getPostEventStatusLabel(item.postEventStatus, item.status),
+        })),
+      },
+      {
+        title: 'Creative & Decor',
+        rows: (contract.creativeAssets || []).map((item: any) => ({
+          name: item.item || 'Creative item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0,
+          status: getPostEventStatusLabel(item.postEventStatus, item.status),
+        })),
+      },
+    ].filter((section) => section.rows.length > 0);
+
+    if (returnSections.length === 0) {
+      toast.error('No reusable items were assigned to this event, so there is nothing to collect back.');
+      return;
+    }
+
+    const driverName = (contract.logisticsAssignment?.driver?.fullName || contract.logisticsAssignment?.driver?.driverId || '');
+
+    const sectionsHtml = returnSections.map((section) => `
+      <section class="document-section">
+        <h3 class="section-heading">${escapeHtml(section.title)} - Return</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:40%">Item</th>
+              <th>Code</th>
+              <th>Qty To Return</th>
+              <th>Post-Event Status</th>
+              <th style="width:14%">Collected</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${section.rows.map((row) => `
+              <tr>
+                <td>${escapeHtml(row.name)}</td>
+                <td>${escapeHtml(row.code)}</td>
+                <td>${row.quantity}</td>
+                <td>${escapeHtml(row.status)}</td>
+                <td>&#9744;</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div class="info-grid" style="margin-top:8px">
+          <div>Collected from venue by driver: ____________________</div>
+          <div>Returned &amp; received by (${escapeHtml(section.title)}): ____________________</div>
+        </div>
+      </section>
+    `).join('');
+
+    const printWindow = window.open('', '_blank', 'width=960,height=1080');
+    if (!printWindow) {
+      toast.error('Please allow pop-ups to print the return / pickup checklist');
+      return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${escapeHtml(contract.contractNumber)} - Return / Pickup Checklist</title>
+          <style>${PRINT_DOCUMENT_STYLES}</style>
+        </head>
+        <body>
+          ${getPrintHeaderHtml(
+            'Return / Pickup Checklist',
+            'Reusable items to collect back from the venue after the event. Food/consumables are excluded. Confirm each item and record the return handover per department.',
+            [
+              { label: 'Contract Number', value: contract.contractNumber },
+              { label: 'Client', value: contract.clientName },
+              { label: 'Event Date', value: new Date(contract.eventDate).toLocaleDateString() },
+              { label: 'Driver', value: driverName || 'Unassigned' },
+            ]
+          )}
+          ${sectionsHtml}
+          <div class="document-note">
+            Printed from the logistics section for ${COMPANY_NAME}. Items not collected/returned should be logged as an incident for reconciliation.
+          </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
+
   const handlePrintKitchenChecklist = () => {
     if (!contract) {
       return;
@@ -6549,6 +6659,10 @@ export default function ContractDetail() {
                     <Printer className="mr-2 h-4 w-4" />
                     Driver Pickup Checklist
                   </Button>
+                  <Button variant="outline" size="sm" data-print-hide="true" onClick={handlePrintReturnPickupChecklist}>
+                    <Printer className="mr-2 h-4 w-4" />
+                    Return / Pickup Checklist
+                  </Button>
                   {isPreSignatureStage ? renderReferenceBadge() : null}
                   {renderTabEditButton('event')}
                 </div>
@@ -6750,6 +6864,40 @@ export default function ContractDetail() {
                         )}
                       </CardContent>
                     </Card>
+
+                    {/* Post-event return reconciliation: how many reusable items are
+                        still unaccounted for after the event (loaded → returned). */}
+                    {eventHasPassed && ((contract.equipmentChecklist || []).length + (contract.linenRequirements || []).length + (contract.creativeAssets || []).length) > 0 ? (
+                      <Card className="border-slate-200">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-base">Return Reconciliation (Post-Event)</CardTitle>
+                          <p className="text-sm text-muted-foreground">
+                            Reusable items to bring back from the venue and how many are still unaccounted for. Food is consumed and excluded. Log any missing items as an incident.
+                          </p>
+                        </CardHeader>
+                        <CardContent className="grid gap-3 sm:grid-cols-3">
+                          {[
+                            { label: 'Stockroom & Equipment', total: (contract.equipmentChecklist || []).length, remaining: stockroomReturnsRemaining },
+                            { label: 'Linen', total: (contract.linenRequirements || []).length, remaining: linenReturnsRemaining },
+                            { label: 'Creative & Decor', total: (contract.creativeAssets || []).length, remaining: creativeReturnsRemaining },
+                          ].filter((d) => d.total > 0).map((d) => {
+                            const accounted = d.total - d.remaining;
+                            const done = d.remaining === 0;
+                            return (
+                              <div key={d.label} className={`rounded-xl border p-4 ${done ? 'border-green-200 bg-green-50/70' : 'border-amber-200 bg-amber-50/70'}`}>
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-sm font-semibold">{d.label}</p>
+                                  <Badge className={done ? 'border-green-200 bg-green-100 text-green-800' : 'border-amber-200 bg-amber-100 text-amber-900'}>
+                                    {done ? 'All returned' : `${d.remaining} pending`}
+                                  </Badge>
+                                </div>
+                                <p className="mt-1 text-sm text-muted-foreground">{accounted} of {d.total} item(s) checked / returned.</p>
+                              </div>
+                            );
+                          })}
+                        </CardContent>
+                      </Card>
+                    ) : null}
                       </TabsContent>
 
                       <TabsContent value="staff" className="mt-4 space-y-4">
