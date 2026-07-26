@@ -45,23 +45,18 @@ The one-week banquet roster freeze is shown as UI labels ("Roster Frozen / Freez
 - **Evidence:** banquet-assignment route validates supervisor + payment hold only; no freeze check.
 - **Better:** enforce like the material freeze (block roster edits within 7 days unless admin/management override with a recorded reason). Appendix H documents freeze/SLA rules.
 
-### F3 — Procurement request creation not role-restricted · **[Purchasing · Procurement]** · **[Scenario: procurement request]** · Low
-`POST /api/procurement-requests` uses `auth` but no `requireRole`, so any authenticated role (incl. kitchen/banquet) can create an inventory procurement request.
-- **Evidence:** `server/routes/procurementRequests.js:391`.
-- **Better:** restrict to requesting departments (creative/linen/stockroom/logistics/purchasing/admin), or confirm this is intended and document it. (Requester role is recorded, so impact is low.)
+### F3 — ~~Procurement request creation not role-restricted~~ · **RETRACTED (false finding, 2026-07-26)**
+On closer read the route **is** restricted: `POST /api/procurement-requests` checks an inline allowlist `CREATE_ACCESS_ROLES = ['creative','linen','logistics','stockroom','purchasing','admin']` (`procurementRequests.js:44,393`). The first pass only grepped for `requireRole` middleware and missed the inline check. **No issue — creation is properly restricted.**
 
-### F4 — Confirm guest-based waitstaff bracket (1 waiter / 25 guests) · **[Banquet · Pre-event]** · Low / verify
-Appendix H specifies waitstaff ≈ 1 per 25 guests + role-based banquet plan. The system has banquet staffing suggestions, but the exact 1:25 bracket wasn't verified in this pass.
-- **Better:** confirm the suggestion engine uses the 1:25 ratio (and the role plan), so it matches the documented rule.
+### F4 — Waitstaff bracket did not match Appendix H · **[Banquet · Pre-event]** · Low · ✅ FIXED (2026-07-26)
+The suggestion engine used **1 waiter per 30 guests** (`service_staff: ceil(guests/30)`), but Appendix H mandates **1 per 25** ("40 waiters for 1,000 pax"). Fixed to `ceil(guests/25)` in `getSuggestedBanquetStaffingPlan` (`server/routes/contracts.js`), matching the business rule.
 
-### F5 — Single large JS bundle (no code-splitting) · **[Global · Performance]** · Low
-Production build emits one ~1.75 MB JS chunk (Vite warns >500 kB). Slower first load, especially on the "mobile status-check" use case.
-- **Evidence:** `npm run build` output.
-- **Better:** route-level `React.lazy()` / `manualChunks` to split by dashboard/module.
+### F5 — Single large JS bundle · **[Global · Performance]** · Low · ✅ PARTIALLY FIXED (2026-07-26)
+Added `manualChunks` in `vite.config.ts` to split vendor code: main app bundle **1.75 MB → 1.22 MB**, with react (230 kB), vendor (200 kB), radix (111 kB) now cached separately. Remaining reduction needs route-level `React.lazy()` (larger refactor) — deferred.
 
-### F6 — Build/tooling warnings & lint debt · **[Global · Maintainability]** · Low
-`postcss.config.js` / `eslint.config.js` "module type not specified" warnings; browserslist data 7 months old; 268 lint items (mostly `no-explicit-any` + unused-vars — style, not defects).
-- **Better:** add `"type": "module"` (or rename configs to `.mjs`), `npx update-browserslist-db`, and chip away at `any`/unused over time. Not urgent.
+### F6 — Build/tooling warnings & lint debt · **[Global · Maintainability]** · Low · ⏸ DEFERRED (deliberately)
+`postcss.config.js` / `eslint.config.js` "module type not specified" warnings; browserslist 7 months old; 268 lint items (mostly `no-explicit-any` + unused-vars — style, not defects).
+- **Deliberately not "fixed":** the tempting fix (`"type": "module"` in package.json) would **break the CommonJS server** (`server/*.js` use `require`), so it's the wrong move. The warnings are harmless; the lint items are style-only. Left as tracked debt to chip away at over time (or rename config files to `.mjs` later). Not worth the risk before group testing.
 
 ---
 
