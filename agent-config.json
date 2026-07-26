@@ -1,0 +1,17 @@
+{
+  "maximumChangesPerRun": 5,
+  "maximumRepairCycles": 3,
+  "maximumFilesChangedPerRequest": 30,
+  "allowDatabaseSchemaChanges": false,
+  "allowNewDependencies": false,
+  "allowPaidServices": false,
+  "allowDeployment": false,
+  "allowRemotePush": false,
+  "allowAutomaticMerge": false,
+  "commitPassingChanges": true,
+  "requireThesisAlignment": true,
+  "panelistMinimumEasyQuestions": 5,
+  "panelistMinimumModerateQuestions": 7,
+  "panelistMinimumDifficultQuestions": 5,
+  "panelistRapidFireQuestions": 10
+}

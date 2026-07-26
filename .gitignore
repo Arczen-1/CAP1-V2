@@ -14,3 +14,8 @@ pnpm-debug.log*
 
 .DS_Store
 Thumbs.db
+.claude/worktrees/
+agent-artifacts/runs/*.log
+
+# Thesis source PDFs are large binaries — keep them out of git history.
+docs/thesis/*.pdf
