@@ -46,13 +46,6 @@ const isCreativeConfirmed = (contract: Contract) => Boolean(contract.sectionConf
 
 const getCreativeStatusMeta = (contract: Contract) => {
   if (isCreativeDraftWorkflowStatus(contract.status)) {
-    if (!contract.setupPerson) {
-      return {
-        label: 'Needs lead',
-        className: 'bg-amber-100 text-amber-900 border-amber-200',
-      };
-    }
-
     if (!(contract.creativeAssets?.length)) {
       return {
         label: 'Needs assets',
@@ -73,13 +66,6 @@ const getCreativeStatusMeta = (contract: Contract) => {
     };
   }
 
-  if (!contract.setupPerson) {
-    return {
-      label: 'Needs lead',
-      className: 'bg-amber-100 text-amber-900 border-amber-200',
-    };
-  }
-
   if (!(contract.creativeAssets?.length)) {
     return {
       label: 'Needs assets',
@@ -95,14 +81,6 @@ const getCreativeStatusMeta = (contract: Contract) => {
 
 const getNextStepMeta = (contract: Contract) => {
   if (isCreativeDraftWorkflowStatus(contract.status)) {
-    if (!contract.setupPerson) {
-      return {
-        title: 'Assign creative lead',
-        note: 'Set the setup owner first so the draft can move into creative validation.',
-        className: 'text-amber-900',
-      };
-    }
-
     if (!(contract.creativeAssets?.length)) {
       return {
         title: 'Add creative inventory items',
@@ -126,14 +104,6 @@ const getNextStepMeta = (contract: Contract) => {
     };
   }
 
-  if (!contract.setupPerson) {
-    return {
-      title: 'Assign creative lead',
-      note: 'Set the setup owner first so creative planning has a clear point person.',
-      className: 'text-amber-900',
-    };
-  }
-
   if (!(contract.creativeAssets?.length)) {
     return {
       title: 'Review required creative assets',
@@ -153,7 +123,7 @@ const toRow = (contract: Contract): WorklistRow => {
   const timing = getTimingMeta(contract.eventDate, { pastLabel: 'Past event' });
   const creativeStatus = getCreativeStatusMeta(contract);
   const nextStep = getNextStepMeta(contract);
-  const needsPlanning = !contract.setupPerson || !(contract.creativeAssets?.length) || (
+  const needsPlanning = !(contract.creativeAssets?.length) || (
     isCreativeDraftWorkflowStatus(contract.status) && !isCreativeConfirmed(contract)
   );
 
@@ -188,10 +158,6 @@ const toRow = (contract: Contract): WorklistRow => {
         className: isCreativeConfirmed(contract)
           ? 'border-green-200 bg-green-50 text-green-800'
           : 'border-amber-200 bg-amber-50 text-amber-900',
-      }] : []),
-      ...(contract.setupPerson ? [{
-        label: `Lead: ${contract.setupPerson}`,
-        className: 'border-green-200 bg-green-50 text-green-800',
       }] : []),
     ],
     nextStepTitle: nextStep.title,
@@ -241,8 +207,8 @@ export default function CreativeDashboard() {
     const daysUntil = getDaysUntilDate(contract.eventDate);
     return daysUntil >= 0 && daysUntil <= 7;
   });
-  const needsPlanningContracts = approvedContracts.filter((contract) => !contract.setupPerson || !(contract.creativeAssets?.length));
-  const plannedContracts = approvedContracts.filter((contract) => contract.setupPerson && (contract.creativeAssets?.length || 0) > 0);
+  const needsPlanningContracts = approvedContracts.filter((contract) => !(contract.creativeAssets?.length));
+  const plannedContracts = approvedContracts.filter((contract) => (contract.creativeAssets?.length || 0) > 0);
 
   if (isLoading) {
     return (

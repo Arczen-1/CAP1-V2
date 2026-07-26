@@ -908,9 +908,12 @@ const toBanquetStaffSummary = (staff, meta = {}) => ({
   ...meta
 });
 
-const getBanquetCoverageProgress = (supervisorId, staffingPlan, assignments = []) => {
+// Banquet coverage is measured purely by staff-role coverage. The on-site
+// supervisor is the banquet account user, so no separate supervisor assignment
+// is required (or counted) here.
+const getBanquetCoverageProgress = (_supervisorId, staffingPlan, assignments = []) => {
   const requiredAssignments = getBanquetPlanCount(staffingPlan);
-  const totalSteps = requiredAssignments + 1;
+  const totalSteps = requiredAssignments;
 
   if (totalSteps === 0) {
     return 0;
@@ -926,7 +929,7 @@ const getBanquetCoverageProgress = (supervisorId, staffingPlan, assignments = []
     sum + Math.min(Number(staffingPlan?.[role]) || 0, assignmentCounts[role] || 0)
   ), 0);
 
-  const completedSteps = coveredAssignments + (supervisorId ? 1 : 0);
+  const completedSteps = coveredAssignments;
 
   return Math.round((completedSteps / totalSteps) * 100);
 };
@@ -1590,16 +1593,25 @@ const buildOperationsSummary = async (contract) => {
     ? availableDrivers.find(driver => String(driver._id) === String(recommendedTruck.assignedDriver._id))
     : availableDrivers[0] || null;
 
-  // Appendix H: transportation must be arranged at least 3 days before the event.
-  // Advisory warning (not a hard block) so genuine last-minute events still work.
-  // Reuses daysUntilEvent computed above.
+  // Appendix H: any department requiring transportation must arrange it at least
+  // 3 days before the event. This covers BOTH the inventory (cargo) truck and the
+  // separate staff transport. Advisory warnings (not hard blocks) so genuine
+  // last-minute events still work. Reuses daysUntilEvent computed above.
+  const withinLeadTimeWindow = daysUntilEvent >= 0 && daysUntilEvent < 3;
   const transportBooked = Boolean(contract.logisticsAssignment?.truck);
-  const leadTimeWarning = (daysUntilEvent >= 0 && daysUntilEvent < 3 && !transportBooked)
-    ? 'Transport should be arranged at least 3 days before the event (Appendix H). This event is within 3 days and no truck is booked yet.'
+  const leadTimeWarning = (withinLeadTimeWindow && !transportBooked)
+    ? 'Inventory transport should be arranged at least 3 days before the event (Appendix H). This event is within 3 days and no truck is booked yet.'
+    : '';
+
+  const staffHeadcount = getStaffHeadcount(contract);
+  const staffTransportBooked = Boolean(contract.staffTransport?.vehicles?.length);
+  const staffLeadTimeWarning = (withinLeadTimeWindow && staffHeadcount > 0 && !staffTransportBooked)
+    ? `Staff transport should be arranged at least 3 days before the event (Appendix H). This event is within 3 days and no staff transport is booked for the ${staffHeadcount} assigned staff.`
     : '';
 
   const logisticsBlockers = [
     leadTimeWarning,
+    staffLeadTimeWarning,
     availableDrivers.length === 0 ? 'No active driver is available on the event date.' : '',
     availableTrucks.length === 0 ? 'No truck is available on the event date.' : '',
     totalEstimatedVolume > 0 && !recommendedTruck ? 'No truck can be recommended for the estimated load.' : ''
@@ -1699,15 +1711,9 @@ const buildOperationsSummary = async (contract) => {
     return suggestions;
   });
 
+  // Supervisor assignment is no longer required — the banquet account user is the
+  // on-site supervisor — so a missing supervisor is not a blocker.
   const banquetBlockers = [];
-
-  if (!selectedBanquetSupervisorId) {
-    banquetBlockers.push('Assign a banquet supervisor so the event is owned on the banquet dashboard.');
-  }
-
-  if (banquetSupervisors.length === 0) {
-    banquetBlockers.push('No banquet supervisor account is available yet.');
-  }
 
   BANQUET_ASSIGNMENT_ROLES.forEach((role) => {
     const required = banquetPlan[role] || 0;
@@ -2901,6 +2907,9 @@ router.post('/:id/staff-transport/auto-assign', auth, requireRole(['logistics', 
       .filter((truck) => String(truck._id) !== cargoTruckId)
       .filter((truck) => !sameDayStaffTruckIds.has(String(truck._id)))
       .filter((truck) => getPassengerSeats(truck) > 0)
+      // A vehicle can only be auto-booked if it already has a driver — staff
+      // transport must never end up with a car and no one to drive it.
+      .filter((truck) => Boolean(truck.assignedDriver))
       .sort((a, b) => getPassengerSeats(b) - getPassengerSeats(a));
 
     const chosen = [];
@@ -2914,7 +2923,7 @@ router.post('/:id/staff-transport/auto-assign', auth, requireRole(['logistics', 
     }
 
     if (chosen.length === 0) {
-      return res.status(400).json({ message: 'No passenger vehicles are available. Tag vehicles as passenger vehicles (with seat capacity) in Drivers & Trucks, or book staff transport manually.' });
+      return res.status(400).json({ message: 'No driver-paired passenger vehicles are available. In Drivers & Trucks, tag vehicles as passenger vehicles (with seat capacity) and assign each a driver, or book staff transport manually.' });
     }
 
     const seatsShort = Math.max(0, staffCount - totalCapacity);
@@ -2995,16 +3004,18 @@ router.put('/:id/staff-transport', auth, requireRole(['logistics', 'admin']), as
         return res.status(400).json({ message: `${truck.plateNumber || 'This vehicle'} is not tagged as a passenger vehicle, so it cannot carry staff.` });
       }
 
-      let driverId = null;
-      if (entry?.driverId) {
-        driverId = String(entry.driverId);
-        if (!mongoose.isValidObjectId(driverId)) {
-          return res.status(400).json({ message: 'Selected driver is invalid.' });
-        }
-        const driver = await Driver.findById(driverId);
-        if (!driver) {
-          return res.status(404).json({ message: 'Selected driver was not found.' });
-        }
+      // Every staff-transport vehicle must have a driver — a car with no one to
+      // drive it cannot carry staff.
+      if (!entry?.driverId) {
+        return res.status(400).json({ message: `${truck.plateNumber || 'Each staff transport vehicle'} needs an assigned driver before it can be booked.` });
+      }
+      const driverId = String(entry.driverId);
+      if (!mongoose.isValidObjectId(driverId)) {
+        return res.status(400).json({ message: 'Selected driver is invalid.' });
+      }
+      const driver = await Driver.findById(driverId);
+      if (!driver) {
+        return res.status(404).json({ message: 'Selected driver was not found.' });
       }
 
       vehicles.push({ truck: truck._id, driver: driverId, passengerCapacity: getPassengerSeats(truck) });

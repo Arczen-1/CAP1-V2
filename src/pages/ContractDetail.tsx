@@ -1599,13 +1599,14 @@ export default function ContractDetail() {
   };
 
   // Manual staff-transport picker: map of truckId -> selected driverId ('' = none).
-  const toggleStaffTransportVehicle = (truckId: string) => {
+  const toggleStaffTransportVehicle = (truckId: string, defaultDriverId = '') => {
     setStaffTransportDraft((current) => {
       const next = { ...current };
       if (truckId in next) {
         delete next[truckId];
       } else {
-        next[truckId] = '';
+        // Pre-fill the vehicle's own assigned driver so a driver is never blank by default.
+        next[truckId] = defaultDriverId;
       }
       return next;
     });
@@ -1621,10 +1622,15 @@ export default function ContractDetail() {
       return;
     }
 
-    const vehicles = Object.entries(staffTransportDraft).map(([truckId, driverId]) => ({
-      truckId,
-      ...(driverId ? { driverId } : {}),
-    }));
+    const entries = Object.entries(staffTransportDraft);
+    // Every booked vehicle must have a driver — a car with no driver can't carry staff.
+    const missingDriver = entries.filter(([, driverId]) => !driverId);
+    if (missingDriver.length > 0) {
+      toast.error(`Assign a driver to every selected vehicle before saving (${missingDriver.length} still ${missingDriver.length === 1 ? 'needs' : 'need'} one).`);
+      return;
+    }
+
+    const vehicles = entries.map(([truckId, driverId]) => ({ truckId, driverId }));
 
     setIsAssigningStaffTransport(true);
     try {
@@ -3919,7 +3925,7 @@ export default function ContractDetail() {
   const banquetRosterFreezeActive = banquetEventDaysAway !== null && banquetEventDaysAway >= 0 && banquetEventDaysAway <= BANQUET_ROSTER_FREEZE_DAYS;
   const banquetRosterPlanningActive = banquetEventDaysAway !== null && banquetEventDaysAway > BANQUET_ROSTER_FREEZE_DAYS && banquetEventDaysAway <= BANQUET_PLANNING_WINDOW_DAYS;
   const banquetRosterForecastActive = banquetEventDaysAway !== null && banquetEventDaysAway > BANQUET_PLANNING_WINDOW_DAYS;
-  const banquetRosterFrozenReady = banquetRosterFreezeActive && Boolean(effectiveBanquetSupervisorName) && banquetMissingRoles.length === 0 && banquetPlannedTotal > 0;
+  const banquetRosterFrozenReady = banquetRosterFreezeActive && banquetMissingRoles.length === 0 && banquetPlannedTotal > 0;
   const banquetRosterStage = banquetEventDaysAway === null
     ? {
         label: 'Schedule Needed',
@@ -3942,8 +3948,8 @@ export default function ContractDetail() {
               ? 'Banquet roster is inside the one-week freeze window and appears complete.'
               : 'Banquet roster is inside the one-week freeze window but is not complete.',
             note: banquetRosterFrozenReady
-              ? 'Changes after this point should be treated as replacements with supervisor approval and a recorded reason.'
-              : 'Assign the supervisor and complete all planned role slots. Late changes should be handled as controlled replacements.',
+              ? 'Changes after this point should be treated as replacements with a recorded reason.'
+              : 'Complete all planned role slots. Late changes should be handled as controlled replacements.',
           }
         : banquetRosterPlanningActive
           ? {
@@ -3973,13 +3979,6 @@ export default function ContractDetail() {
             : banquetEventDaysAway <= BANQUET_PLANNING_WINDOW_DAYS
               ? `Inside the ${BANQUET_PLANNING_WINDOW_DAYS}-day planning window before the roster freeze.`
               : `${banquetEventDaysAway} day(s) before the event; staffing can remain forecasted until the Mancom planning window.`,
-    },
-    {
-      label: 'Supervisor ownership',
-      ready: Boolean(effectiveBanquetSupervisorName),
-      detail: effectiveBanquetSupervisorName
-        ? `${effectiveBanquetSupervisorName} owns banquet coordination for this event.`
-        : 'Open or save this plan as the banquet supervisor so ownership is recorded.',
     },
     {
       label: 'Guest-based staffing target',
@@ -4596,7 +4595,7 @@ export default function ContractDetail() {
         key: 'banquet',
         label: 'Banquet',
         status: 'not_started',
-        detail: 'No banquet supervisor or staffing plan has been saved yet.',
+        detail: 'No banquet staffing plan has been saved yet.',
       };
     }
 
@@ -4610,8 +4609,7 @@ export default function ContractDetail() {
     }
 
     if (
-      banquetSummary.selectedSupervisorId
-      && banquetSummary.coverage.planned > 0
+      banquetSummary.coverage.planned > 0
       && banquetSummary.coverage.assigned >= banquetSummary.coverage.planned
     ) {
       return {
@@ -4623,8 +4621,7 @@ export default function ContractDetail() {
     }
 
     if (
-      banquetSummary.selectedSupervisorId
-      || banquetSummary.coverage.planned > 0
+      banquetSummary.coverage.planned > 0
       || banquetSummary.selectedAssignments.length > 0
     ) {
       return {
@@ -4639,7 +4636,7 @@ export default function ContractDetail() {
       key: 'banquet',
       label: 'Banquet',
       status: 'not_started',
-      detail: 'No banquet supervisor or staffing plan has been saved yet.',
+      detail: 'No banquet staffing plan has been saved yet.',
     };
   })();
 
@@ -6945,11 +6942,12 @@ export default function ContractDetail() {
                               <div className="space-y-2">
                                 {staffVehicleOptions.map((vehicle) => {
                                   const selected = vehicle._id in staffTransportDraft;
+                                  const needsDriver = selected && !staffTransportDraft[vehicle._id];
                                   return (
-                                    <div key={vehicle._id} className={`rounded-lg border p-3 ${selected ? 'border-primary bg-primary/5' : 'border-slate-200'}`}>
+                                    <div key={vehicle._id} className={`rounded-lg border p-3 ${needsDriver ? 'border-red-300 bg-red-50/60' : selected ? 'border-primary bg-primary/5' : 'border-slate-200'}`}>
                                       <div className="flex flex-wrap items-center justify-between gap-3">
                                         <label className="flex items-center gap-3">
-                                          <input type="checkbox" checked={selected} onChange={() => toggleStaffTransportVehicle(vehicle._id)} className="h-4 w-4" />
+                                          <input type="checkbox" checked={selected} onChange={() => toggleStaffTransportVehicle(vehicle._id, vehicle.assignedDriver?._id || '')} className="h-4 w-4" />
                                           <span>
                                             <span className="font-medium">{vehicle.plateNumber}</span>
                                             <span className="text-muted-foreground"> · {(vehicle.truckType || '').replace(/_/g, ' ')} · {vehicle.passengerCapacity} seats</span>
@@ -6959,15 +6957,23 @@ export default function ContractDetail() {
                                           <select
                                             value={staffTransportDraft[vehicle._id] || ''}
                                             onChange={(event) => setStaffTransportDriver(vehicle._id, event.target.value)}
-                                            className="rounded-md border border-slate-300 bg-background px-2 py-1 text-sm"
+                                            className={`rounded-md border bg-background px-2 py-1 text-sm ${needsDriver ? 'border-red-400 text-red-700' : 'border-slate-300'}`}
                                           >
-                                            <option value="">Driver: unassigned{vehicle.assignedDriver ? ` (default ${vehicle.assignedDriver.fullName})` : ''}</option>
-                                            {staffDriverOptions.map((driver) => (
-                                              <option key={driver._id} value={driver._id}>{driver.fullName || driver.driverId}</option>
-                                            ))}
+                                            <option value="">Select a driver (required)</option>
+                                            {vehicle.assignedDriver ? (
+                                              <option value={vehicle.assignedDriver._id}>{vehicle.assignedDriver.fullName} (assigned)</option>
+                                            ) : null}
+                                            {staffDriverOptions
+                                              .filter((driver) => driver._id !== vehicle.assignedDriver?._id)
+                                              .map((driver) => (
+                                                <option key={driver._id} value={driver._id}>{driver.fullName || driver.driverId}</option>
+                                              ))}
                                           </select>
                                         ) : null}
                                       </div>
+                                      {needsDriver ? (
+                                        <p className="mt-2 text-xs font-medium text-red-700">A driver is required for this vehicle.</p>
+                                      ) : null}
                                     </div>
                                   );
                                 })}

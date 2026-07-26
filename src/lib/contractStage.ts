@@ -74,7 +74,7 @@ export const getContractStage = (contract: ContractStageSource, viewerRole?: str
   }
 
   if (contract.status !== 'draft') {
-    return getPostDraftStage(contract);
+    return getPostDraftStage(contract, viewerRole);
   }
 
   const confirmations = contract.sectionConfirmations || {};
@@ -127,7 +127,7 @@ export const getContractStage = (contract: ContractStageSource, viewerRole?: str
 // Post-draft statuses previously surfaced only the raw enum value, which made
 // it hard to tell which team owns the contract or what phase the event is in.
 // Every stage now carries an owner and a distinct color.
-const getPostDraftStage = (contract: ContractStageSource): ContractStage => {
+const getPostDraftStage = (contract: ContractStageSource, viewerRole?: string | null): ContractStage => {
   switch (contract.status) {
     case 'pending_client_signature':
       return {
@@ -183,7 +183,8 @@ const getPostDraftStage = (contract: ContractStageSource): ContractStage => {
         if (daysUntilEvent >= 0 && daysUntilEvent <= 7) {
           return {
             key: 'event_week_freeze',
-            label: 'Event Week - Materials Frozen',
+            // The material freeze is not relevant to Kitchen, so they just see "Event Week".
+            label: viewerRole === 'kitchen' ? 'Event Week' : 'Event Week - Materials Frozen',
             badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-200',
             owner: 'Departments',
           };

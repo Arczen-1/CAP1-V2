@@ -78,6 +78,10 @@ export default function PurchasingDashboard() {
   const [selectedRequest, setSelectedRequest] = useState<ProcurementRequest | null>(null);
   const [quoteForm, setQuoteForm] = useState(buildEmptyQuoteForm());
   const [fulfillmentForm, setFulfillmentForm] = useState(buildEmptyFulfillmentForm());
+  const [searchTerm, setSearchTerm] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('all');
+  const [requisitionTypeFilter, setRequisitionTypeFilter] = useState('all');
+  const [sortOrder, setSortOrder] = useState<'needed_asc' | 'needed_desc' | 'created_desc' | 'created_asc'>('needed_asc');
 
   const fetchRequests = async () => {
     try {
@@ -99,17 +103,50 @@ export default function PurchasingDashboard() {
     fetchRequests();
   }, []);
 
-  const sortedRequests = useMemo(() => (
-    [...requests].sort((left, right) => {
-      const leftTime = new Date(left.neededBy || left.createdAt).getTime();
-      const rightTime = new Date(right.neededBy || right.createdAt).getTime();
-      if (leftTime !== rightTime) {
-        return leftTime - rightTime;
+  const sortedRequests = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    const filtered = requests.filter((request) => {
+      if (departmentFilter !== 'all' && request.department !== departmentFilter) {
+        return false;
       }
+      if (requisitionTypeFilter !== 'all' && request.requisitionType !== requisitionTypeFilter) {
+        return false;
+      }
+      if (term) {
+        const haystack = [
+          request.requestNumber,
+          request.itemName,
+          request.itemCode,
+          request.department,
+          request.contract?.contractNumber,
+          request.contract?.clientName,
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (!haystack.includes(term)) {
+          return false;
+        }
+      }
+      return true;
+    });
 
-      return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-    })
-  ), [requests]);
+    const neededTime = (request: ProcurementRequest) => new Date(request.neededBy || request.createdAt).getTime();
+    const createdTime = (request: ProcurementRequest) => new Date(request.createdAt).getTime();
+
+    return filtered.sort((left, right) => {
+      switch (sortOrder) {
+        case 'needed_desc':
+          return neededTime(right) - neededTime(left);
+        case 'created_desc':
+          return createdTime(right) - createdTime(left);
+        case 'created_asc':
+          return createdTime(left) - createdTime(right);
+        case 'needed_asc':
+        default: {
+          const diff = neededTime(left) - neededTime(right);
+          return diff !== 0 ? diff : createdTime(right) - createdTime(left);
+        }
+      }
+    });
+  }, [requests, searchTerm, departmentFilter, requisitionTypeFilter, sortOrder]);
 
   const activeSuppliers = useMemo(
     () => suppliers.filter((supplier) => supplier.isActive !== false),
@@ -551,6 +588,63 @@ export default function PurchasingDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardContent className="flex flex-col gap-3 p-4 lg:flex-row lg:flex-wrap lg:items-end">
+            <div className="flex-1 min-w-[200px] space-y-1">
+              <Label className="text-xs">Search</Label>
+              <Input
+                placeholder="Request #, item, code, or client..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
+            </div>
+            <div className="w-full space-y-1 lg:w-44">
+              <Label className="text-xs">Department</Label>
+              <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All departments</SelectItem>
+                  <SelectItem value="creative">Creative</SelectItem>
+                  <SelectItem value="linen">Linen</SelectItem>
+                  <SelectItem value="stockroom">Stockroom</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-full space-y-1 lg:w-48">
+              <Label className="text-xs">Requisition type</Label>
+              <Select value={requisitionTypeFilter} onValueChange={setRequisitionTypeFilter}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All types</SelectItem>
+                  <SelectItem value="item_requisition">Item requisition</SelectItem>
+                  <SelectItem value="purchase_requisition">Purchase requisition</SelectItem>
+                  <SelectItem value="emergency_requisition">Emergency requisition</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-full space-y-1 lg:w-52">
+              <Label className="text-xs">Sort by</Label>
+              <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as typeof sortOrder)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="needed_asc">Needed by (soonest first)</SelectItem>
+                  <SelectItem value="needed_desc">Needed by (latest first)</SelectItem>
+                  <SelectItem value="created_desc">Newest first</SelectItem>
+                  <SelectItem value="created_asc">Oldest first</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {(searchTerm || departmentFilter !== 'all' || requisitionTypeFilter !== 'all' || sortOrder !== 'needed_asc') ? (
+              <Button
+                variant="ghost"
+                onClick={() => { setSearchTerm(''); setDepartmentFilter('all'); setRequisitionTypeFilter('all'); setSortOrder('needed_asc'); }}
+              >
+                Reset
+              </Button>
+            ) : null}
+          </CardContent>
+        </Card>
 
         <Tabs defaultValue="queue" className="space-y-4">
           <TabsList>

@@ -80,6 +80,7 @@ export default function AccountingProcurementQueue() {
   const [notes, setNotes] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
   const [reviewChecklist, setReviewChecklist] = useState<ProcurementReviewBasis>(createEmptyChecklist());
+  const [sortOrder, setSortOrder] = useState<'created_desc' | 'created_asc' | 'event_asc' | 'needed_asc'>('created_desc');
 
   const fetchRequests = async () => {
     try {
@@ -97,13 +98,33 @@ export default function AccountingProcurementQueue() {
     fetchRequests();
   }, []);
 
+  const sortRequests = useMemo(() => {
+    const created = (request: ProcurementRequest) => new Date(request.createdAt).getTime();
+    const eventTime = (request: ProcurementRequest) => (request.contract?.eventDate || request.eventDate ? new Date(request.contract?.eventDate || request.eventDate || 0).getTime() : Number.POSITIVE_INFINITY);
+    const neededTime = (request: ProcurementRequest) => new Date(request.neededBy || request.createdAt).getTime();
+
+    return (list: ProcurementRequest[]) => [...list].sort((left, right) => {
+      switch (sortOrder) {
+        case 'created_asc':
+          return created(left) - created(right);
+        case 'event_asc':
+          return eventTime(left) - eventTime(right);
+        case 'needed_asc':
+          return neededTime(left) - neededTime(right);
+        case 'created_desc':
+        default:
+          return created(right) - created(left);
+      }
+    });
+  }, [sortOrder]);
+
   const budgetRequests = useMemo(
-    () => requests.filter((request) => request.status === 'awaiting_accounting_approval'),
-    [requests]
+    () => sortRequests(requests.filter((request) => request.status === 'awaiting_accounting_approval')),
+    [requests, sortRequests]
   );
   const expenseRequests = useMemo(
-    () => requests.filter((request) => request.status === 'proof_submitted'),
-    [requests]
+    () => sortRequests(requests.filter((request) => request.status === 'proof_submitted')),
+    [requests, sortRequests]
   );
   const withSupplierProfileCount = useMemo(
     () => requests.filter((request) => getProcurementReviewBasis(request).supplierVerified).length,
@@ -243,14 +264,28 @@ export default function AccountingProcurementQueue() {
       </div>
 
       <Card>
-        <CardContent className="flex flex-col gap-2 p-4 md:flex-row md:items-center md:justify-between">
+        <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <h2 className="text-lg font-semibold">Budget Approval Queue</h2>
             <p className="text-sm text-muted-foreground">
               Review the supplier, amount, and timeline before releasing budget to purchasing.
             </p>
           </div>
-          <Badge variant="outline">{budgetRequests.length} waiting</Badge>
+          <div className="flex items-center gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Sort by</Label>
+              <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as typeof sortOrder)}>
+                <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="created_desc">Newest first</SelectItem>
+                  <SelectItem value="created_asc">Oldest first</SelectItem>
+                  <SelectItem value="event_asc">Event date (soonest)</SelectItem>
+                  <SelectItem value="needed_asc">Needed by (soonest)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Badge variant="outline">{budgetRequests.length} waiting</Badge>
+          </div>
         </CardContent>
       </Card>
 

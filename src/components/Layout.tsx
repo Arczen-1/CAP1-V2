@@ -37,7 +37,9 @@ import {
   Package,
   Shield,
   UserCog,
-  BarChart3
+  BarChart3,
+  X,
+  CheckCircle2
 } from 'lucide-react';
 
 interface NavItem {
@@ -63,8 +65,62 @@ interface AppNotification {
     contractNumber?: string;
     clientName?: string;
     status?: string;
+    clientSigned?: boolean;
+    paymentStatus?: string;
+    departmentProgress?: Record<string, number>;
+    paymentHold?: { active?: boolean };
   };
 }
+
+// Whether an action-required notification's task is already resolved, so the UI
+// can show a green "Done" instead of a red "High". Only returns true for clearly
+// resolvable cases; ambiguous ones stay flagged. Derived from the linked
+// contract's current state.
+const isNotificationActionDone = (notification: AppNotification): boolean => {
+  const contract = notification.contract;
+  if (!contract || !contract.status) {
+    return false;
+  }
+
+  const status = contract.status;
+  // A closed or cancelled contract has no outstanding actions left.
+  if (status === 'completed' || status === 'cancelled') {
+    return true;
+  }
+
+  const text = `${notification.title} ${notification.message} ${notification.actionLabel || ''}`.toLowerCase();
+  const approved = status === 'approved';
+
+  // Accounting review / approve-for-preparation tasks.
+  if (text.includes('approve') || text.includes('ready for accounting') || text.includes('review payment') || text.includes('collection milestone') || text.includes('full payment received')) {
+    return approved;
+  }
+
+  // Client-signature tasks.
+  if (text.includes('client signature') || text.includes('waiting for client signature') || text.includes('mark client signed')) {
+    return Boolean(contract.clientSigned) && status !== 'pending_client_signature' && status !== 'draft';
+  }
+
+  // Collection / balance tasks.
+  if (text.includes('collection') || text.includes('balance') || text.includes('payment follow') || text.includes('reservation fee')) {
+    return contract.paymentStatus === 'paid';
+  }
+
+  // On-hold alerts resolve once the hold is lifted.
+  if (text.includes('on hold') || text.includes('hold')) {
+    return !contract.paymentHold?.active;
+  }
+
+  // Department preparation / "open task" fan-out.
+  if (notification.department && contract.departmentProgress) {
+    const progress = contract.departmentProgress[notification.department];
+    if (typeof progress === 'number') {
+      return progress >= 100;
+    }
+  }
+
+  return false;
+};
 
 const navItems: NavItem[] = [
   { label: 'Home', href: '/', icon: Home, roles: ['all'] },
@@ -195,6 +251,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const handleDismissNotification = async (notificationId: string) => {
+    // Optimistically remove it, then tell the server.
+    const previous = notifications;
+    setNotifications((current) => current.filter((entry) => entry._id !== notificationId));
+    try {
+      await api.dismissNotification(notificationId);
+    } catch (error) {
+      console.error('Failed to dismiss notification:', error);
+      setNotifications(previous);
+    }
+  };
+
   const formatNotificationTime = (value: string) => {
     const timestamp = new Date(value).getTime();
     const diffMinutes = Math.max(0, Math.round((Date.now() - timestamp) / 60000));
@@ -247,36 +315,61 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           ) : visibleNotifications.length === 0 ? (
             <div className="px-3 py-6 text-center text-sm text-muted-foreground">No notifications yet.</div>
           ) : (
-            visibleNotifications.slice(0, 10).map((notification) => (
-              <button
-                key={notification._id}
-                type="button"
-                onClick={() => handleOpenNotification(notification)}
-                className={`w-full border-b px-3 py-3 text-left transition hover:bg-muted/70 ${
-                  notification.isRead ? 'bg-background' : 'bg-primary/5'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold">{notification.title}</p>
-                    <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{notification.message}</p>
-                  </div>
-                  {!notification.isRead ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" /> : null}
+            visibleNotifications.slice(0, 10).map((notification) => {
+              const actionDone = isNotificationActionDone(notification);
+              return (
+                <div
+                  key={notification._id}
+                  className={`relative border-b transition hover:bg-muted/70 ${
+                    notification.isRead ? 'bg-background' : 'bg-primary/5'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleOpenNotification(notification)}
+                    className="w-full px-3 py-3 pr-9 text-left"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">{notification.title}</p>
+                        <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{notification.message}</p>
+                      </div>
+                      {!notification.isRead ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" /> : null}
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {notification.department ? (
+                        <Badge variant="outline" className="capitalize">
+                          {notification.department}
+                        </Badge>
+                      ) : null}
+                      {actionDone ? (
+                        <Badge variant="outline" className="border-emerald-200 bg-emerald-100 text-emerald-800">
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                          Done
+                        </Badge>
+                      ) : notification.priority === 'high' ? (
+                        <Badge variant="destructive">High</Badge>
+                      ) : null}
+                      <span className="text-xs text-muted-foreground">{formatNotificationTime(notification.createdAt)}</span>
+                      {!actionDone ? (
+                        <span className="text-xs font-medium text-primary">{notification.actionLabel || 'Open'}</span>
+                      ) : null}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Dismiss notification"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleDismissNotification(notification._id);
+                    }}
+                    className="absolute right-1.5 top-2 rounded-md p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {notification.department ? (
-                    <Badge variant="outline" className="capitalize">
-                      {notification.department}
-                    </Badge>
-                  ) : null}
-                  {notification.priority === 'high' ? (
-                    <Badge variant="destructive">High</Badge>
-                  ) : null}
-                  <span className="text-xs text-muted-foreground">{formatNotificationTime(notification.createdAt)}</span>
-                  <span className="text-xs font-medium text-primary">{notification.actionLabel || 'Open'}</span>
-                </div>
-              </button>
-            ))
+              );
+            })
           )}
         </div>
       </DropdownMenuContent>

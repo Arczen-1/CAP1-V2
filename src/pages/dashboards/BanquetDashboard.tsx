@@ -23,8 +23,10 @@ interface Contract {
   banquetAssignment?: { assignments?: unknown[] } | null;
 }
 
+// Staffing is complete once the banquet team is assigned. The supervisor is the
+// banquet account user, so no separate supervisor assignment is required.
 const isBanquetStaffingComplete = (contract: Contract) =>
-  (contract.banquetAssignment?.assignments?.length || 0) > 0 && Boolean(contract.assignedSupervisor);
+  (contract.banquetAssignment?.assignments?.length || 0) > 0;
 
 const getBanquetStatusClassName = (status: string) => {
   switch (status) {
@@ -54,8 +56,8 @@ const getNextStepMeta = (contract: Contract) => {
     return {
       title: daysUntil <= 7 ? 'Finalize day-of staffing' : 'Assign banquet staff',
       note: daysUntil <= 7
-        ? 'Assign the banquet team and supervisor, then save the staffing form — the event is near.'
-        : 'Build the staffing plan, assign the team and supervisor, and save the banquet form.',
+        ? 'Assign the banquet team, then save the staffing form — the event is near.'
+        : 'Build the staffing plan, assign the team, and save the banquet form.',
       className: daysUntil <= 7 ? 'text-orange-800' : 'text-slate-700',
     };
   }

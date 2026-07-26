@@ -533,6 +533,12 @@ class ApiService {
     });
   }
 
+  async dismissNotification(id: string) {
+    return this.request(`/notifications/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
   // Reports
   async getDepartmentReport(params?: { startDate?: string; endDate?: string }) {
     const filteredParams = params

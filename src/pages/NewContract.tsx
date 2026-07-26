@@ -419,6 +419,17 @@ interface InventoryMatchRule {
 }
 
 const GUESTS_PER_TABLE = 10;
+
+// Item quantity input: allow the field to be cleared (returns 0, shown as empty)
+// while typing, and never let it go negative. A 0 is rejected only at submit.
+const normalizeItemQuantityInput = (rawValue: string): number => {
+  if (rawValue.trim() === '') {
+    return 0;
+  }
+  const parsed = parseInt(rawValue, 10);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+};
+
 const AUTO_SETUP_LABELS: Record<SetupSuggestionKey, string> = {
   tables: 'Tables',
   chairs: 'Chairs',
@@ -1661,6 +1672,19 @@ export default function NewContract() {
   // ============================================
 
   const handleSubmit = async () => {
+    // Every selected inventory item must have a quantity of at least 1 (0 or blank
+    // is only tolerated while typing).
+    const invalidQuantityItem = [
+      ...selectedCreativeAssets,
+      ...selectedLinenRequirements,
+      ...selectedStockroomRequirements,
+    ].find((entry) => !(Number(entry.quantity) >= 1));
+    if (invalidQuantityItem) {
+      toast.error(`Enter a quantity of at least 1 for ${invalidQuantityItem.itemName || 'each selected item'}.`);
+      setActiveTab('addons');
+      return;
+    }
+
     if (isInventoryDraftEditor) {
       if (!editingContractId) {
         toast.error('Draft inventory validation is only available while editing an existing contract.');
@@ -3064,8 +3088,8 @@ export default function NewContract() {
                         <Input
                           type="number"
                           placeholder="Qty"
-                          value={asset.quantity}
-                          onChange={(e) => setCreativeAssets(prev => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, quantity: parseInt(e.target.value) || 1 } : entry))}
+                          value={asset.quantity || ''}
+                          onChange={(e) => setCreativeAssets(prev => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, quantity: normalizeItemQuantityInput(e.target.value) } : entry))}
                           className="w-full md:w-20"
                           min={1}
                         />
@@ -3161,8 +3185,8 @@ export default function NewContract() {
                         <Input
                           type="number"
                           placeholder="Qty"
-                          value={item.quantity}
-                          onChange={(e) => setLinenRequirements(prev => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, quantity: parseInt(e.target.value) || 1 } : entry))}
+                          value={item.quantity || ''}
+                          onChange={(e) => setLinenRequirements(prev => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, quantity: normalizeItemQuantityInput(e.target.value) } : entry))}
                           className="w-full md:w-20"
                           min={1}
                         />
@@ -3258,8 +3282,8 @@ export default function NewContract() {
                         <Input
                           type="number"
                           placeholder="Qty"
-                          value={item.quantity}
-                          onChange={(e) => setStockroomRequirements(prev => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, quantity: parseInt(e.target.value) || 1 } : entry))}
+                          value={item.quantity || ''}
+                          onChange={(e) => setStockroomRequirements(prev => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, quantity: normalizeItemQuantityInput(e.target.value) } : entry))}
                           className="w-full md:w-20"
                           min={1}
                         />
