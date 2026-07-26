@@ -1590,7 +1590,16 @@ const buildOperationsSummary = async (contract) => {
     ? availableDrivers.find(driver => String(driver._id) === String(recommendedTruck.assignedDriver._id))
     : availableDrivers[0] || null;
 
+  // Appendix H: transportation must be arranged at least 3 days before the event.
+  // Advisory warning (not a hard block) so genuine last-minute events still work.
+  // Reuses daysUntilEvent computed above.
+  const transportBooked = Boolean(contract.logisticsAssignment?.truck);
+  const leadTimeWarning = (daysUntilEvent >= 0 && daysUntilEvent < 3 && !transportBooked)
+    ? 'Transport should be arranged at least 3 days before the event (Appendix H). This event is within 3 days and no truck is booked yet.'
+    : '';
+
   const logisticsBlockers = [
+    leadTimeWarning,
     availableDrivers.length === 0 ? 'No active driver is available on the event date.' : '',
     availableTrucks.length === 0 ? 'No truck is available on the event date.' : '',
     totalEstimatedVolume > 0 && !recommendedTruck ? 'No truck can be recommended for the estimated load.' : ''
