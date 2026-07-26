@@ -3307,6 +3307,9 @@ export default function ContractDetail() {
   const useInventoryFocusedContractView = isInventoryDepartmentViewer && !isAdmin() && !isSales();
   const useBanquetFocusedContractView = isBanquet() && !isAdmin() && !isSales();
   const useRestrictedDepartmentContractView = useInventoryFocusedContractView || useBanquetFocusedContractView;
+  // Package price, contract value, balances, and other peso figures are only for
+  // Sales, Accounting, and Admin. Other departments see non-financial views.
+  const canViewContractFinancials = isSales() || isAccounting() || isAdmin();
   const canEditDraftSalesContract = contract ? contract.status === 'draft' && (isSales() || isAdmin()) : false;
   const canEditDraftCreativeInventory = contract ? contract.status === 'draft' && (isCreative() || isAdmin()) : false;
   const canEditDraftLinenInventory = contract ? contract.status === 'draft' && (isLinen() || isAdmin()) : false;
@@ -5279,8 +5282,16 @@ export default function ContractDetail() {
             <div className="min-w-0">
               <p className="font-semibold text-red-900">Final Balance Overdue / On Hold</p>
               <p className="mt-1 text-sm text-red-900/80">
-                {contract.paymentHold.reason || 'The remaining balance was not collected by its due date.'}
-                {' '}Preparation, release, and execution are blocked until the balance is settled or management releases the hold. The PHP 30,000 reservation fee and the 40% collection are non-refundable; refunds require a formal cancellation letter and Execom review.
+                {canViewContractFinancials ? (
+                  <>
+                    {contract.paymentHold.reason || 'The remaining balance was not collected by its due date.'}
+                    {' '}Preparation, release, and execution are blocked until the balance is settled or management releases the hold. The PHP 30,000 reservation fee and the 40% collection are non-refundable; refunds require a formal cancellation letter and Execom review.
+                  </>
+                ) : (
+                  // Non-finance departments are told the contract is blocked, but not
+                  // the monetary specifics (amounts, fees), which are finance-only.
+                  <>This contract is on hold pending a payment matter with Accounting. Preparation, release, and execution are blocked until Accounting settles it or management releases the hold.</>
+                )}
               </p>
             </div>
             {isAdmin() && (

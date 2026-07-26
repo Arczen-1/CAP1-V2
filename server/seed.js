@@ -528,6 +528,7 @@ const demoDrivers = [
 ];
 
 const demoTrucks = [
+  // Cargo trucks (carry event items, not staff).
   {
     plateNumber: 'ABC-1234',
     truckType: 'closed_van',
@@ -536,7 +537,6 @@ const demoTrucks = [
       volume: 15,
       dimensions: { length: 450, width: 200, height: 220 }
     },
-    passengerCapacity: 14,
     status: 'available'
   },
   {
@@ -547,9 +547,13 @@ const demoTrucks = [
       volume: 25,
       dimensions: { length: 600, width: 240, height: 250 }
     },
-    passengerCapacity: 2,
     status: 'available'
-  }
+  },
+  // Passenger vehicles for staff transportation (passengerVehicle: true).
+  { plateNumber: 'JCV-1001', truckType: 'passenger_van', brand: 'Toyota', model: 'Hiace Commuter', passengerVehicle: true, passengerCapacity: 15, status: 'available' },
+  { plateNumber: 'JCV-1002', truckType: 'passenger_van', brand: 'Nissan', model: 'Urvan', passengerVehicle: true, passengerCapacity: 15, status: 'available' },
+  { plateNumber: 'JCV-1003', truckType: 'coaster', brand: 'Toyota', model: 'Coaster', passengerVehicle: true, passengerCapacity: 28, status: 'available' },
+  { plateNumber: 'JCV-1005', truckType: 'suv', brand: 'Toyota', model: 'Fortuner', passengerVehicle: true, passengerCapacity: 6, status: 'available' }
 ];
 
 async function seedDatabase() {

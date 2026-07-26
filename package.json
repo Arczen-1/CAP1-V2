@@ -13,6 +13,8 @@
     "seed:reports": "node server/seedReportsDemo.js",
     "seed:banquet": "node server/seedBanquetStaff.js",
     "seed:suppliers": "node server/seedSuppliers.js",
+    "seed:vehicles": "node server/seedPassengerVehicles.js",
+    "agents:dashboard": "node agent-dashboard.mjs",
     "import:legacy": "node server/importLegacyInventory.js",
     "rebuild:legacy:curated": "node server/rebuildLegacyInventoryCurated.js",
     "build": "tsc -b && vite build",
