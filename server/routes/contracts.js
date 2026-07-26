@@ -870,7 +870,8 @@ const getSuggestedBanquetStaffingPlan = (guestCount) => {
 
   return {
     head_captain: 1,
-    service_staff: Math.max(2, Math.ceil(normalizedGuestCount / 30)),
+    // Appendix H business rule: 1 waiter per 25 guests (e.g., 40 waiters for 1,000 pax).
+    service_staff: Math.max(2, Math.ceil(normalizedGuestCount / 25)),
     food_runner: normalizedGuestCount >= 80 ? Math.max(1, Math.ceil(normalizedGuestCount / 120)) : 0,
     busser: normalizedGuestCount >= 120 ? Math.max(1, Math.ceil(normalizedGuestCount / 150)) : 0,
     bartender: normalizedGuestCount >= 150 ? Math.max(1, Math.ceil(normalizedGuestCount / 200)) : 0,
