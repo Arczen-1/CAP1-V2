@@ -3044,6 +3044,14 @@ router.put('/:id/banquet-assignment', auth, requireRole(['banquet_supervisor', '
       return res.status(400).json({ message: banquetHoldError });
     }
 
+    // Banquet roster freeze: within one week of the event the roster is locked
+    // (mirrors the material freeze). Late changes are controlled — admin only.
+    if (isMaterialFreezeActive(contract) && req.user.role !== 'admin') {
+      return res.status(400).json({
+        message: 'Banquet roster is frozen: within 7 days of the event, staffing changes require management (admin) approval. Ask an admin to record any late replacement.'
+      });
+    }
+
     const rawGuestCount = req.body?.serviceGuestCount;
     const serviceGuestCount = rawGuestCount === undefined || rawGuestCount === null || rawGuestCount === ''
       ? getEstimatedBanquetGuestCount(contract)

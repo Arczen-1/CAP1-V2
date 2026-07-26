@@ -205,7 +205,26 @@ router.post('/', auth, requireRole(['sales', 'admin']), tastingValidation, async
         message: 'This email already has an active tasting booking'
       });
     }
-    
+
+    // Prevent double-booking the same date + time slot (the slots/available list
+    // is advisory only; enforce it here so two clients can't take the same slot).
+    if (req.body.tastingDate && req.body.tastingTime) {
+      const slotDay = new Date(req.body.tastingDate);
+      const slotTaken = await MenuTasting.findOne({
+        tastingTime: req.body.tastingTime,
+        status: { $in: ['booked', 'confirmed'] },
+        tastingDate: {
+          $gte: new Date(new Date(slotDay).setHours(0, 0, 0, 0)),
+          $lte: new Date(new Date(slotDay).setHours(23, 59, 59, 999)),
+        },
+      });
+      if (slotTaken) {
+        return res.status(400).json({
+          message: `The ${req.body.tastingTime} slot on that date is already booked. Please choose another slot.`,
+        });
+      }
+    }
+
     const tasting = new MenuTasting({
       ...req.body,
       menuItems: sanitizeMenuItems(req.body.menuItems),
