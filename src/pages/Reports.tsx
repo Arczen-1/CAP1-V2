@@ -34,7 +34,15 @@ interface ReportChart {
   id: string;
   title: string;
   description?: string;
+  // 'breakdown' (default): composition donut + bars. 'trend': month timeline.
+  kind?: 'breakdown' | 'trend';
   items: ReportChartItem[];
+}
+
+interface ReportInsight {
+  tone: 'warning' | 'info' | 'positive';
+  title: string;
+  detail: string;
 }
 
 interface ReportColumn {
@@ -62,9 +70,16 @@ interface DepartmentReport {
     endDate: string;
   };
   summaryCards: ReportCard[];
+  insights?: ReportInsight[];
   charts: ReportChart[];
   sections: ReportSection[];
 }
+
+const INSIGHT_TONE_META: Record<ReportInsight['tone'], { className: string; label: string }> = {
+  warning: { className: 'border-amber-300 bg-amber-50 text-amber-950', label: 'Needs attention' },
+  info: { className: 'border-blue-200 bg-blue-50 text-blue-950', label: 'Worth knowing' },
+  positive: { className: 'border-emerald-200 bg-emerald-50 text-emerald-950', label: 'On track' },
+};
 
 const chartColors = ['#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed', '#0891b2', '#475569'];
 
@@ -273,11 +288,18 @@ export default function Reports() {
     }
 
     const usedWorksheetNames = new Set<string>();
-    const summaryRows = report.summaryCards.map((card) => ({
-      metric: card.label,
-      value: card.value,
-      notes: card.helper || ''
-    }));
+    const summaryRows = [
+      ...(report.insights || []).map((insight) => ({
+        metric: `INSIGHT (${insight.tone === 'warning' ? 'Needs attention' : insight.tone === 'positive' ? 'On track' : 'Worth knowing'})`,
+        value: insight.title,
+        notes: insight.detail
+      })),
+      ...report.summaryCards.map((card) => ({
+        metric: card.label,
+        value: card.value,
+        notes: card.helper || ''
+      })),
+    ];
     const analyticsRows = report.charts.flatMap((chart) => (
       chart.items.map((item) => ({
         chart: chart.title,
@@ -389,6 +411,45 @@ export default function Reports() {
   const renderChart = (chart: ReportChart) => {
     const maxValue = Math.max(...chart.items.map((item) => Number(item.value) || 0), 1);
     const totalValue = chart.items.reduce((total, item) => total + (Number(item.value) || 0), 0);
+
+    // Trend charts are timelines: a donut of months is meaningless, so render
+    // vertical bars left-to-right instead (zero months stay visible as gaps).
+    if (chart.kind === 'trend') {
+      return (
+        <Card key={chart.id} className="overflow-hidden border-slate-200 lg:col-span-2 xl:col-span-3">
+          <CardHeader className="border-b bg-muted/30">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              {chart.title}
+            </CardTitle>
+            {chart.description ? <CardDescription>{chart.description}</CardDescription> : null}
+          </CardHeader>
+          <CardContent className="pt-6">
+            {chart.items.length === 0 || totalValue === 0 ? (
+              <p className="text-sm text-muted-foreground">No activity recorded in this window yet.</p>
+            ) : (
+              <div className="flex items-end gap-3" style={{ height: 170 }}>
+                {chart.items.map((item) => {
+                  const value = Number(item.value) || 0;
+                  const barHeight = Math.max(value > 0 ? 6 : 2, Math.round((value / maxValue) * 120));
+                  return (
+                    <div key={`${chart.id}-${item.label}`} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
+                      <span className="text-xs font-semibold text-foreground">{value.toLocaleString()}</span>
+                      <div
+                        className="w-full max-w-14 rounded-t-md"
+                        style={{ height: barHeight, backgroundColor: value > 0 ? '#2563eb' : '#e5e7eb' }}
+                      />
+                      <span className="text-xs text-muted-foreground">{item.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      );
+    }
+
     let accumulatedPercent = 0;
     const donutSegments = chart.items.map((item, index) => {
       const value = Number(item.value) || 0;
@@ -791,6 +852,24 @@ export default function Reports() {
                 </Card>
               ))}
             </div>
+
+            {report.insights && report.insights.length > 0 ? (
+              <div className={`space-y-2 ${printSectionId ? 'print:hidden' : ''}`}>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Key Insights & Recommended Actions</p>
+                <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+                  {report.insights.map((insight) => {
+                    const meta = INSIGHT_TONE_META[insight.tone] || INSIGHT_TONE_META.info;
+                    return (
+                      <div key={insight.title} className={`rounded-xl border p-4 ${meta.className}`}>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] opacity-70">{meta.label}</p>
+                        <p className="mt-1 text-sm font-semibold">{insight.title}</p>
+                        <p className="mt-1 text-sm leading-relaxed opacity-90">{insight.detail}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
 
             <div className={`grid gap-4 lg:grid-cols-2 xl:grid-cols-3 print:grid-cols-3 ${printSectionId ? 'print:hidden' : ''}`}>
               {report.charts.map(renderChart)}

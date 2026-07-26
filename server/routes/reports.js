@@ -268,6 +268,38 @@ const buildCollectionsTrend = (payments, end, months = 6) => {
   return series;
 };
 
+// Generic trailing-N-month series: counts (or sums) rows by month so every
+// department can see workload/demand as a trend instead of a single total.
+const buildMonthlySeries = (rows, getDate, end, months = 6, getValue = () => 1) => {
+  const anchor = new Date(end.getFullYear(), end.getMonth(), 1);
+  const series = [];
+
+  for (let offset = months - 1; offset >= 0; offset -= 1) {
+    const monthStart = new Date(anchor.getFullYear(), anchor.getMonth() - offset, 1);
+    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0, 23, 59, 59, 999);
+    const total = safeArray(rows).reduce((sum, row) => {
+      const raw = getDate(row);
+      const date = raw ? new Date(raw) : null;
+      return date && date >= monthStart && date <= monthEnd ? sum + (Number(getValue(row)) || 0) : sum;
+    }, 0);
+
+    series.push({
+      label: new Intl.DateTimeFormat('en-PH', { month: 'short', year: '2-digit' }).format(monthStart),
+      value: Math.round(total)
+    });
+  }
+
+  return series;
+};
+
+// Decision insights: short, data-driven callouts ranked warning-first so the
+// reader sees what needs action before the raw tables.
+const makeInsight = (tone, title, detail) => ({ tone, title, detail });
+const rankInsights = (insights) => {
+  const order = { warning: 0, info: 1, positive: 2 };
+  return insights.filter(Boolean).sort((left, right) => (order[left.tone] ?? 3) - (order[right.tone] ?? 3));
+};
+
 const getProcurementAmount = (request) => (
   Number(request.quote?.quotedTotal)
   || ((Number(request.quote?.quotedUnitPrice) || 0) * (Number(request.requestedQuantity) || 0))
@@ -411,11 +443,15 @@ const makeCard = (label, value, helper = '', tone = 'default') => ({
   tone
 });
 
-const makeChart = (id, title, items, description = '') => ({
+// kind: 'breakdown' renders as a composition (donut + bars); 'trend' renders as a
+// month-by-month timeline. Trend charts keep zero months so the timeline is
+// continuous and dips are visible.
+const makeChart = (id, title, items, description = '', kind = 'breakdown') => ({
   id,
   title,
   description,
-  items: items.filter((item) => Number(item.value) > 0)
+  kind,
+  items: kind === 'trend' ? items : items.filter((item) => Number(item.value) > 0)
 });
 
 const makeSection = (id, title, description, columns, rows, emptyMessage = 'No records found for the selected date range.') => ({
@@ -544,24 +580,56 @@ const buildIncidentRows = (incidents, limit = 12) => incidents
     item: incident.inventoryItemName || 'General'
   }));
 
-const buildSalesReport = ({ contracts, menuTastings, paymentContracts, start, end }) => {
+const buildSalesReport = ({ contracts, menuTastings, paymentContracts, bookingTrendContracts = [], start, end }) => {
   const summary = getContractSummary(contracts);
   const payments = getPaymentsInRange(paymentContracts, start, end).filter((payment) => payment.status === 'completed');
   const convertedTastings = menuTastings.filter((tasting) => tasting.contractCreated || tasting.contract).length;
+  const conversionRate = menuTastings.length > 0 ? convertedTastings / menuTastings.length : null;
+  const unsignedNearEvent = contracts.filter((contract) => {
+    if (contract.clientSigned || ['completed', 'cancelled'].includes(contract.status)) {
+      return false;
+    }
+    const daysToEvent = Math.ceil((new Date(contract.eventDate).getTime() - Date.now()) / 86400000);
+    return daysToEvent >= 0 && daysToEvent <= 60;
+  });
+  const bookingTrend = buildMonthlySeries(bookingTrendContracts, (contract) => contract.createdAt, end);
+  const bookedValueTrend = buildMonthlySeries(bookingTrendContracts, (contract) => contract.createdAt, end, 6, (contract) => contract.totalContractValue);
+  const latestBookings = bookingTrend[bookingTrend.length - 1]?.value || 0;
+  const previousBookings = bookingTrend[bookingTrend.length - 2]?.value || 0;
 
   return {
     title: 'Sales Report',
-    subtitle: 'Menu tasting conversion, contract pipeline, signed contracts, and sales value for the selected period.',
+    subtitle: 'Booking momentum, tasting-to-contract conversion, pipeline health, and sales value to guide selling priorities.',
+    insights: rankInsights([
+      unsignedNearEvent.length > 0
+        ? makeInsight('warning', `${unsignedNearEvent.length} unsigned contract(s) with events inside 60 days`, `Chase signatures first: ${unsignedNearEvent.slice(0, 3).map((contract) => contract.contractNumber).join(', ')}${unsignedNearEvent.length > 3 ? '…' : ''}. Payments cannot be collected until the client signs.`)
+        : makeInsight('positive', 'No unsigned contracts near their event date', 'Every event inside the next 60 days already has a signed contract.'),
+      conversionRate !== null
+        ? (conversionRate < 0.5
+          ? makeInsight('warning', `Tasting conversion is ${formatPercent(conversionRate)}`, 'Fewer than half of tastings become contracts. Review follow-up timing and pricing objections raised during tastings.')
+          : makeInsight('positive', `Tasting conversion is ${formatPercent(conversionRate)}`, `${convertedTastings} of ${menuTastings.length} tastings in this period became contracts.`))
+        : null,
+      latestBookings < previousBookings
+        ? makeInsight('info', 'Bookings dipped versus last month', `${latestBookings} contract(s) booked this month vs ${previousBookings} last month. Consider pushing tasting invitations to refill the pipeline.`)
+        : makeInsight('info', 'Booking momentum is steady or growing', `${latestBookings} contract(s) booked this month vs ${previousBookings} last month.`),
+    ]),
     summaryCards: [
-      makeCard('Contracts Created/Event Range', contracts.length, 'Contracts with event dates in this period'),
-      makeCard('Signed Contracts', summary.signedCount, 'Client signature already recorded'),
-      makeCard('Contract Value', formatCurrency(summary.totalValue), 'Total value of contracts in range', 'success'),
-      makeCard('Tasting Conversion', `${convertedTastings}/${menuTastings.length}`, 'Menu tastings linked to contracts')
+      makeCard('Contracts In Range', contracts.length, 'Contracts with event dates in this period'),
+      makeCard('Signed Contracts', `${summary.signedCount}/${contracts.length}`, 'Client signature already recorded', summary.signedCount === contracts.length && contracts.length > 0 ? 'success' : 'default'),
+      makeCard('Contract Value', formatCurrency(summary.totalValue), `Average ${formatCurrency(summary.averageValue)} per contract`, 'success'),
+      makeCard('Tasting Conversion', conversionRate !== null ? formatPercent(conversionRate) : 'No tastings', `${convertedTastings} of ${menuTastings.length} tastings became contracts`, conversionRate !== null && conversionRate < 0.5 ? 'warning' : 'default')
     ],
     charts: [
-      makeChart('contract-status', 'Contract Status', mapToChartItems(countBy(contracts, (contract) => contract.status))),
-      makeChart('event-type', 'Event Type', mapToChartItems(countBy(contracts, (contract) => contract.clientType))),
-      makeChart('package-mix', 'Package Mix', mapToChartItems(countBy(contracts, (contract) => contract.packageSelected)))
+      makeChart('booking-trend', 'Contracts Booked Per Month', bookingTrend, 'New contracts created each month (trailing 6 months) - the leading indicator of future revenue.', 'trend'),
+      makeChart('booked-value-trend', 'Booked Value Per Month (PHP)', bookedValueTrend, 'Total value of contracts created each month (trailing 6 months).', 'trend'),
+      makeChart('sales-funnel', 'Pipeline Funnel', [
+        { label: 'Tastings Held', value: menuTastings.length },
+        { label: 'Contracts Created', value: contracts.length },
+        { label: 'Signed', value: summary.signedCount },
+        { label: 'Approved For Prep', value: summary.approvedCount }
+      ], 'Where prospects drop off between tasting and an approved event.'),
+      makeChart('event-type', 'Event Type Mix', mapToChartItems(countBy(contracts, (contract) => contract.clientType)), 'Which market segments drive this period.'),
+      makeChart('package-mix', 'Package Mix', mapToChartItems(countBy(contracts, (contract) => contract.packageSelected)), 'Which packages sell - guides pricing and promo focus.')
     ],
     sections: [
       makeSection('contracts', 'Contract Pipeline', 'Contracts handled by Sales within the selected event date range.', contractColumns, buildContractRows(contracts)),
@@ -612,9 +680,30 @@ const buildAccountingReport = ({ contracts, procurementRequests, paymentContract
   const aging = buildAgingSummary(receivableContracts);
   const collectionsTrend = buildCollectionsTrend(trendPayments, end);
 
+  const worstBucket = [...aging.buckets].reverse().find((bucket) => bucket.key !== 'not_due' && bucket.amount > 0);
+  const latestCollections = collectionsTrend[collectionsTrend.length - 1]?.value || 0;
+  const previousCollections = collectionsTrend[collectionsTrend.length - 2]?.value || 0;
+
   return {
     title: 'Accounting / Finance Report',
     subtitle: 'Financial position, collections trend, receivables aging, budget commitments, procurement expenses, and accounting action items.',
+    insights: rankInsights([
+      aging.overdueAmount > 0
+        ? makeInsight('warning', `${formatCurrency(aging.overdueAmount)} is past due across ${aging.overdueCount} account(s)`, `Oldest exposure sits in the ${worstBucket?.label || 'overdue'} bucket. Start collection follow-ups from the top of the aging schedule below.`)
+        : makeInsight('positive', 'No receivable is past its milestone due date', 'All outstanding balances are still within their collection windows.'),
+      collectionRate < 0.6 && contractValue > 0
+        ? makeInsight('warning', `Collection rate is ${formatPercent(collectionRate)}`, 'Less than 60% of projected revenue in this period has been collected. Prioritize the 40% and final-balance milestones before event dates lock preparation.')
+        : null,
+      budgetQueue.length > 0
+        ? makeInsight('info', `${budgetQueue.length} budget request(s) waiting for approval`, `${formatCurrency(procurementFinancials.pendingBudgetAmount)} in purchasing is blocked until Accounting decides. Departments cannot buy until released.`)
+        : null,
+      latestCollections < previousCollections
+        ? makeInsight('info', 'Cash collections dipped versus last month', `${formatCurrency(latestCollections)} collected this month vs ${formatCurrency(previousCollections)} last month.`)
+        : null,
+      availableOperatingBudget < 0
+        ? makeInsight('warning', 'Commitments exceed collections', `The operating position is ${formatCurrency(availableOperatingBudget)}. Slow down new budget approvals or accelerate collections.`)
+        : null,
+    ]),
     summaryCards: [
       makeCard('Contract Revenue', formatCurrency(contractValue), 'Projected revenue from contracts in range', 'success'),
       makeCard('Cash Collected', formatCurrency(totalCollected), `${formatPercent(collectionRate)} collection rate`, 'success'),
@@ -623,12 +712,7 @@ const buildAccountingReport = ({ contracts, procurementRequests, paymentContract
       makeCard('Available Budget Est.', formatCurrency(availableOperatingBudget), 'Collections less confirmed expenses and open commitments', availableOperatingBudget < 0 ? 'warning' : 'success')
     ],
     charts: [
-      {
-        id: 'collections-trend',
-        title: 'Monthly Collections Trend',
-        description: 'Completed client payments collected per month (trailing 6 months).',
-        items: collectionsTrend
-      },
+      makeChart('collections-trend', 'Monthly Collections Trend (PHP)', collectionsTrend, 'Completed client payments collected per month (trailing 6 months).', 'trend'),
       makeChart('ar-aging', 'Accounts Receivable Aging', aging.buckets.map((bucket) => ({ label: bucket.label, value: Math.round(bucket.amount) })), 'Outstanding balance grouped by how overdue each milestone is.'),
       makeChart('finance-position', 'Financial Position', [
         { label: 'Collected', value: Math.round(totalCollected) },
@@ -713,20 +797,48 @@ const buildInventoryDepartmentReport = ({ contracts, procurementRequests, incide
   const preparedItems = assignedItems.filter((item) => item.status === 'prepared').length;
   const pendingItems = assignedItems.filter((item) => item.status !== 'prepared').length;
   const fulfilledRequests = procurementRequests.filter((request) => request.status === 'fulfilled').length;
+  const preparedRate = assignedItems.length > 0 ? preparedItems / assignedItems.length : null;
+  const lowStockCount = inventorySnapshot.lowStockItems.length;
+  // Which items events keep demanding: the restock/expansion signal for this department.
+  const demandByItem = assignedItems.reduce((counts, item) => {
+    const name = item.item || item.type || 'Unnamed item';
+    counts[name] = (counts[name] || 0) + (Number(item.quantity) || 1);
+    return counts;
+  }, {});
+  const topDemand = Object.entries(demandByItem)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 8)
+    .map(([label, value]) => ({ label, value }));
+  const pendingNearEvent = inventoryContracts.filter((contract) => {
+    const daysToEvent = Math.ceil((new Date(contract.eventDate).getTime() - Date.now()) / 86400000);
+    return daysToEvent >= 0 && daysToEvent <= 7
+      && safeArray(contract[sectionKey]).some((item) => item.status !== 'prepared');
+  });
 
   return {
     title: `${inventorySnapshot.label} Report`,
-    subtitle: 'Inventory readiness, low stock, procurement requests, and event item preparation.',
+    subtitle: 'Preparation risk, item demand, stock health, and procurement status to plan restocking and prep work.',
+    insights: rankInsights([
+      pendingNearEvent.length > 0
+        ? makeInsight('warning', `${pendingNearEvent.length} event(s) within 7 days still have unprepared items`, `Prepare these first: ${pendingNearEvent.slice(0, 3).map((contract) => contract.contractNumber).join(', ')}${pendingNearEvent.length > 3 ? '…' : ''}. The material freeze locks these reservations to their events.`)
+        : makeInsight('positive', 'No unprepared items inside the event-week window', 'Everything due in the next 7 days is already marked prepared.'),
+      lowStockCount > 0
+        ? makeInsight('warning', `${lowStockCount} item(s) are at or below minimum stock`, 'Cross-check the demand chart: if a low-stock item is also a top-demand item, raise a purchasing request now rather than per event.')
+        : makeInsight('positive', 'No items are below minimum stock', 'Current stock levels cover the usual demand.'),
+      topDemand.length > 0
+        ? makeInsight('info', `Highest event demand: ${topDemand[0].label}`, `${formatNumber(topDemand[0].value)} unit(s) requested across events in this period. Top-demand items are the strongest candidates for permanent stock expansion instead of repeat rentals.`)
+        : null,
+    ]),
     summaryCards: [
       makeCard('Events With Assigned Items', inventoryContracts.length, 'Contracts requiring this department'),
-      makeCard('Prepared Items', preparedItems, 'Contract checklist items marked prepared', 'success'),
-      makeCard('Pending Items', pendingItems, 'Items still pending preparation', pendingItems ? 'warning' : 'success'),
-      makeCard('Low/Attention Stock', inventorySnapshot.lowStockItems.length + inventorySnapshot.attentionItems.length, 'Current inventory records needing review', 'warning')
+      makeCard('Preparation Rate', preparedRate !== null ? formatPercent(preparedRate) : 'No items', `${preparedItems} prepared / ${pendingItems} pending`, preparedRate !== null && preparedRate < 1 ? 'warning' : 'success'),
+      makeCard('Low/Attention Stock', lowStockCount + inventorySnapshot.attentionItems.length, 'Current inventory records needing review', lowStockCount ? 'warning' : 'success'),
+      makeCard('Requests Fulfilled', `${fulfilledRequests}/${procurementRequests.length}`, 'Purchasing requests completed in this period')
     ],
     charts: [
-      makeChart('inventory-status', 'Inventory Status', inventorySnapshot.statusChart),
-      makeChart('inventory-category', 'Inventory Categories', inventorySnapshot.categoryChart),
-      makeChart('procurement-status', 'Purchasing Requests', mapToChartItems(countBy(procurementRequests, (request) => request.status)))
+      makeChart('item-demand', 'Most Requested Items (units)', topDemand, 'Total units events required per item in this period - restock and buy-vs-rent decisions start here.'),
+      makeChart('inventory-status', 'Inventory Status', inventorySnapshot.statusChart, 'Health of the current stock records.'),
+      makeChart('procurement-status', 'Purchasing Requests', mapToChartItems(countBy(procurementRequests, (request) => request.status)), 'Where this department\'s purchase/rental requests stand.')
     ],
     sections: [
       makeSection('event-items', 'Event Inventory Workload', 'Contracts in the date range that need this department.', [
@@ -771,25 +883,55 @@ const buildInventoryDepartmentReport = ({ contracts, procurementRequests, incide
   };
 };
 
-const buildKitchenReport = ({ contracts, incidents, inventorySnapshot }) => {
+const buildKitchenReport = ({ contracts, incidents, inventorySnapshot, end }) => {
   const kitchenContracts = contracts.filter((contract) => safeArray(contract.menuDetails).length > 0);
   const menuItems = kitchenContracts.flatMap((contract) => safeArray(contract.menuDetails));
   const confirmedItems = menuItems.filter((item) => item.confirmed).length;
   const preparedEvents = kitchenContracts.filter((contract) => contract.ingredientStatus === 'prepared').length;
+  // Dish popularity: what the kitchen actually cooks most, weighted by contract count
+  // (each contract counts a dish once - quantity is pax, not dish frequency).
+  const dishPopularity = Object.entries(menuItems.reduce((counts, item) => {
+    const name = item.item || 'Unnamed dish';
+    counts[name] = (counts[name] || 0) + 1;
+    return counts;
+  }, {}))
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 8)
+    .map(([label, value]) => ({ label, value }));
+  const paxWorkloadTrend = buildMonthlySeries(kitchenContracts, (contract) => contract.eventDate, end, 6, (contract) => contract.totalPacks);
+  const unpreparedNearEvent = kitchenContracts.filter((contract) => {
+    const daysToEvent = Math.ceil((new Date(contract.eventDate).getTime() - Date.now()) / 86400000);
+    return daysToEvent >= 0 && daysToEvent <= 7 && contract.ingredientStatus !== 'prepared';
+  });
+  const foodIncidents = incidents.filter((incident) => incident.incidentType === 'food_spoilage');
 
   return {
     title: 'Kitchen Report',
-    subtitle: 'Menu checklist completion, ingredient preparation, kitchen stock, and food-related incidents.',
+    subtitle: 'Preparation risk, dish popularity, guest-volume workload, and kitchen stock to plan cooking capacity and buying.',
+    insights: rankInsights([
+      unpreparedNearEvent.length > 0
+        ? makeInsight('warning', `${unpreparedNearEvent.length} event(s) within 7 days are not kitchen-ready`, `Confirm menus and prepare ingredients for: ${unpreparedNearEvent.slice(0, 3).map((contract) => contract.contractNumber).join(', ')}${unpreparedNearEvent.length > 3 ? '…' : ''}.`)
+        : makeInsight('positive', 'Every event inside the next 7 days is kitchen-ready', 'All near-term events have confirmed menus and prepared ingredients.'),
+      inventorySnapshot.lowStockItems.length > 0
+        ? makeInsight('warning', `${inventorySnapshot.lowStockItems.length} kitchen item(s) at or below minimum stock`, 'Restock before the next peak month shown in the guest-volume trend.')
+        : null,
+      dishPopularity.length > 0
+        ? makeInsight('info', `Most ordered dish: ${dishPopularity[0].label}`, `Chosen by ${dishPopularity[0].value} event(s) in this period. Popular dishes drive ingredient buying; rarely chosen dishes are candidates to rotate off the menu.`)
+        : null,
+      foodIncidents.length > 0
+        ? makeInsight('warning', `${foodIncidents.length} food spoilage incident(s) reported`, 'Review storage and transport handling for the affected events.')
+        : null,
+    ]),
     summaryCards: [
       makeCard('Events With Menu', kitchenContracts.length, 'Contracts with menu details'),
-      makeCard('Confirmed Menu Items', `${confirmedItems}/${menuItems.length}`, 'Menu checklist completion'),
-      makeCard('Prepared Events', preparedEvents, 'Ingredient status marked prepared', 'success'),
-      makeCard('Low Kitchen Stock', inventorySnapshot.lowStockItems.length, 'Items at or below minimum stock', 'warning')
+      makeCard('Menu Confirmation', menuItems.length > 0 ? formatPercent(confirmedItems / menuItems.length) : 'No items', `${confirmedItems} of ${menuItems.length} dishes confirmed`),
+      makeCard('Kitchen-Ready Events', `${preparedEvents}/${kitchenContracts.length}`, 'Ingredient status marked prepared', preparedEvents === kitchenContracts.length && kitchenContracts.length > 0 ? 'success' : 'default'),
+      makeCard('Low Kitchen Stock', inventorySnapshot.lowStockItems.length, 'Items at or below minimum stock', inventorySnapshot.lowStockItems.length ? 'warning' : 'success')
     ],
     charts: [
-      makeChart('ingredient-status', 'Ingredient Status', mapToChartItems(countBy(kitchenContracts, (contract) => contract.ingredientStatus))),
-      makeChart('menu-category', 'Menu Categories', mapToChartItems(countBy(menuItems, (item) => item.category))),
-      makeChart('kitchen-inventory-status', 'Kitchen Inventory Status', inventorySnapshot.statusChart)
+      makeChart('pax-workload', 'Guest Volume Per Month (pax)', paxWorkloadTrend, 'Total guests to feed per month (trailing 6 months) - sets ingredient buying and staffing capacity.', 'trend'),
+      makeChart('dish-popularity', 'Most Ordered Dishes (events)', dishPopularity, 'How many events chose each dish - guides bulk ingredient purchasing and menu rotation.'),
+      makeChart('ingredient-status', 'Ingredient Status By Event', mapToChartItems(countBy(kitchenContracts, (contract) => contract.ingredientStatus)), 'Where each event sits in kitchen preparation.')
     ],
     sections: [
       makeSection('menu-events', 'Menu Preparation Events', 'Events in the selected range that include menu work.', [
@@ -824,28 +966,48 @@ const buildKitchenReport = ({ contracts, incidents, inventorySnapshot }) => {
   };
 };
 
-const buildBanquetReport = ({ contracts, banquetStaff, incidents }) => {
+const buildBanquetReport = ({ contracts, banquetStaff, incidents, end }) => {
   const banquetContracts = contracts.filter((contract) => ['approved', 'completed'].includes(contract.status));
   const assignedEvents = banquetContracts.filter((contract) => safeArray(contract.banquetAssignment?.assignments).length > 0);
   const assignmentCount = sumBy(banquetContracts, (contract) => safeArray(contract.banquetAssignment?.assignments).length);
   const activeStaff = banquetStaff.filter((staff) => staff.status === 'active');
+  // Appendix H: 1 waiter per 25 guests. Compare required headcount against the
+  // active pool to spot months where hiring/on-call staff are needed.
+  const requiredStaffFor = (contract) => Math.ceil((Number(contract.banquetAssignment?.serviceGuestCount) || Number(contract.totalPacks) || 0) / 25);
+  const staffDemandTrend = buildMonthlySeries(banquetContracts, (contract) => contract.eventDate, end, 6, requiredStaffFor);
+  const peakDemand = Math.max(0, ...staffDemandTrend.map((month) => month.value));
+  const unstaffedNearEvent = banquetContracts.filter((contract) => {
+    const daysToEvent = Math.ceil((new Date(contract.eventDate).getTime() - Date.now()) / 86400000);
+    return daysToEvent >= 0 && daysToEvent <= 7 && safeArray(contract.banquetAssignment?.assignments).length === 0;
+  });
 
   return {
     title: 'Banquet Report',
-    subtitle: 'Staffing coverage, active banquet staff, assignment workload, and banquet incident monitoring.',
+    subtitle: 'Staffing demand versus pool capacity, roster completion risk, and workload to plan hiring and assignments.',
+    insights: rankInsights([
+      unstaffedNearEvent.length > 0
+        ? makeInsight('warning', `${unstaffedNearEvent.length} event(s) within 7 days have no staff assigned`, `Assign teams now: ${unstaffedNearEvent.slice(0, 3).map((contract) => contract.contractNumber).join(', ')}${unstaffedNearEvent.length > 3 ? '…' : ''}. Rosters should be frozen one week before the event.`)
+        : makeInsight('positive', 'All events inside the next 7 days have staff assigned', 'No roster gaps in the freeze window.'),
+      peakDemand > activeStaff.length
+        ? makeInsight('warning', `Peak month needs ~${peakDemand} staff but the active pool is ${activeStaff.length}`, 'At 1 waiter per 25 guests, the busiest month exceeds the current pool. Line up on-call staff or stagger event acceptance.')
+        : makeInsight('positive', `Active pool (${activeStaff.length}) covers the peak month (~${peakDemand} needed)`, 'Staffing capacity is sufficient for the busiest month in view.'),
+      banquetContracts.length > assignedEvents.length
+        ? makeInsight('info', `${banquetContracts.length - assignedEvents.length} approved event(s) still need a staffing plan`, 'Draft plans early - the suggestion engine pre-fills 1 waiter per 25 guests.')
+        : null,
+    ]),
     summaryCards: [
       makeCard('Approved Events', banquetContracts.length, 'Events ready for banquet planning'),
-      makeCard('Events With Staff Plan', assignedEvents.length, 'Events with assigned banquet staff', 'success'),
-      makeCard('Total Staff Assignments', assignmentCount, 'Assigned staff slots in selected events'),
+      makeCard('Staffed Events', `${assignedEvents.length}/${banquetContracts.length}`, 'Events with assigned banquet staff', assignedEvents.length === banquetContracts.length && banquetContracts.length > 0 ? 'success' : 'warning'),
+      makeCard('Peak Staff Demand', `~${peakDemand}`, 'Busiest month at 1 waiter per 25 guests', peakDemand > activeStaff.length ? 'warning' : 'default'),
       makeCard('Active Staff Pool', activeStaff.length, 'Available active banquet staff')
     ],
     charts: [
-      makeChart('staff-status', 'Staff Status', mapToChartItems(countBy(banquetStaff, (staff) => staff.status))),
-      makeChart('staff-roles', 'Banquet Staff Roles', mapToChartItems(countBy(banquetStaff, (staff) => staff.role))),
+      makeChart('staff-demand', 'Required Staff Per Month (1 per 25 guests)', staffDemandTrend, 'Headcount each month\'s events require - compare against the active pool to plan hiring.', 'trend'),
+      makeChart('staff-roles', 'Staff Pool By Role', mapToChartItems(countBy(banquetStaff, (staff) => staff.role)), 'Composition of the pool - reveals role shortages (e.g. bartenders).'),
       makeChart('event-staffing', 'Event Staffing Status', [
         { label: 'With Staff Plan', value: assignedEvents.length },
         { label: 'No Staff Plan Yet', value: Math.max(0, banquetContracts.length - assignedEvents.length) }
-      ])
+      ], 'How many approved events still need a roster.')
     ],
     sections: [
       makeSection('events', 'Banquet Event Workload', 'Approved events in the selected range and their staff assignment status.', [
@@ -885,24 +1047,50 @@ const buildBanquetReport = ({ contracts, banquetStaff, incidents }) => {
   };
 };
 
-const buildLogisticsReport = ({ contracts, drivers, trucks, incidents }) => {
+const buildLogisticsReport = ({ contracts, drivers, trucks, incidents, end }) => {
   const logisticsContracts = contracts.filter((contract) => ['approved', 'completed'].includes(contract.status));
   const scheduledAssignments = logisticsContracts.filter((contract) => contract.logisticsAssignment?.truck || contract.logisticsAssignment?.driver);
   const dispatched = logisticsContracts.filter((contract) => ['ready_for_dispatch', 'dispatched', 'completed'].includes(contract.logisticsAssignment?.assignmentStatus));
+  const operationalTrucks = trucks.filter((truck) => ['available', 'in_use'].includes(truck.status));
+  const fleetUtilization = operationalTrucks.length > 0
+    ? trucks.filter((truck) => truck.status === 'in_use').length / operationalTrucks.length
+    : null;
+  const outOfServiceTrucks = trucks.filter((truck) => ['maintenance', 'repair'].includes(truck.status));
+  const transportDemandTrend = buildMonthlySeries(logisticsContracts, (contract) => contract.eventDate, end);
+  // Appendix H: transport must be arranged 3 days before the event.
+  const unbookedNearEvent = logisticsContracts.filter((contract) => {
+    const daysToEvent = Math.ceil((new Date(contract.eventDate).getTime() - Date.now()) / 86400000);
+    return daysToEvent >= 0 && daysToEvent <= 3 && !contract.logisticsAssignment?.truck;
+  });
+  const vehicleIncidents = incidents.filter((incident) => incident.incidentType === 'vehicle_breakdown');
 
   return {
     title: 'Logistics Report',
-    subtitle: 'Truck/driver availability, event assignments, dispatch status, and logistics incidents.',
+    subtitle: 'Transport demand, lead-time compliance, fleet utilization, and dispatch status to plan vehicle allocation.',
+    insights: rankInsights([
+      unbookedNearEvent.length > 0
+        ? makeInsight('warning', `${unbookedNearEvent.length} event(s) within 3 days have no truck booked`, `Appendix H requires transport arranged 3 days ahead. Book now: ${unbookedNearEvent.slice(0, 3).map((contract) => contract.contractNumber).join(', ')}${unbookedNearEvent.length > 3 ? '…' : ''}.`)
+        : makeInsight('positive', 'Every event inside the 3-day lead window has a truck booked', 'Transport lead-time rule (Appendix H) is being met.'),
+      outOfServiceTrucks.length > 0
+        ? makeInsight('info', `${outOfServiceTrucks.length} truck(s) in maintenance/repair`, `Effective fleet is ${operationalTrucks.length} vehicle(s). Schedule repairs away from the peak month in the demand trend.`)
+        : null,
+      fleetUtilization !== null && fleetUtilization >= 0.8
+        ? makeInsight('warning', `Fleet utilization is ${formatPercent(fleetUtilization)}`, 'The fleet is nearly fully deployed. Same-day double bookings become likely - consider rentals for overlapping event dates.')
+        : null,
+      vehicleIncidents.length > 0
+        ? makeInsight('warning', `${vehicleIncidents.length} vehicle breakdown(s) reported`, 'Review the affected units before assigning them to upcoming events.')
+        : null,
+    ]),
     summaryCards: [
       makeCard('Approved Events', logisticsContracts.length, 'Events needing transport coordination'),
-      makeCard('Scheduled Assignments', scheduledAssignments.length, 'Events with truck or driver assigned', 'success'),
-      makeCard('Ready/Dispatched', dispatched.length, 'Assignments marked ready, dispatched, or completed'),
-      makeCard('Available Trucks', trucks.filter((truck) => truck.status === 'available').length, 'Current truck availability')
+      makeCard('Booked Events', `${scheduledAssignments.length}/${logisticsContracts.length}`, 'Events with truck or driver assigned', scheduledAssignments.length === logisticsContracts.length && logisticsContracts.length > 0 ? 'success' : 'warning'),
+      makeCard('Fleet Utilization', fleetUtilization !== null ? formatPercent(fleetUtilization) : 'No fleet', `${trucks.filter((truck) => truck.status === 'in_use').length} of ${operationalTrucks.length} operational trucks deployed`, fleetUtilization !== null && fleetUtilization >= 0.8 ? 'warning' : 'default'),
+      makeCard('Ready/Dispatched', dispatched.length, 'Assignments marked ready, dispatched, or completed')
     ],
     charts: [
-      makeChart('assignment-status', 'Assignment Status', mapToChartItems(countBy(logisticsContracts, (contract) => contract.logisticsAssignment?.assignmentStatus || 'pending'))),
-      makeChart('truck-status', 'Truck Status', mapToChartItems(countBy(trucks, (truck) => truck.status))),
-      makeChart('driver-status', 'Driver Status', mapToChartItems(countBy(drivers, (driver) => driver.status)))
+      makeChart('transport-demand', 'Events Needing Transport Per Month', transportDemandTrend, 'Monthly transport workload (trailing 6 months) - schedule maintenance in the quiet months.', 'trend'),
+      makeChart('assignment-status', 'Assignment Status', mapToChartItems(countBy(logisticsContracts, (contract) => contract.logisticsAssignment?.assignmentStatus || 'pending')), 'Where each event sits in the dispatch pipeline.'),
+      makeChart('truck-status', 'Fleet Status', mapToChartItems(countBy(trucks, (truck) => truck.status)), 'Deployment vs downtime across the fleet.')
     ],
     sections: [
       makeSection('events', 'Logistics Event Workload', 'Approved events in the selected range and current dispatch status.', [
@@ -946,25 +1134,61 @@ const buildPurchasingReport = ({ procurementRequests, suppliers }) => {
   const openRequests = procurementRequests.filter((request) => !['fulfilled', 'cancelled'].includes(request.status));
   const quotedTotal = sumBy(procurementRequests, (request) => request.quote?.quotedTotal);
   const preferredSuppliers = suppliers.filter((supplier) => supplier.isPreferred);
+  // Cycle time: how long accounting decisions take after a quote is submitted.
+  const reviewedRequests = procurementRequests.filter((request) => request.quote?.submittedAt && request.accounting?.reviewedAt);
+  const averageApprovalDays = reviewedRequests.length > 0
+    ? reviewedRequests.reduce((sum, request) => sum + Math.max(0, (new Date(request.accounting.reviewedAt).getTime() - new Date(request.quote.submittedAt).getTime()) / 86400000), 0) / reviewedRequests.length
+    : null;
+  const spendByDepartment = getProcurementFinancials(procurementRequests).confirmedExpenses
+    .reduce((totals, request) => {
+      totals[request.department] = (totals[request.department] || 0) + getProcurementAmount(request);
+      return totals;
+    }, {});
+  const spendBySupplier = procurementRequests
+    .filter((request) => request.quote?.supplierName && ['approved', 'proof_submitted', 'fulfilled'].includes(request.status))
+    .reduce((totals, request) => {
+      totals[request.quote.supplierName] = (totals[request.quote.supplierName] || 0) + getProcurementAmount(request);
+      return totals;
+    }, {});
+  const topSuppliers = Object.entries(spendBySupplier)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 6)
+    .map(([label, value]) => ({ label, value: Math.round(value) }));
+  const emergencyCount = procurementRequests.filter((request) => request.requisitionType === 'emergency_requisition').length;
+  const emergencyRate = procurementRequests.length > 0 ? emergencyCount / procurementRequests.length : null;
+  const stalePending = openRequests.filter((request) => {
+    const ageDays = (Date.now() - new Date(request.createdAt).getTime()) / 86400000;
+    return request.status === 'awaiting_accounting_approval' && ageDays > 3;
+  });
 
   return {
     title: 'Purchasing Report',
-    subtitle: 'Procurement request movement, supplier coverage, quoted budgets, and fulfillment status.',
+    subtitle: 'Approval cycle time, spend concentration, supplier reliance, and SLA discipline to negotiate better and unblock requests.',
+    insights: rankInsights([
+      stalePending.length > 0
+        ? makeInsight('warning', `${stalePending.length} request(s) stuck in budget approval for over 3 days`, `Follow up with Accounting on: ${stalePending.slice(0, 3).map((request) => request.requestNumber).join(', ')}${stalePending.length > 3 ? '…' : ''}.`)
+        : null,
+      averageApprovalDays !== null
+        ? makeInsight(averageApprovalDays > 3 ? 'warning' : 'positive', `Average budget approval takes ${averageApprovalDays.toFixed(1)} day(s)`, averageApprovalDays > 3 ? 'Approval turnaround eats into the 7-day requisition lead time. Submit quotes earlier or escalate reviews.' : 'Approval turnaround leaves comfortable room inside the 7-day lead-time rule.')
+        : null,
+      emergencyRate !== null && emergencyRate > 0.25
+        ? makeInsight('warning', `${formatPercent(emergencyRate)} of requests are emergency requisitions`, 'Heavy emergency use signals departments are requesting too late. Reinforce the 7-day standard lead time.')
+        : null,
+      topSuppliers.length > 0
+        ? makeInsight('info', `Largest supplier by spend: ${topSuppliers[0].label}`, `${formatCurrency(topSuppliers[0].value)} committed/spent this period. Concentrated spend is leverage for discounts - and a risk if that supplier fails.`)
+        : null,
+    ]),
     summaryCards: [
-      makeCard('Requests In Range', procurementRequests.length, 'Procurement requests created in selected period'),
+      makeCard('Requests In Range', procurementRequests.length, `${emergencyCount} emergency requisition(s)`),
       makeCard('Open Requests', openRequests.length, 'Requests not yet fulfilled or cancelled', openRequests.length ? 'warning' : 'success'),
-      makeCard('Quoted Total', formatCurrency(quotedTotal), 'Total quoted request value'),
-      makeCard('Preferred Suppliers', preferredSuppliers.length, 'Active preferred suppliers')
+      makeCard('Avg Approval Turnaround', averageApprovalDays !== null ? `${averageApprovalDays.toFixed(1)} day(s)` : 'No reviews yet', 'Quote submission to accounting decision', averageApprovalDays !== null && averageApprovalDays > 3 ? 'warning' : 'default'),
+      makeCard('Quoted Total', formatCurrency(quotedTotal), `${preferredSuppliers.length} preferred supplier(s) available`)
     ],
     charts: [
-      makeChart('request-status', 'Request Status', mapToChartItems(countBy(procurementRequests, (request) => request.status))),
-      makeChart('request-department', 'Requests By Department', mapToChartItems(countBy(procurementRequests, (request) => request.department))),
-      makeChart('supplier-departments', 'Supplier Department Coverage', mapToChartItems(suppliers.reduce((counts, supplier) => {
-        safeArray(supplier.departments).forEach((department) => {
-          counts[department] = (counts[department] || 0) + 1;
-        });
-        return counts;
-      }, {})))
+      makeChart('spend-department', 'Confirmed Spend By Department (PHP)', mapToChartItems(Object.fromEntries(Object.entries(spendByDepartment).map(([key, value]) => [key, Math.round(value)]))), 'Where the purchasing budget actually goes - the basis for next month\'s allocations.'),
+      makeChart('top-suppliers', 'Top Suppliers By Committed Spend (PHP)', topSuppliers, 'Supplier concentration - negotiation leverage and single-source risk.'),
+      makeChart('request-status', 'Request Pipeline', mapToChartItems(countBy(procurementRequests, (request) => request.status)), 'Where requests sit in the approval-to-fulfillment flow.'),
+      makeChart('requisition-mix', 'Requisition Type Mix', mapToChartItems(countBy(procurementRequests, (request) => request.requisitionType || 'unspecified')), 'Standard vs emergency discipline against the 7-day lead-time rule.')
     ],
     sections: [
       makeSection('requests', 'Procurement Request Register', 'Purchasing activity created during the selected period.', [
@@ -992,7 +1216,7 @@ const buildPurchasingReport = ({ procurementRequests, suppliers }) => {
   };
 };
 
-const buildAdminReport = ({ contracts, menuTastings, procurementRequests, incidents, paymentContracts, receivableContracts = [], trendPayments = [], inventories, users, banquetStaff, drivers, trucks, suppliers, start, end }) => {
+const buildAdminReport = ({ contracts, menuTastings, procurementRequests, incidents, paymentContracts, receivableContracts = [], trendPayments = [], bookingTrendContracts = [], inventories, users, banquetStaff, drivers, trucks, suppliers, start, end }) => {
   const contractSummary = getContractSummary(contracts);
   const payments = getPaymentsInRange(paymentContracts, start, end).filter((payment) => payment.status === 'completed');
   const collectedAmount = sumBy(payments, (payment) => payment.amount);
@@ -1013,33 +1237,53 @@ const buildAdminReport = ({ contracts, menuTastings, procurementRequests, incide
     attention: summary.attention + snapshot.attentionItems.length
   }), { totalItems: 0, lowStock: 0, attention: 0 });
 
+  const bookingTrend = buildMonthlySeries(bookingTrendContracts, (contract) => contract.createdAt, end);
+  const convertedTastings = menuTastings.filter((tasting) => tasting.contractCreated || tasting.contract).length;
+  const unresolvedHighIncidents = incidents.filter((incident) => ['high', 'critical'].includes(incident.severity) && incident.status !== 'resolved');
+
   return {
     title: 'Admin Reports',
-    subtitle: 'Full system analytics across contracts, users, inventory, procurement, staffing, logistics, and incidents.',
+    subtitle: 'Cross-department health check: revenue and cash trends, pipeline, workload, risks, and operational capacity in one view.',
+    insights: rankInsights([
+      aging.overdueAmount > 0
+        ? makeInsight('warning', `${formatCurrency(aging.overdueAmount)} in receivables is past due`, `${aging.overdueCount} account(s) are overdue - the single biggest cash risk in view. Direct Accounting to the aging schedule.`)
+        : makeInsight('positive', 'No overdue receivables', 'All outstanding balances are within their collection windows.'),
+      unresolvedHighIncidents.length > 0
+        ? makeInsight('warning', `${unresolvedHighIncidents.length} unresolved high/critical incident(s)`, 'Losses may be charged if unresolved - review the incident register before closing the affected contracts.')
+        : null,
+      inventoryTotals.lowStock > 0
+        ? makeInsight('info', `${inventoryTotals.lowStock} inventory item(s) below minimum stock`, 'Check the department snapshots to see which sections need restocking budget.')
+        : null,
+      budgetQueue.length > 0
+        ? makeInsight('info', `${budgetQueue.length} procurement request(s) waiting for budget approval`, `${formatCurrency(procurementFinancials.pendingBudgetAmount)} in purchases is blocked pending Accounting review.`)
+        : null,
+      collectionRate < 0.6 && contractSummary.totalValue > 0
+        ? makeInsight('warning', `Overall collection rate is ${formatPercent(collectionRate)}`, 'Under 60% of projected revenue in range has been collected.')
+        : null,
+    ]),
     summaryCards: [
       makeCard('Contracts', contracts.length, `${formatCurrency(contractSummary.totalValue)} total contract value`, 'success'),
-      makeCard('Payments Collected', formatCurrency(collectedAmount), 'Completed payments in date range'),
-      makeCard('Active Users', users.filter((user) => user.isActive).length, 'Enabled user accounts'),
+      makeCard('Payments Collected', formatCurrency(collectedAmount), `${formatPercent(collectionRate)} of projected revenue collected`),
+      makeCard('Overdue A/R', formatCurrency(aging.overdueAmount), `${aging.overdueCount} account(s) past due`, aging.overdueAmount ? 'warning' : 'success'),
       makeCard('Inventory Alerts', inventoryTotals.lowStock + inventoryTotals.attention, 'Low stock or attention items', inventoryTotals.lowStock ? 'warning' : 'success')
     ],
     charts: [
-      {
-        id: 'collections-trend',
-        title: 'Monthly Collections Trend',
-        description: 'Completed client payments collected per month (trailing 6 months).',
-        items: collectionsTrend
-      },
+      makeChart('collections-trend', 'Monthly Collections Trend (PHP)', collectionsTrend, 'Completed client payments collected per month (trailing 6 months).', 'trend'),
+      makeChart('booking-trend', 'Contracts Booked Per Month', bookingTrend, 'New contracts created per month (trailing 6 months) - the leading revenue indicator.', 'trend'),
+      makeChart('business-funnel', 'Business Funnel', [
+        { label: 'Tastings Held', value: menuTastings.length },
+        { label: 'Converted To Contracts', value: convertedTastings },
+        { label: 'Signed', value: contractSummary.signedCount },
+        { label: 'Approved For Prep', value: contractSummary.approvedCount }
+      ], 'End-to-end conversion from tasting to approved event.'),
       makeChart('ar-aging', 'Accounts Receivable Aging', aging.buckets.map((bucket) => ({ label: bucket.label, value: Math.round(bucket.amount) })), 'Outstanding balance grouped by how overdue each milestone is.'),
-      makeChart('contract-status', 'Contracts By Status', mapToChartItems(countBy(contracts, (contract) => contract.status))),
-      makeChart('users-by-role', 'Users By Role', mapToChartItems(countBy(users, (user) => user.role))),
-      makeChart('procurement-status', 'Procurement By Status', mapToChartItems(countBy(procurementRequests, (request) => request.status))),
       makeChart('finance-position', 'Finance Position', [
         { label: 'Collected', value: Math.round(collectedAmount) },
         { label: 'Receivable', value: Math.round(outstandingBalance) },
         { label: 'Confirmed Expenses', value: Math.round(procurementFinancials.confirmedExpenseAmount) },
         { label: 'Open Commitments', value: Math.round(procurementFinancials.approvedCommitmentAmount) }
-      ]),
-      makeChart('incident-severity', 'Incidents By Severity', mapToChartItems(countBy(incidents, (incident) => incident.severity)))
+      ], 'Cash in vs money owed vs money committed.'),
+      makeChart('incident-severity', 'Incidents By Severity', mapToChartItems(countBy(incidents, (incident) => incident.severity)), 'Operational risk reported in this period.')
     ],
     sections: [
       makeSection('contracts', 'Contract Register', 'Contracts with event dates in the selected range.', contractColumns, buildContractRows(contracts, 15)),
@@ -1167,7 +1411,8 @@ const buildContext = async (role, start, end) => {
     trucks,
     suppliers,
     receivableContracts,
-    trendContracts
+    trendContracts,
+    bookingTrendContracts
   ] = await Promise.all([
     Contract.find(contractQuery).select(CONTRACT_SELECT).lean(),
     ['admin', 'sales'].includes(role)
@@ -1191,6 +1436,12 @@ const buildContext = async (role, start, end) => {
     ['admin', 'accounting'].includes(role)
       ? Contract.find({ 'payments.date': { $gte: trendStart, $lte: end } })
           .select('payments')
+          .lean()
+      : [],
+    // Booking momentum: contracts by creation date over the trailing window.
+    ['admin', 'sales'].includes(role)
+      ? Contract.find({ createdAt: { $gte: trendStart, $lte: end } })
+          .select('createdAt totalContractValue status clientSigned')
           .lean()
       : []
   ]);
@@ -1230,6 +1481,7 @@ const buildContext = async (role, start, end) => {
     suppliers,
     receivableContracts,
     trendPayments,
+    bookingTrendContracts,
     inventories: Object.fromEntries(inventoryEntries)
   };
 };
