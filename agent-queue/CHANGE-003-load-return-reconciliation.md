@@ -2,7 +2,7 @@
 
 Change ID: CHANGE-003
 
-Status: PENDING
+Status: IMPLEMENTED (uncommitted)
 
 Priority: Medium
 
@@ -35,7 +35,7 @@ Closing the loop on the round trip: items that go out should come back (minus co
 
 ## Expected Thesis Basis
 
-Post-event phase — inventory count, noting damaged/missing equipment (Ch1 §1.5.2; Ch5 post-event checking).
+**Appendix H "Current Business Rule" (PDF p.138):** "Any variance between the two counts is carried into the missing-and-damaged summary, and the cost of unresolved losses may be charged unless the supervisor files a valid counter-report." Confirmed Juan Carlo business rule. Also Ch1 §1.5.2 (post-event inventory count).
 
 ## Acceptance Expectations
 

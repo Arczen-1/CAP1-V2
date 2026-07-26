@@ -7,6 +7,16 @@
 
 > **Owner-confirmed deviations:** External integrations named in the thesis — **Nodemailer email, Facebook Prophet forecasting, Google Calendar/Maps APIs, Acrobat Sign** — were **intentionally replaced with in-system workarounds** and are **not pending work**. They are classified below as *Implemented differently / approved deviation*, and the recommended fix is to update the **thesis**, not the system.
 
+> **⚠ CORRECTION (2026-07-26) — Appendix H supersedes several classifications below.** The first pass read only the main chapters and missed **Appendix H "Current Business Rule"** (PDF pp.137–138) and Appendix I (client interview). Appendix H is Juan Carlo's client-provided business rules and **documents** items this report initially called "implemented but not documented" or "possible scope expansion / needs approval." The following are therefore **DOCUMENTED (Appendix H) AND IMPLEMENTED = aligned, approved scope** — see [business-rules-appendix-h.md](../docs/thesis/knowledge-base/business-rules-appendix-h.md):
+> - Payment engine: ₱30k reservation fee, 40/60 milestones, aging/uncollectible, auto-hold, no-refund, early full pay, post-after-sign.
+> - **Financial confidentiality** — package price & total contract value visible only to Accounting/Sales (the PDF redaction).
+> - **Material freeze** (7 days before event).
+> - **Staff/department transportation** (Appendix H: transport requests ≥3 days prior; Logistics allocates trucks/drivers) — **not** a scope expansion.
+> - **Return reconciliation / pickup** (loaded-back must match checklist; return count + warehouse second count; variance → missing-and-damaged) — the CHANGE-001/003 features.
+> - Guest brackets (1 waiter/25), truck-by-m³ + rent-if-over-capacity, incident reporting, 1-month-before SLA.
+>
+> Read §7, §10, and §13 below through this correction. Genuinely still-not-in-thesis items are only: the *2-week/7-day kitchen prep notifications*, the "Awaiting Contract Close" UI stage, the logistics workflow sub-tab UI, and the notification cleanup/expiry — all minor UI/UX refinements of documented behavior.
+
 ---
 
 ## 1. Current project summary

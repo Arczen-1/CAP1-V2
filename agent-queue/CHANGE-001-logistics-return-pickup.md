@@ -2,7 +2,7 @@
 
 Change ID: CHANGE-001
 
-Status: PENDING
+Status: IMPLEMENTED (uncommitted)
 
 Priority: Medium
 
@@ -37,7 +37,7 @@ The real logistics cycle is a round trip: deliver items to the venue, then pick 
 
 ## Expected Thesis Basis
 
-Post-event phase — logging returned items (Ch1 §1.5.2 Scope; Ch5 post-event checking). UNKNOWN exact wording.
+**Appendix H "Current Business Rule" (PDF p.138):** staff/logistics may not leave the venue until "equipment loaded back into the trucks matches the inventory checklist of items brought to the event… supervisor's return count and the warehouse's second count." Also Ch1 §1.5.2 Scope (post-event: logging returned items). Confirmed Juan Carlo business rule.
 
 ## Acceptance Expectations
 

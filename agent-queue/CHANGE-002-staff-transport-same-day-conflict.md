@@ -35,7 +35,7 @@ Real logistics scenario: two events on the same day. Today the staff-transport a
 
 ## Expected Thesis Basis
 
-Scheduling/Logistics module — vehicle scheduling & conflict avoidance (Ch1 §1.4.1.3; Ch5 Logistics). UNKNOWN exact section for staff transport (staff transport is an added capability — see alignment report).
+**Appendix H "Current Business Rule" (PDF p.138):** "any department requiring transportation must arrange it at least three days prior so the Logistics Department can allocate trucks and drivers." Staff/department transportation is a confirmed Juan Carlo business rule (not a scope expansion). Also Ch1 §1.4.1.3 Scheduling/Logistics — vehicle scheduling & conflict avoidance.
 
 ## Acceptance Expectations
 

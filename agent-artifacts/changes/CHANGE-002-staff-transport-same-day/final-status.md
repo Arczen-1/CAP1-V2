@@ -1,10 +1,10 @@
 # Final Status — CHANGE-002
 
-Status: IMPLEMENTED (uncommitted) — needs a two-same-day-events runtime test to fully confirm
+Status: VERIFIED (uncommitted)
 
-- Verdict: PASS (smoke-tested; no regression) with one untested scenario (full double-booking path)
-- Files changed: 1 (`server/routes/contracts.js`) — auto-assign, manual booking, operations summary
-- Commit: none (left uncommitted per owner)
-- Human decision required: none for the fix; recommend the two-event manual test before release
+- Verdict: **PASS** — runtime end-to-end test passed.
+- Test (2026-07-26): created two temp approved contracts on the same event date (30 staff each) and auto-assigned staff transport to both via the live API. Contract A took the 40-seat vehicle; Contract B was correctly excluded from it and took two other vehicles (28+15). **No vehicle shared.** Temp contracts deleted after the test.
+- Files changed: 1 (`server/routes/contracts.js`) — auto-assign, manual booking, operations-summary options list.
+- Commit: none (left uncommitted per owner).
 
-Genuine bug fix (was: a passenger van could be auto-assigned/booked for two same-day events).
+Genuine bug fix, now verified: a passenger van can no longer be double-booked across two same-day events.

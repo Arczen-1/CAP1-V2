@@ -35,6 +35,7 @@ Proposed revisions so the thesis draft matches the **current, approved system be
 - **Reason:** Prophet is not implemented; the workaround meets the practical need.
 - **Evidence:** `buildReservationMap`, `getDateAvailableQuantity` in `routes/contracts.js`; no `prophet`/forecast code.
 - **Requires human approval:** **Yes** — forecasting is named in **Scope** and objectives; removing/relabelling a scope item is a scope-level change the panel may probe.
+- **DECIDED (2026-07-26):** Reframe as real-time availability; move Prophet to Future Work. See [decisions-log.md](decisions-log.md) D-2.
 
 ### TU-4 — Scheduling/logistics APIs (Google Calendar/Maps)
 
@@ -65,6 +66,7 @@ Proposed revisions so the thesis draft matches the **current, approved system be
 - **Reason:** Avoid claiming an unimplemented, prominently-described feature at defense.
 - **Evidence:** No `commission` code in `server/` or `src/`.
 - **Requires human approval:** **Yes** — this is a documented core Finance feature; decide implement-vs-defer.
+- **DECIDED (2026-07-26):** Defer to Future Work; soften Finance-module/Accounting-role claims. See [decisions-log.md](decisions-log.md) D-1.
 
 ### TU-7 — Module framing (four modules → seven operational modules)
 

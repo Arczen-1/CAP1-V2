@@ -41,6 +41,8 @@ Extracted text uses PDF page numbers (`===== PAGE n =====`). Printed page number
 - [architecture-basis.md](architecture-basis.md)
 - [evaluation-criteria.md](evaluation-criteria.md)
 - [traceability-matrix.md](traceability-matrix.md)
+- [business-rules-appendix-h.md](business-rules-appendix-h.md) — **Juan Carlo's client-provided business rules (Appendix H)**; authoritative basis for payment/hold, financial confidentiality, freeze, transport, and post-event rules
+- [decisions-log.md](decisions-log.md) — owner-directed decisions (commission defer, forecasting reframe, Appendix H confirmation)
 - [recommended-thesis-updates.md](recommended-thesis-updates.md)
 
 Related: [../../../agent-artifacts/thesis-system-alignment-report.md](../../../agent-artifacts/thesis-system-alignment-report.md)
