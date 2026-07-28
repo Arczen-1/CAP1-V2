@@ -444,7 +444,9 @@ const makeCard = (label, value, helper = '', tone = 'default') => ({
 });
 
 // kind: 'breakdown' renders as a composition (donut + bars); 'trend' renders as a
-// month-by-month timeline. Trend charts keep zero months so the timeline is
+// month-by-month timeline; 'ranking' renders a full-width ordered list for
+// long-named entities (suppliers, dishes, items) where the name matters more
+// than the share of a whole. Trend charts keep zero months so the timeline is
 // continuous and dips are visible.
 const makeChart = (id, title, items, description = '', kind = 'breakdown') => ({
   id,
@@ -836,7 +838,7 @@ const buildInventoryDepartmentReport = ({ contracts, procurementRequests, incide
       makeCard('Requests Fulfilled', `${fulfilledRequests}/${procurementRequests.length}`, 'Purchasing requests completed in this period')
     ],
     charts: [
-      makeChart('item-demand', 'Most Requested Items (units)', topDemand, 'Total units events required per item in this period - restock and buy-vs-rent decisions start here.'),
+      makeChart('item-demand', 'Most Requested Items (units)', topDemand, 'Total units events required per item in this period - restock and buy-vs-rent decisions start here.', 'ranking'),
       makeChart('inventory-status', 'Inventory Status', inventorySnapshot.statusChart, 'Health of the current stock records.'),
       makeChart('procurement-status', 'Purchasing Requests', mapToChartItems(countBy(procurementRequests, (request) => request.status)), 'Where this department\'s purchase/rental requests stand.')
     ],
@@ -930,7 +932,7 @@ const buildKitchenReport = ({ contracts, incidents, inventorySnapshot, end }) =>
     ],
     charts: [
       makeChart('pax-workload', 'Guest Volume Per Month (pax)', paxWorkloadTrend, 'Total guests to feed per month (trailing 6 months) - sets ingredient buying and staffing capacity.', 'trend'),
-      makeChart('dish-popularity', 'Most Ordered Dishes (events)', dishPopularity, 'How many events chose each dish - guides bulk ingredient purchasing and menu rotation.'),
+      makeChart('dish-popularity', 'Most Ordered Dishes (events)', dishPopularity, 'How many events chose each dish - guides bulk ingredient purchasing and menu rotation.', 'ranking'),
       makeChart('ingredient-status', 'Ingredient Status By Event', mapToChartItems(countBy(kitchenContracts, (contract) => contract.ingredientStatus)), 'Where each event sits in kitchen preparation.')
     ],
     sections: [
@@ -1185,8 +1187,8 @@ const buildPurchasingReport = ({ procurementRequests, suppliers }) => {
       makeCard('Quoted Total', formatCurrency(quotedTotal), `${preferredSuppliers.length} preferred supplier(s) available`)
     ],
     charts: [
-      makeChart('spend-department', 'Confirmed Spend By Department (PHP)', mapToChartItems(Object.fromEntries(Object.entries(spendByDepartment).map(([key, value]) => [key, Math.round(value)]))), 'Where the purchasing budget actually goes - the basis for next month\'s allocations.'),
-      makeChart('top-suppliers', 'Top Suppliers By Committed Spend (PHP)', topSuppliers, 'Supplier concentration - negotiation leverage and single-source risk.'),
+      makeChart('spend-department', 'Confirmed Spend By Department (PHP)', mapToChartItems(Object.fromEntries(Object.entries(spendByDepartment).map(([key, value]) => [key, Math.round(value)]))), 'Where the purchasing budget actually goes - the basis for next month\'s allocations.', 'ranking'),
+      makeChart('top-suppliers', 'Top Suppliers By Committed Spend (PHP)', topSuppliers, 'Supplier concentration - negotiation leverage and single-source risk.', 'ranking'),
       makeChart('request-status', 'Request Pipeline', mapToChartItems(countBy(procurementRequests, (request) => request.status)), 'Where requests sit in the approval-to-fulfillment flow.'),
       makeChart('requisition-mix', 'Requisition Type Mix', mapToChartItems(countBy(procurementRequests, (request) => request.requisitionType || 'unspecified')), 'Standard vs emergency discipline against the 7-day lead-time rule.')
     ],

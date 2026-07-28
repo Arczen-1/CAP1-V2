@@ -35,7 +35,8 @@ interface ReportChart {
   title: string;
   description?: string;
   // 'breakdown' (default): composition donut + bars. 'trend': month timeline.
-  kind?: 'breakdown' | 'trend';
+  // 'ranking': full-width ordered list for long-named entities.
+  kind?: 'breakdown' | 'trend' | 'ranking';
   items: ReportChartItem[];
 }
 
@@ -82,6 +83,26 @@ const INSIGHT_TONE_META: Record<ReportInsight['tone'], { className: string; labe
 };
 
 const chartColors = ['#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed', '#0891b2', '#475569'];
+
+// Chart values can be peso amounts in the millions. Printing them in full
+// overflows the donut centre and the narrow trend columns, so labels are
+// abbreviated (1.2M / 350.5K) while the exact figure stays in the tooltip.
+const formatCompactNumber = (value: number) => {
+  const amount = Number(value) || 0;
+  const absolute = Math.abs(amount);
+
+  if (absolute >= 1_000_000) {
+    return `${(amount / 1_000_000).toFixed(absolute >= 10_000_000 ? 0 : 1)}M`;
+  }
+
+  if (absolute >= 10_000) {
+    return `${(amount / 1_000).toFixed(absolute >= 100_000 ? 0 : 1)}K`;
+  }
+
+  return amount.toLocaleString();
+};
+
+const formatExactNumber = (value: number) => (Number(value) || 0).toLocaleString();
 
 const getDateInputValue = (date: Date) => date.toISOString().slice(0, 10);
 
@@ -428,22 +449,84 @@ export default function Reports() {
             {chart.items.length === 0 || totalValue === 0 ? (
               <p className="text-sm text-muted-foreground">No activity recorded in this window yet.</p>
             ) : (
-              <div className="flex items-end gap-3" style={{ height: 170 }}>
+              <div className="flex items-end gap-2 sm:gap-3" style={{ height: 170 }}>
                 {chart.items.map((item) => {
                   const value = Number(item.value) || 0;
                   const barHeight = Math.max(value > 0 ? 6 : 2, Math.round((value / maxValue) * 120));
                   return (
-                    <div key={`${chart.id}-${item.label}`} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
-                      <span className="text-xs font-semibold text-foreground">{value.toLocaleString()}</span>
+                    <div
+                      key={`${chart.id}-${item.label}`}
+                      className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"
+                    >
+                      <span
+                        className="max-w-full truncate text-[11px] font-semibold tabular-nums text-foreground sm:text-xs"
+                        title={formatExactNumber(value)}
+                      >
+                        {formatCompactNumber(value)}
+                      </span>
                       <div
                         className="w-full max-w-14 rounded-t-md"
                         style={{ height: barHeight, backgroundColor: value > 0 ? '#2563eb' : '#e5e7eb' }}
                       />
-                      <span className="text-xs text-muted-foreground">{item.label}</span>
+                      <span className="max-w-full truncate text-[11px] text-muted-foreground sm:text-xs">
+                        {item.label}
+                      </span>
                     </div>
                   );
                 })}
               </div>
+            )}
+          </CardContent>
+        </Card>
+      );
+    }
+
+    // Ranked entities (suppliers, dishes, items): the NAME carries the meaning,
+    // so it gets the full card width on its own line instead of being squeezed
+    // beside a donut and ellipsised.
+    if (chart.kind === 'ranking') {
+      return (
+        <Card key={chart.id} className="overflow-hidden border-slate-200">
+          <CardHeader className="border-b bg-muted/30">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              {chart.title}
+            </CardTitle>
+            {chart.description ? <CardDescription>{chart.description}</CardDescription> : null}
+          </CardHeader>
+          <CardContent className="space-y-3 pt-6">
+            {chart.items.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No chart data for this period.</p>
+            ) : (
+              chart.items.map((item, index) => {
+                const value = Number(item.value) || 0;
+                const percent = Math.max(3, (value / maxValue) * 100);
+                return (
+                  <div key={`${chart.id}-${item.label}`} className="min-w-0 space-y-1">
+                    <div className="flex items-start justify-between gap-3 text-sm">
+                      <span className="flex min-w-0 items-start gap-2 font-medium">
+                        <span
+                          className="mt-1 h-2.5 w-2.5 shrink-0 rounded-sm"
+                          style={{ backgroundColor: chartColors[index % chartColors.length] }}
+                        />
+                        <span className="break-words leading-snug">{item.label}</span>
+                      </span>
+                      <span
+                        className="shrink-0 font-semibold tabular-nums text-foreground"
+                        title={formatExactNumber(value)}
+                      >
+                        {formatCompactNumber(value)}
+                      </span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted">
+                      <div
+                        className="h-2 rounded-full"
+                        style={{ width: `${percent}%`, backgroundColor: chartColors[index % chartColors.length] }}
+                      />
+                    </div>
+                  </div>
+                );
+              })
             )}
           </CardContent>
         </Card>
@@ -473,7 +556,10 @@ export default function Reports() {
           </CardTitle>
           {chart.description ? <CardDescription>{chart.description}</CardDescription> : null}
         </CardHeader>
-        <CardContent className="grid gap-4 pt-6 sm:grid-cols-[130px_1fr]">
+        {/* minmax(0,1fr) (not 1fr) so the legend column can shrink below its
+            longest label - otherwise long names like supplier titles blow the
+            column out and the values on the right get clipped by the card. */}
+        <CardContent className="grid gap-4 pt-6 sm:grid-cols-[112px_minmax(0,1fr)]">
           {chart.items.length === 0 ? (
             <p className="text-sm text-muted-foreground sm:col-span-2">No chart data for this period.</p>
           ) : (
@@ -495,25 +581,37 @@ export default function Reports() {
                     />
                   ))}
                 </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-xl font-bold">{totalValue}</span>
+                <div className="absolute inset-0 flex flex-col items-center justify-center px-2">
+                  <span
+                    className="max-w-full truncate text-lg font-bold leading-tight"
+                    title={formatExactNumber(totalValue)}
+                  >
+                    {formatCompactNumber(totalValue)}
+                  </span>
                   <span className="text-[10px] uppercase text-muted-foreground">Total</span>
                 </div>
               </div>
-              <div className="space-y-3">
+              <div className="min-w-0 space-y-3">
                 {chart.items.map((item, index) => {
                   const percent = Math.max(3, (Number(item.value) / maxValue) * 100);
                   return (
-                    <div key={`${chart.id}-${item.label}`} className="space-y-1">
-                      <div className="flex items-center justify-between gap-3 text-sm">
-                        <span className="flex min-w-0 items-center gap-2 font-medium">
+                    <div key={`${chart.id}-${item.label}`} className="min-w-0 space-y-1">
+                      <div className="flex items-start justify-between gap-3 text-sm">
+                        <span className="flex min-w-0 items-start gap-2 font-medium">
                           <span
-                            className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                            className="mt-1 h-2.5 w-2.5 shrink-0 rounded-sm"
                             style={{ backgroundColor: chartColors[index % chartColors.length] }}
                           />
-                          <span className="truncate">{item.label}</span>
+                          {/* Wrap rather than ellipsise: a cut-off category name
+                              ("Awaiting Accounting Appro…") is unreadable. */}
+                          <span className="break-words leading-snug">{item.label}</span>
                         </span>
-                        <span className="font-semibold text-foreground">{item.value}</span>
+                        <span
+                          className="shrink-0 font-semibold tabular-nums text-foreground"
+                          title={formatExactNumber(Number(item.value))}
+                        >
+                          {formatCompactNumber(Number(item.value))}
+                        </span>
                       </div>
                       <div className="h-2 rounded-full bg-muted">
                         <div
