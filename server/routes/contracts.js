@@ -87,7 +87,9 @@ const INVENTORY_STATUS_RULES = {
     allowedRoles: ['stockroom', 'logistics', 'admin'],
     allowedStatuses: PRE_EVENT_CHECKLIST_STATUSES,
     postEventAllowedStatuses: ['pending_check', 'checked_ok'],
-    progressKey: 'logistics',
+    // Equipment is the stockroom's checklist, so its preparation drives the
+    // stockroom department's progress (and its "Done" tag), not logistics.
+    progressKey: 'stockroom',
     readyStatuses: ['prepared'],
     incidentDepartment: 'logistics'
   }
@@ -899,7 +901,13 @@ const getEstimatedBanquetGuestCount = (contract) => {
 const toBanquetStaffSummary = (staff, meta = {}) => ({
   _id: String(staff._id),
   employeeId: staff.employeeId,
-  fullName: staff.fullName,
+  // fullName is set by a pre-save hook, so staff created via seed/insertMany can
+  // have it empty. Fall back to first + last name (then employee ID) so the
+  // banquet picker never shows a blank "- Suggested" option.
+  fullName: staff.fullName
+    || [staff.firstName, staff.lastName].filter(Boolean).join(' ').trim()
+    || staff.employeeId
+    || 'Unnamed staff',
   role: staff.role,
   status: staff.status,
   employmentType: staff.employmentType,
@@ -2156,6 +2164,9 @@ router.put('/:id/kitchen-ingredient-status', auth, requireRole(['kitchen', 'admi
     }
 
     contract.ingredientStatus = status;
+    // Drive the Kitchen department's progress (and its "Done" tag) off the prep
+    // state: prepared = complete (checklist is required above), procured = halfway.
+    contract.departmentProgress.kitchen = status === 'prepared' ? 100 : status === 'procured' ? 50 : 0;
     await contract.save();
     await maybeNotifyPreparationComplete(contract);
 
@@ -2618,7 +2629,8 @@ router.post('/:id/complete', auth, requireRole(['accounting', 'admin']), async (
       kitchen: 100,
       purchasing: 100,
       creative: 100,
-      linen: 100
+      linen: 100,
+      stockroom: 100
     };
 
     await contract.save();

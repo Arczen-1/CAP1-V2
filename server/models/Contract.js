@@ -663,7 +663,8 @@ const contractSchema = new mongoose.Schema({
     kitchen: { type: Number, default: 0 },
     purchasing: { type: Number, default: 0 },
     creative: { type: Number, default: 0 },
-    linen: { type: Number, default: 0 }
+    linen: { type: Number, default: 0 },
+    stockroom: { type: Number, default: 0 }
   },
 
   sectionConfirmations: {
@@ -744,10 +745,12 @@ contractSchema.pre('save', async function() {
     this.slaWarning = now > oneMonthBefore && this.status === 'draft';
   }
   
-  // Calculate progress
+  // Calculate progress — divide by the actual number of tracked departments so
+  // adding a department (e.g. stockroom) stays correct automatically.
   const deptProgress = this.departmentProgress;
-  const total = Object.values(deptProgress).reduce((a, b) => a + b, 0);
-  this.progress = Math.round(total / 8);
+  const values = Object.values(deptProgress).filter((v) => typeof v === 'number');
+  const total = values.reduce((a, b) => a + b, 0);
+  this.progress = values.length ? Math.round(total / values.length) : 0;
 });
 
 module.exports = mongoose.model('Contract', contractSchema);
