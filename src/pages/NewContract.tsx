@@ -957,8 +957,8 @@ export default function NewContract() {
       setTastingNotesByItem(
         Object.fromEntries(
           (data.menuItems || [])
-            .filter((dish) => dish?.itemName && dish?.notes)
-            .map((dish) => [dish.itemName as string, dish.notes as string])
+            .filter((dish: { itemName?: string; notes?: string }) => dish?.itemName && dish?.notes)
+            .map((dish: { itemName?: string; notes?: string }) => [dish.itemName as string, dish.notes as string])
         )
       );
     } catch (error) {

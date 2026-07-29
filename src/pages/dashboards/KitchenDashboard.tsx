@@ -202,7 +202,7 @@ export default function KitchenDashboard() {
   const handleUpdateIngredientStatus = async (contractId: string, status: string) => {
     try {
       await api.updateKitchenIngredientStatus(contractId, { status: status as 'pending' | 'procured' | 'prepared' });
-      toast.success('Ingredient status updated!');
+      toast.success('Item status updated!');
       fetchData();
     } catch (error: any) {
       toast.error(error.message || 'Failed to update');
@@ -396,7 +396,7 @@ export default function KitchenDashboard() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Kitchen Dashboard</h1>
           <p className="text-muted-foreground">
-            Food preparation and ingredient readiness
+            Food preparation and item readiness
           </p>
         </div>
 
@@ -432,7 +432,7 @@ export default function KitchenDashboard() {
               <div className="text-2xl font-bold text-green-600">
                 {approvedContracts.filter(c => c.ingredientStatus === 'prepared').length}
               </div>
-              <p className="text-xs text-muted-foreground">Ingredients ready</p>
+              <p className="text-xs text-muted-foreground">Items ready</p>
             </CardContent>
           </Card>
         </div>
