@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, useRole } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -205,9 +205,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     });
   const unreadCount = visibleNotifications.filter((notification) => !notification.isRead).length;
 
+  // While the notification menu is open, the background poll must not replace the
+  // list underneath the cursor: refreshing re-renders the open dropdown and makes
+  // it churn (and previously closed it entirely). A ref, not state, so the poll's
+  // 30s callback reads the live value without being re-created.
+  const notificationsMenuOpenRef = useRef(false);
+
   const fetchNotifications = async () => {
     if (!user) {
       setNotifications([]);
+      return;
+    }
+
+    // Defer refreshes until the menu is closed again.
+    if (notificationsMenuOpenRef.current) {
       return;
     }
 
@@ -295,8 +306,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     item.roles.includes(role || '')
   );
 
-  const NotificationMenu = () => (
-    <DropdownMenu>
+  // A stable element, NOT a component defined during render. Declaring it as
+  // `const NotificationMenu = () => (...)` and rendering `<NotificationMenu />`
+  // gave it a new component identity on every render, so React remounted the
+  // whole dropdown each time the 30s poll fired — closing it while open. As a
+  // plain element the type stays constant and the open menu survives re-renders.
+  const notificationMenu = (
+    <DropdownMenu onOpenChange={(open) => { notificationsMenuOpenRef.current = open; }}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-5 w-5" />
@@ -326,7 +342,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           ) : visibleNotifications.length === 0 ? (
             <div className="px-3 py-6 text-center text-sm text-muted-foreground">No notifications yet.</div>
           ) : (
-            visibleNotifications.slice(0, 10).map((notification) => {
+            visibleNotifications.map((notification) => {
               const actionDone = isNotificationActionDone(notification);
               return (
                 <div
@@ -468,7 +484,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
             </p>
           </div>
-          <NotificationMenu />
+          {notificationMenu}
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -532,7 +548,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               />
             </div>
           </div>
-          <NotificationMenu />
+          {notificationMenu}
         </header>
 
         {/* Page Content */}

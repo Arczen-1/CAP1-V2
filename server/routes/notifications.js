@@ -54,6 +54,12 @@ const isProcurementNotificationDone = (notification, request) => {
   return false;
 };
 
+const POST_EVENT_SECTION_BY_DEPARTMENT = {
+  creative: 'creativeAssets',
+  linen: 'linenRequirements',
+  stockroom: 'equipmentChecklist'
+};
+
 // Contract-backed notifications resolve against the contract's own state.
 const isContractNotificationDone = (notification, contract) => {
   if (!contract || !contract.status) {
@@ -65,24 +71,70 @@ const isContractNotificationDone = (notification, contract) => {
     return true;
   }
 
-  const text = `${notification.title} ${notification.message} ${notification.actionLabel || ''}`.toLowerCase();
   const approved = status === 'approved';
+  const fullyPaid = contract.paymentStatus === 'paid';
 
-  if (text.includes('approve') || text.includes('ready for accounting') || text.includes('review payment')
-    || text.includes('collection milestone') || text.includes('full payment received')) {
-    return approved;
+  // Resolution is decided by notification type before any keyword matching.
+  // The keyword rules read actionLabel too, and the compliance sweep stamps the
+  // same generic "Review payment" label on every alert it sends (including
+  // post-event checks), which would otherwise match the approval rule below and
+  // mark unrelated tasks done.
+
+  // Collection-timeline alerts are resolved by the balance being settled.
+  if (['payment_followup', 'payment_milestone_due', 'payment_uncollectible', 'final_balance_due'].includes(notification.type)) {
+    return fullyPaid;
   }
 
-  if (text.includes('client signature') || text.includes('waiting for client signature') || text.includes('mark client signed')) {
-    return Boolean(contract.clientSigned) && status !== 'pending_client_signature' && status !== 'draft';
-  }
-
-  if (text.includes('collection') || text.includes('balance') || text.includes('payment follow') || text.includes('reservation fee')) {
-    return contract.paymentStatus === 'paid';
-  }
-
-  if (text.includes('on hold') || text.includes('hold')) {
+  // A hold is resolved only when the hold itself is lifted.
+  if (notification.type === 'contract_on_hold') {
     return !contract.paymentHold?.active;
+  }
+
+  // Operational tasks are resolved by the assigned department finishing its own
+  // work. The approval or deadline that created them can never complete them.
+  const isOperationalTask = ['contract_approved', 'deadline_reminder', 'task_assigned'].includes(notification.type);
+
+  const text = `${notification.title} ${notification.message} ${notification.actionLabel || ''}`.toLowerCase();
+
+  if (!isOperationalTask) {
+    if (text.includes('approve') || text.includes('ready for accounting') || text.includes('review payment')
+      || text.includes('collection milestone') || text.includes('full payment received')) {
+      return approved;
+    }
+
+    if (text.includes('client signature') || text.includes('waiting for client signature') || text.includes('mark client signed')) {
+      return Boolean(contract.clientSigned) && status !== 'pending_client_signature' && status !== 'draft';
+    }
+
+    if (text.includes('collection') || text.includes('balance') || text.includes('payment follow') || text.includes('reservation fee')) {
+      return fullyPaid;
+    }
+
+    if (text.includes('on hold') || text.includes('hold')) {
+      return !contract.paymentHold?.active;
+    }
+  }
+
+  // Transport lead-time reminders resolve as soon as transport is booked. Booking
+  // a truck only lifts logistics progress to 50, so the progress fallback below
+  // would keep this red even after the task is done.
+  if (text.includes('transport not booked')) {
+    return Boolean(contract.logisticsAssignment?.truck)
+      || Boolean(contract.staffTransport?.vehicles?.length);
+  }
+
+  // Post-event check reminders resolve against the recipient department's own
+  // items. departmentProgress tracks pre-event preparation, so it says nothing
+  // about whether the returned items have actually been inspected.
+  if (text.includes('post-event checks')) {
+    const section = POST_EVENT_SECTION_BY_DEPARTMENT[notification.department];
+    if (section) {
+      const items = contract[section] || [];
+      return items.length > 0 && items.every((item) => (
+        item.postEventStatus === 'checked_ok' || item.postEventStatus === 'incident_reported'
+      ));
+    }
+    return false;
   }
 
   if (notification.department && contract.departmentProgress) {
@@ -100,7 +152,11 @@ const isContractNotificationDone = (notification, contract) => {
 router.get('/', auth, async (req, res) => {
   try {
     const notifications = await Notification.find({ recipient: req.user._id })
-      .populate('contract', 'contractNumber clientName status eventDate clientSigned paymentStatus departmentProgress paymentHold')
+      // Only the postEventStatus of each checklist item is selected: the full
+      // item documents carry inline image data URIs and would bloat the payload.
+      // logisticsAssignment.truck and staffTransport.vehicles let the transport
+      // lead-time reminder resolve once transport is booked.
+      .populate('contract', 'contractNumber clientName status eventDate clientSigned paymentStatus departmentProgress paymentHold logisticsAssignment.truck staffTransport.vehicles creativeAssets.postEventStatus linenRequirements.postEventStatus equipmentChecklist.postEventStatus')
       .populate('procurementRequest', 'requestNumber status department accounting fulfillment')
       .sort({ createdAt: -1 })
       .limit(50);

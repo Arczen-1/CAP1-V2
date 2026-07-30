@@ -30,6 +30,10 @@ mongoose.connect(MONGODB_URI)
     // begin-preparations alert once the event is within 7 days.
     const { startKitchenPrepSweep } = require('./kitchenPrepNotifications');
     startKitchenPrepSweep();
+    // Transport lead-time reminder: alerts Logistics once an event is within 3
+    // days with the truck and/or staff transport still unbooked (Appendix H).
+    const { startTransportLeadTimeSweep } = require('./transportLeadTimeNotifications');
+    startTransportLeadTimeSweep();
   })
   .catch(err => console.error('MongoDB connection error:', err));
 

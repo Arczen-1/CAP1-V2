@@ -96,15 +96,46 @@ const formatAmount = (value) => new Intl.NumberFormat('en-PH', {
   maximumFractionDigits: 2
 }).format(Number(value) || 0);
 
+// Recipient role -> the department tag stored on the notification. Used when a
+// sweep alert is routed to departments other than accounting, so the alert is
+// attributed to the team that actually has to act on it.
+const DEPARTMENT_BY_ROLE = {
+  accounting: 'accounting',
+  sales: 'sales',
+  admin: 'admin',
+  creative: 'creative',
+  linen: 'linen',
+  stockroom: 'stockroom',
+  kitchen: 'kitchen',
+  logistics: 'logistics',
+  purchasing: 'purchasing',
+  banquet_supervisor: 'banquet'
+};
+
 // Creates one notification per recipient, exactly once per contract + type +
 // title. Re-running the sweep never duplicates an alert that was already sent.
-const notifyRolesOnce = async ({ contract, roles, type, title, message, priority = 'high' }) => {
+//
+// Collection alerts default to the payments tab and are tagged 'accounting'.
+// Alerts routed elsewhere (post-event checks) must pass their own destination,
+// and leave `department` unset so each recipient is tagged with their own
+// department rather than inheriting accounting's.
+const notifyRolesOnce = async ({
+  contract,
+  roles,
+  type,
+  title,
+  message,
+  priority = 'high',
+  actionUrl = `/contracts/${contract._id}?tab=payments`,
+  actionLabel = 'Review payment',
+  department = 'accounting'
+}) => {
   const alreadySent = await Notification.exists({ contract: contract._id, type, title });
   if (alreadySent) {
     return false;
   }
 
-  const users = await User.find({ role: { $in: roles }, isActive: true }).select('_id');
+  const users = await User.find({ role: { $in: roles }, isActive: true }).select('_id role');
   if (users.length === 0) {
     return false;
   }
@@ -115,9 +146,9 @@ const notifyRolesOnce = async ({ contract, roles, type, title, message, priority
     title,
     message,
     contract: contract._id,
-    actionUrl: `/contracts/${contract._id}?tab=payments`,
-    actionLabel: 'Review payment',
-    department: 'accounting',
+    actionUrl,
+    actionLabel,
+    department: department || DEPARTMENT_BY_ROLE[user.role] || 'accounting',
     priority
   })));
 
@@ -166,7 +197,12 @@ const runPaymentComplianceSweep = async () => {
             type: 'deadline_reminder',
             title: `Post-event checks ready: ${contract.contractNumber}`,
             message: `${contract.clientName}'s event on ${formatDate(contract.eventDate)} has ended. You can now begin your post-event inventory checks for the returned items (and report any incidents). Accounting will close the contract once all checks are complete.`,
-            priority: 'high'
+            priority: 'high',
+            // Goes to the inventory checklist, not the payments tab, and is
+            // tagged with each recipient's own department.
+            actionUrl: `/contracts/${contract._id}?tab=inventory`,
+            actionLabel: 'Start post-event checks',
+            department: null
           });
           if (sent) summary.notified += 1;
         }
