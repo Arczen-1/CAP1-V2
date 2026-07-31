@@ -60,6 +60,10 @@ const POST_EVENT_SECTION_BY_DEPARTMENT = {
   stockroom: 'equipmentChecklist'
 };
 
+// Departments whose draft-stage task is to validate their own inventory section.
+// The sectionConfirmations key matches the department name.
+const INVENTORY_DEPARTMENTS = ['creative', 'linen', 'stockroom'];
+
 // Contract-backed notifications resolve against the contract's own state.
 const isContractNotificationDone = (notification, contract) => {
   if (!contract || !contract.status) {
@@ -137,6 +141,41 @@ const isContractNotificationDone = (notification, contract) => {
     return false;
   }
 
+  // Draft-stage inventory validation: an inventory department's task is done the
+  // moment it confirms its own section. departmentProgress tracks later item
+  // preparation, so it never reflects this validation step (this was the reported
+  // bug — Creative validated but the tag stayed red). Also resolves once the
+  // contract moves past draft, since the validation window has then closed.
+  if (INVENTORY_DEPARTMENTS.includes(notification.department)
+    && (text.includes('validation needed') || text.includes('validate inventory') || text.includes('inventory changed'))) {
+    return Boolean(contract.sectionConfirmations?.[notification.department]?.confirmed)
+      || status !== 'draft';
+  }
+
+  // Draft-stage Sales prompts (confirm the payment term, react to a department's
+  // validation) resolve once the payment arrangement is confirmed or the contract
+  // has been sent onward past draft.
+  if (notification.department === 'sales'
+    && (text.includes('payment term') || text.includes('payment arrangement')
+      || text.includes('validation complete') || text.includes('confirmed for'))) {
+    return Boolean(contract.sectionConfirmations?.payments?.confirmed)
+      || status !== 'draft';
+  }
+
+  // "Ready to close" is done only when the contract is actually closed. Accounting
+  // progress reaches 100 at approval — long before closing — so the progress
+  // fallback below would mark this done far too early.
+  if (text.includes('ready to close') || text.includes('awaiting close') || text.includes('close contract')) {
+    return status === 'completed';
+  }
+
+  // The initial "approved event ready for logistics" task is done once the cargo
+  // truck is assigned. Requiring full dispatch (progress 100) would keep it red
+  // through most of the event's life.
+  if (notification.department === 'logistics' && notification.type === 'contract_approved') {
+    return Boolean(contract.logisticsAssignment?.truck);
+  }
+
   if (notification.department && contract.departmentProgress) {
     const progress = contract.departmentProgress[notification.department];
     if (typeof progress === 'number') {
@@ -156,7 +195,7 @@ router.get('/', auth, async (req, res) => {
       // item documents carry inline image data URIs and would bloat the payload.
       // logisticsAssignment.truck and staffTransport.vehicles let the transport
       // lead-time reminder resolve once transport is booked.
-      .populate('contract', 'contractNumber clientName status eventDate clientSigned paymentStatus departmentProgress paymentHold logisticsAssignment.truck staffTransport.vehicles creativeAssets.postEventStatus linenRequirements.postEventStatus equipmentChecklist.postEventStatus')
+      .populate('contract', 'contractNumber clientName status eventDate clientSigned paymentStatus departmentProgress paymentHold sectionConfirmations logisticsAssignment.truck staffTransport.vehicles creativeAssets.postEventStatus linenRequirements.postEventStatus equipmentChecklist.postEventStatus')
       .populate('procurementRequest', 'requestNumber status department accounting fulfillment')
       .sort({ createdAt: -1 })
       .limit(50);
@@ -252,3 +291,6 @@ router.post('/', auth, async (req, res) => {
 });
 
 module.exports = router;
+// Exported for the resolver test harness (test/notificationDone.test.js).
+module.exports.isContractNotificationDone = isContractNotificationDone;
+module.exports.isProcurementNotificationDone = isProcurementNotificationDone;

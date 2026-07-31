@@ -2912,7 +2912,8 @@ router.post('/:id/staff-transport/auto-assign', auth, requireRole(['logistics', 
     }
 
     // Only passenger-tagged vehicles carry staff — never the back of a cargo truck.
-    // Exclude the cargo truck already booked for this event; use the fewest seats first.
+    // Exclude the cargo truck already booked for this event and anything already
+    // committed to another event on the same date.
     const cargoTruckId = contract.logisticsAssignment?.truck ? String(contract.logisticsAssignment.truck) : null;
     const sameDayStaffTruckIds = await getSameDayStaffTruckIds(contract);
     const candidates = (await Truck.find({ status: { $in: ['available', 'in_use'] }, passengerVehicle: true }))
@@ -2921,17 +2922,31 @@ router.post('/:id/staff-transport/auto-assign', auth, requireRole(['logistics', 
       .filter((truck) => getPassengerSeats(truck) > 0)
       // A vehicle can only be auto-booked if it already has a driver — staff
       // transport must never end up with a car and no one to drive it.
-      .filter((truck) => Boolean(truck.assignedDriver))
-      .sort((a, b) => getPassengerSeats(b) - getPassengerSeats(a));
+      .filter((truck) => Boolean(truck.assignedDriver));
 
     const chosen = [];
     let totalCapacity = 0;
-    for (const truck of candidates) {
-      if (totalCapacity >= staffCount) {
-        break;
+
+    // Prefer the smallest single vehicle that seats everyone: sending a 45-seat
+    // bus for 13 staff wastes a vehicle another event may need that day.
+    const singleFit = candidates
+      .filter((truck) => getPassengerSeats(truck) >= staffCount)
+      .sort((a, b) => getPassengerSeats(a) - getPassengerSeats(b))[0];
+
+    if (singleFit) {
+      chosen.push(singleFit);
+      totalCapacity = getPassengerSeats(singleFit);
+    } else {
+      // Nothing seats the whole team alone, so combine — largest first, which
+      // reaches the headcount using the fewest vehicles.
+      const byLargest = [...candidates].sort((a, b) => getPassengerSeats(b) - getPassengerSeats(a));
+      for (const truck of byLargest) {
+        if (totalCapacity >= staffCount) {
+          break;
+        }
+        chosen.push(truck);
+        totalCapacity += getPassengerSeats(truck);
       }
-      chosen.push(truck);
-      totalCapacity += getPassengerSeats(truck);
     }
 
     if (chosen.length === 0) {

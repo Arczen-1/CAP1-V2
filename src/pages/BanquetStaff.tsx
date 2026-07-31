@@ -35,10 +35,11 @@ const employmentTypes = [
 interface BanquetStaffMember {
   _id: string;
   employeeId: string;
-  firstName: string;
-  lastName: string;
-  fullName: string;
-  email: string;
+  firstName?: string;
+  lastName?: string;
+  // Derived by a Mongoose pre-validate hook; absent on records imported around it.
+  fullName?: string;
+  email?: string;
   role: string;
   employmentType: string;
   phone?: string;
@@ -184,9 +185,9 @@ export default function BanquetStaff() {
   const openEditDialog = (staff: BanquetStaffMember) => {
     setSelectedStaff(staff);
     setFormData({
-      firstName: staff.firstName,
-      lastName: staff.lastName,
-      email: staff.email,
+      firstName: staff.firstName || '',
+      lastName: staff.lastName || '',
+      email: staff.email || '',
       phone: staff.phone || '',
       role: staff.role,
       employmentType: staff.employmentType,
@@ -234,10 +235,20 @@ export default function BanquetStaff() {
     return colors[role] || 'bg-gray-100 text-gray-800';
   };
 
+  // fullName is derived by a Mongoose hook, so records imported around it can be
+  // missing it. Every searchable value is treated as optional — one incomplete
+  // record must never blank the whole page.
+  const getStaffName = (member: BanquetStaffMember) => (
+    member.fullName
+    || [member.firstName, member.lastName].filter(Boolean).join(' ')
+    || member.employeeId
+    || 'Unnamed staff'
+  );
+
   const filteredStaff = staff.filter(member => {
-    const matchesSearch = member.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         member.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         member.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const needle = searchTerm.trim().toLowerCase();
+    const matchesSearch = !needle || [getStaffName(member), member.employeeId, member.email]
+      .some((value) => (value || '').toLowerCase().includes(needle));
     const matchesRole = selectedRole === 'all' || member.role === selectedRole;
     return matchesSearch && matchesRole;
   });
@@ -425,7 +436,7 @@ export default function BanquetStaff() {
                             <User className="h-4 w-4" />
                           </div>
                           <div>
-                            <p className="font-medium text-sm">{member.fullName}</p>
+                            <p className="font-medium text-sm">{getStaffName(member)}</p>
                             <p className="text-xs text-muted-foreground">{member.employeeId}</p>
                           </div>
                         </div>

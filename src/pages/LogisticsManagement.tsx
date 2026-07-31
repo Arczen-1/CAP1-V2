@@ -41,14 +41,15 @@ const licenseTypes = [
 interface Driver {
   _id: string;
   driverId: string;
-  firstName: string;
-  lastName: string;
-  fullName: string;
-  licenseNumber: string;
-  licenseType: string;
+  firstName?: string;
+  lastName?: string;
+  // Derived by a Mongoose pre-validate hook; absent on records imported around it.
+  fullName?: string;
+  licenseNumber?: string;
+  licenseType?: string;
   licenseExpiry?: string;
   phone?: string;
-  assignedTrucks: Truck[];
+  assignedTrucks?: Truck[];
 }
 
 interface Truck {
@@ -339,10 +340,10 @@ export default function LogisticsManagement() {
   const openEditDriverDialog = (driver: Driver) => {
     setSelectedDriver(driver);
     setDriverForm({
-      firstName: driver.firstName,
-      lastName: driver.lastName,
-      licenseNumber: driver.licenseNumber,
-      licenseType: driver.licenseType,
+      firstName: driver.firstName || '',
+      lastName: driver.lastName || '',
+      licenseNumber: driver.licenseNumber || '',
+      licenseType: driver.licenseType || 'professional',
       licenseExpiry: driver.licenseExpiry ? driver.licenseExpiry.split('T')[0] : '',
       phone: driver.phone || ''
     });
@@ -401,15 +402,29 @@ export default function LogisticsManagement() {
     return truckTypes.find(t => t.value === type)?.label || type;
   };
 
+  // Records imported outside the Mongoose hooks can be missing derived fields such
+  // as fullName, so every searchable value is treated as optional. A single record
+  // with a missing field previously threw here and blanked the whole page.
+  const matchesSearch = (term: string, ...values: (string | undefined | null)[]) => {
+    const needle = term.trim().toLowerCase();
+    if (!needle) return true;
+    return values.some((value) => (value || '').toLowerCase().includes(needle));
+  };
+
+  // Prefer the stored full name, fall back to the name parts, then the driver ID.
+  const getDriverName = (driver: Driver) => (
+    driver.fullName
+    || [driver.firstName, driver.lastName].filter(Boolean).join(' ')
+    || driver.driverId
+    || 'Unnamed driver'
+  );
+
   const filteredDrivers = drivers.filter(driver =>
-    driver.fullName.toLowerCase().includes(driverSearch.toLowerCase()) ||
-    driver.driverId.toLowerCase().includes(driverSearch.toLowerCase()) ||
-    driver.licenseNumber.toLowerCase().includes(driverSearch.toLowerCase())
+    matchesSearch(driverSearch, getDriverName(driver), driver.driverId, driver.licenseNumber)
   );
 
   const filteredTrucks = trucks.filter(truck =>
-    truck.plateNumber.toLowerCase().includes(truckSearch.toLowerCase()) ||
-    truck.truckId.toLowerCase().includes(truckSearch.toLowerCase())
+    matchesSearch(truckSearch, truck.plateNumber, truck.truckId)
   );
 
   const approvedContracts = contracts
@@ -618,7 +633,7 @@ export default function LogisticsManagement() {
                                 <User className="h-4 w-4" />
                               </div>
                               <div>
-                                <p className="font-medium text-sm">{driver.fullName || driver.driverId}</p>
+                                <p className="font-medium text-sm">{getDriverName(driver)}</p>
                                 <p className="text-xs text-muted-foreground">{driver.driverId}</p>
                               </div>
                             </div>
@@ -631,8 +646,8 @@ export default function LogisticsManagement() {
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex flex-wrap gap-1">
-                              {driver.assignedTrucks?.length > 0 ? (
-                                driver.assignedTrucks.map((truck) => (
+                              {(driver.assignedTrucks || []).length > 0 ? (
+                                (driver.assignedTrucks || []).map((truck) => (
                                   <Badge key={truck._id} variant="outline">{truck.plateNumber}</Badge>
                                 ))
                               ) : (
