@@ -409,6 +409,10 @@ interface OperationsSummary {
       truckType: string;
       status: string;
       capacityVolume: number;
+      // Metro Manila number coding for this event's date and venue.
+      coded?: boolean;
+      codingReason?: string;
+      codingApplies?: boolean;
       assignedDriver?: {
         _id: string;
         fullName: string;
@@ -5024,6 +5028,8 @@ export default function ContractDetail() {
                 truckType: savedLogisticsTruck.truckType,
                 status: savedLogisticsTruck.status || 'assigned_to_this_event',
                 capacityVolume: savedLogisticsTruck.capacity?.volume || 0,
+                // Already booked for this event, so it stays selectable.
+                coded: false,
                 assignedDriver: savedLogisticsDriver
                   ? {
                       _id: savedLogisticsDriver._id,
@@ -5044,6 +5050,8 @@ export default function ContractDetail() {
           truckType: savedLogisticsTruck.truckType,
           status: savedLogisticsTruck.status || 'assigned_to_this_event',
           capacityVolume: savedLogisticsTruck.capacity?.volume || 0,
+          // Already booked for this event, so it stays selectable.
+          coded: false,
           assignedDriver: savedLogisticsDriver
             ? {
                 _id: savedLogisticsDriver._id,
@@ -7054,6 +7062,12 @@ export default function ContractDetail() {
 
                       <TabsContent value="booking" className="mt-4 space-y-4">
                     <div className="space-y-4">
+                      {operationsSummary?.logistics.numberCoding?.active ? (
+                        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                          <span className="font-medium">Metro Manila number coding · {operationsSummary.logistics.numberCoding.weekday}</span>
+                          <p className="mt-0.5">{operationsSummary.logistics.numberCoding.note}</p>
+                        </div>
+                      ) : null}
                       <Card className="border-slate-200 bg-slate-50/50">
                         <CardHeader className="pb-3">
                           <CardTitle className="text-base">Booking Overview</CardTitle>
@@ -7138,8 +7152,11 @@ export default function ContractDetail() {
                                     <SelectContent>
                                       <SelectItem value="__none__">No truck assigned yet</SelectItem>
                                       {logisticsTruckOptions.map((truck) => (
-                                        <SelectItem key={truck._id} value={truck._id}>
+                                        // Number-coded plates stay listed so the reason is visible,
+                                        // but cannot be selected for this event date.
+                                        <SelectItem key={truck._id} value={truck._id} disabled={Boolean(truck.coded)}>
                                           {truck.plateNumber} ({truck.truckType.replace(/_/g, ' ')}, {truck.capacityVolume || 0} m3)
+                                          {truck.coded ? ' — number-coded' : ''}
                                         </SelectItem>
                                       ))}
                                     </SelectContent>
@@ -7312,8 +7329,11 @@ export default function ContractDetail() {
                                   <SelectContent>
                                     <SelectItem value="__none__">No truck assigned</SelectItem>
                                     {operationsSummary.logistics.availableTrucks.map(truck => (
-                                      <SelectItem key={truck._id} value={truck._id}>
+                                      // Number-coded plates stay listed so the reason is visible,
+                                      // but cannot be selected for this event date.
+                                      <SelectItem key={truck._id} value={truck._id} disabled={Boolean(truck.coded)}>
                                         {truck.plateNumber} ({truck.truckType.replace(/_/g, ' ')})
+                                        {truck.coded ? ' — number-coded' : ''}
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
@@ -7361,14 +7381,18 @@ export default function ContractDetail() {
                           <div className="space-y-2">
                             {operationsSummary.logistics.availableTrucks.length > 0 ? (
                               operationsSummary.logistics.availableTrucks.map(truck => (
-                                <div key={truck._id} className="flex items-center justify-between rounded-md border p-3 text-sm">
+                                <div key={truck._id} className={`flex items-center justify-between rounded-md border p-3 text-sm ${truck.coded ? 'border-amber-300 bg-amber-50/60' : ''}`}>
                                   <div>
                                     <p className="font-medium">{truck.plateNumber}</p>
                                     <p className="text-muted-foreground capitalize">
                                       {truck.truckType.replace(/_/g, ' ')} • {truck.capacityVolume || 0} m3
                                     </p>
                                   </div>
-                                  <Badge variant="outline">{truck.status.replace(/_/g, ' ')}</Badge>
+                                  {truck.coded ? (
+                                    <Badge variant="outline" className="border-amber-300 bg-amber-100 text-amber-900">Number-coded</Badge>
+                                  ) : (
+                                    <Badge variant="outline">{truck.status.replace(/_/g, ' ')}</Badge>
+                                  )}
                                 </div>
                               ))
                             ) : (

@@ -1342,13 +1342,15 @@ const buildOperationsSummary = async (contract) => {
     }
   }).select('creativeAssets linenRequirements equipmentChecklist logisticsAssignment staffTransport banquetAssignment assignedSupervisor eventDate contractNumber');
 
-  // Passenger vehicles already booked for staff transport on the same day (other
-  // active contracts) — excluded from this event's staff-transport options so one
-  // van is never offered to two same-day events.
+  // Vehicles and drivers already committed to staff transport on the same day by
+  // other active contracts. A van or a person can only be in one place at a time,
+  // so these are excluded from this event's options.
   const sameDayStaffTruckIds = new Set();
+  const sameDayStaffDriverIds = new Set();
   sameDayContracts.forEach((other) => {
     (other.staffTransport?.vehicles || []).forEach((vehicle) => {
       if (vehicle?.truck) sameDayStaffTruckIds.add(String(vehicle.truck));
+      if (vehicle?.driver) sameDayStaffDriverIds.add(String(vehicle.driver));
     });
   });
 
@@ -1568,27 +1570,38 @@ const buildOperationsSummary = async (contract) => {
 
   const assignedDriverId = contract.logisticsAssignment?.driver ? String(contract.logisticsAssignment.driver) : '';
   const assignedTruckId = contract.logisticsAssignment?.truck ? String(contract.logisticsAssignment.truck) : '';
-  const reservedDriverIds = new Set(
-    sameDayContracts
+  // A driver or vehicle booked anywhere on this date is unavailable — it makes no
+  // difference whether the other event has it hauling inventory or carrying staff.
+  const reservedDriverIds = new Set([
+    ...sameDayContracts
       .map(entry => entry.logisticsAssignment?.driver)
       .filter(Boolean)
-      .map(value => String(value))
-  );
-  const reservedTruckIds = new Set(
-    sameDayContracts
+      .map(value => String(value)),
+    ...sameDayStaffDriverIds
+  ]);
+  const reservedTruckIds = new Set([
+    ...sameDayContracts
       .map(entry => entry.logisticsAssignment?.truck)
       .filter(Boolean)
-      .map(value => String(value))
-  );
+      .map(value => String(value)),
+    ...sameDayStaffTruckIds
+  ]);
 
   const availableDrivers = activeDrivers.filter(driver => {
     const driverId = String(driver._id);
     return driverId === assignedDriverId || !reservedDriverIds.has(driverId);
   });
 
+  // Cargo fleet only. Passenger vehicles (vans, coasters, buses, SUVs) are for
+  // staff transport and carry no load volume, so they are not offered here — the
+  // two bookings are deliberately separate. A passenger vehicle already saved as
+  // this event's cargo truck stays listed so an existing booking still resolves.
   const availableTrucks = activeTrucks.filter(truck => {
     const truckId = String(truck._id);
-    return truckId === assignedTruckId || !reservedTruckIds.has(truckId);
+    if (truckId === assignedTruckId) {
+      return true;
+    }
+    return !truck.passengerVehicle && !reservedTruckIds.has(truckId);
   });
 
   const sortedTrucks = [...availableTrucks].sort((left, right) => {
@@ -1779,10 +1792,12 @@ const buildOperationsSummary = async (contract) => {
       })),
       // Passenger-tagged vehicles offered for the (separate) staff transport
       // booking, excluding the cargo truck already booked for this event.
+      // Excludes this event's own cargo truck, plus anything another same-day
+      // event already has booked (cargo or staff).
       staffTransportVehicles: activeTrucks
         .filter((truck) => truck.passengerVehicle
           && String(truck._id) !== String(assignedTruckId || '')
-          && !sameDayStaffTruckIds.has(String(truck._id)))
+          && !reservedTruckIds.has(String(truck._id)))
         .map((truck) => ({
           _id: truck._id,
           truckId: truck.truckId,
@@ -2786,6 +2801,14 @@ router.put('/:id/logistics-assignment', auth, requireRole(['logistics', 'admin']
         return res.status(400).json({ message: 'Selected truck is not available for dispatch' });
       }
 
+      // Mirror of the staff-transport rule: passenger vehicles carry people, not
+      // cargo. Skipped when it is already this event's saved truck, so existing
+      // bookings can still be edited.
+      const isAlreadyAssignedTruck = String(contract.logisticsAssignment?.truck || '') === String(truckId);
+      if (truck.passengerVehicle && !isAlreadyAssignedTruck) {
+        return res.status(400).json({ message: `${truck.plateNumber || 'That vehicle'} is a passenger vehicle for staff transport, so it cannot be booked to carry the event inventory. Choose a cargo truck.` });
+      }
+
       // Metro Manila number coding applies to the delivery truck too. Admin may
       // override for an exempt vehicle or a window-hours schedule.
       const truckCoding = evaluateVehicleCoding({
@@ -2809,6 +2832,21 @@ router.put('/:id/logistics-assignment', auth, requireRole(['logistics', 'admin']
     if (truckConflict) {
       return res.status(409).json({
         message: `${truck?.plateNumber ? `Truck ${truck.plateNumber}` : 'This truck'} is already booked for ${truckConflict.contractNumber} on ${formatDateLabel(contract.eventDate)}. Choose another truck for this event.`
+      });
+    }
+
+    // The checks above only compare against other events' cargo bookings. A truck
+    // or driver may instead be committed to another event's staff transport that
+    // same day, which is just as unavailable.
+    const sameDayReservations = await getSameDayReservations(contract);
+    if (truckId && sameDayReservations.truckIds.has(String(truckId))) {
+      return res.status(409).json({
+        message: `${truck?.plateNumber ? `Truck ${truck.plateNumber}` : 'This truck'} is already booked for another event on ${formatDateLabel(contract.eventDate)}. Choose another truck for this event.`
+      });
+    }
+    if (driverId && sameDayReservations.driverIds.has(String(driverId))) {
+      return res.status(409).json({
+        message: `${driver?.fullName || 'This driver'} is already booked for another event on ${formatDateLabel(contract.eventDate)}. Choose another driver for this event.`
       });
     }
 
@@ -2905,23 +2943,32 @@ const describeTruckCoding = (truck, contract) => {
 // Passenger vehicles already committed to staff transport on the SAME event date
 // by other active contracts. Used to avoid double-booking one van across two
 // same-day events (mirrors the same-day conflict handling for the cargo truck).
-const getSameDayStaffTruckIds = async (contract) => {
-  const ids = new Set();
+// Every vehicle and driver another active event already holds on this date,
+// across BOTH bookings — the cargo assignment and staff transport. A truck or a
+// person can only be in one place at a time, so anything in here is unavailable.
+const getSameDayReservations = async (contract) => {
+  const truckIds = new Set();
+  const driverIds = new Set();
   if (!contract?.eventDate) {
-    return ids;
+    return { truckIds, driverIds };
   }
+
   const sameDayContracts = await Contract.find({
     _id: { $ne: contract._id },
     status: { $in: ACTIVE_CONTRACT_STATUSES },
     eventDate: { $gte: startOfDay(contract.eventDate), $lte: endOfDay(contract.eventDate) },
-  }).select('staffTransport.vehicles.truck');
+  }).select('logisticsAssignment.truck logisticsAssignment.driver staffTransport.vehicles.truck staffTransport.vehicles.driver');
 
   sameDayContracts.forEach((other) => {
+    if (other.logisticsAssignment?.truck) truckIds.add(String(other.logisticsAssignment.truck));
+    if (other.logisticsAssignment?.driver) driverIds.add(String(other.logisticsAssignment.driver));
     (other.staffTransport?.vehicles || []).forEach((vehicle) => {
-      if (vehicle?.truck) ids.add(String(vehicle.truck));
+      if (vehicle?.truck) truckIds.add(String(vehicle.truck));
+      if (vehicle?.driver) driverIds.add(String(vehicle.driver));
     });
   });
-  return ids;
+
+  return { truckIds, driverIds };
 };
 
 const populateStaffTransport = (query) => query
@@ -2949,14 +2996,16 @@ router.post('/:id/staff-transport/auto-assign', auth, requireRole(['logistics', 
     // Exclude the cargo truck already booked for this event and anything already
     // committed to another event on the same date.
     const cargoTruckId = contract.logisticsAssignment?.truck ? String(contract.logisticsAssignment.truck) : null;
-    const sameDayStaffTruckIds = await getSameDayStaffTruckIds(contract);
+    const sameDayReservations = await getSameDayReservations(contract);
     const candidates = (await Truck.find({ status: { $in: ['available', 'in_use'] }, passengerVehicle: true }))
       .filter((truck) => String(truck._id) !== cargoTruckId)
-      .filter((truck) => !sameDayStaffTruckIds.has(String(truck._id)))
+      .filter((truck) => !sameDayReservations.truckIds.has(String(truck._id)))
       .filter((truck) => getPassengerSeats(truck) > 0)
       // A vehicle can only be auto-booked if it already has a driver — staff
       // transport must never end up with a car and no one to drive it.
       .filter((truck) => Boolean(truck.assignedDriver))
+      // ...and that driver must not already be committed elsewhere that day.
+      .filter((truck) => !sameDayReservations.driverIds.has(String(truck.assignedDriver)))
       // Metro Manila number coding: a plate barred from the venue on the event
       // date is never auto-selected.
       .filter((truck) => !evaluateVehicleCoding({
@@ -3046,9 +3095,12 @@ router.put('/:id/staff-transport', auth, requireRole(['logistics', 'admin']), as
     const vehiclesInput = Array.isArray(req.body?.vehicles) ? req.body.vehicles : [];
     const cargoTruckId = contract.logisticsAssignment?.truck ? String(contract.logisticsAssignment.truck) : null;
     const staffCount = getStaffHeadcount(contract);
-    const sameDayStaffTruckIds = await getSameDayStaffTruckIds(contract);
+    const sameDayReservations = await getSameDayReservations(contract);
+    const sameDayStaffTruckIds = sameDayReservations.truckIds;
 
     const seenTruckIds = new Set();
+    // One person cannot drive two vehicles for the same event either.
+    const seenDriverIds = new Set();
     const vehicles = [];
     for (const entry of vehiclesInput) {
       const truckId = entry?.truckId ? String(entry.truckId) : '';
@@ -3099,6 +3151,19 @@ router.put('/:id/staff-transport', auth, requireRole(['logistics', 'admin']), as
       const driver = await Driver.findById(driverId);
       if (!driver) {
         return res.status(404).json({ message: 'Selected driver was not found.' });
+      }
+
+      if (seenDriverIds.has(driverId)) {
+        return res.status(400).json({ message: `${driver.fullName || 'That driver'} is already driving another vehicle for this event. Assign a different driver.` });
+      }
+      seenDriverIds.add(driverId);
+
+      if (sameDayReservations.driverIds.has(driverId)) {
+        return res.status(409).json({ message: `${driver.fullName || 'That driver'} is already booked for another event on ${formatDateLabel(contract.eventDate)}. Choose a different driver.` });
+      }
+
+      if (String(contract.logisticsAssignment?.driver || '') === driverId) {
+        return res.status(400).json({ message: `${driver.fullName || 'That driver'} is already driving the inventory truck for this event and cannot also drive staff transport.` });
       }
 
       vehicles.push({ truck: truck._id, driver: driverId, passengerCapacity: getPassengerSeats(truck) });
