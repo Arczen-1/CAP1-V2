@@ -417,16 +417,27 @@ interface OperationsSummary {
     }>;
     staffTransportVehicles?: Array<{
       _id: string;
+      truckType: string;
       truckId: string;
       plateNumber: string;
-      truckType: string;
       passengerCapacity: number;
+      // Metro Manila number coding for this event's date and venue.
+      coded?: boolean;
+      codingReason?: string;
+      codingApplies?: boolean;
       assignedDriver?: {
         _id: string;
         fullName: string;
         driverId: string;
       } | null;
     }>;
+    numberCoding?: {
+      active: boolean;
+      inCodingZone: boolean;
+      weekday: string;
+      codedDigits: number[];
+      note: string;
+    };
     recommendedTruck?: {
       _id: string;
       truckId: string;
@@ -6929,6 +6940,13 @@ export default function ContractDetail() {
                           {seatsShort > 0 ? <div className="font-medium text-red-700">{seatsShort} seat(s) short</div> : <div className="font-medium text-emerald-700">Everyone has a seat</div>}
                         </div>
 
+                        {operationsSummary?.logistics.numberCoding?.active ? (
+                          <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                            <span className="font-medium">Metro Manila number coding · {operationsSummary.logistics.numberCoding.weekday}</span>
+                            <p className="mt-0.5">{operationsSummary.logistics.numberCoding.note}</p>
+                          </div>
+                        ) : null}
+
                         {staffHeadcount === 0 ? (
                           <p className="text-sm text-muted-foreground">Assign the banquet team first — there is no one to transport yet.</p>
                         ) : canManageLogistics ? (
@@ -6943,14 +6961,22 @@ export default function ContractDetail() {
                                 {staffVehicleOptions.map((vehicle) => {
                                   const selected = vehicle._id in staffTransportDraft;
                                   const needsDriver = selected && !staffTransportDraft[vehicle._id];
+                                  // Number-coded plates cannot enter the venue that day, so the
+                                  // option is shown (for transparency) but not selectable.
+                                  const isCoded = Boolean(vehicle.coded);
                                   return (
-                                    <div key={vehicle._id} className={`rounded-lg border p-3 ${needsDriver ? 'border-red-300 bg-red-50/60' : selected ? 'border-primary bg-primary/5' : 'border-slate-200'}`}>
+                                    <div key={vehicle._id} className={`rounded-lg border p-3 ${isCoded ? 'border-amber-300 bg-amber-50/60 opacity-70' : needsDriver ? 'border-red-300 bg-red-50/60' : selected ? 'border-primary bg-primary/5' : 'border-slate-200'}`}>
                                       <div className="flex flex-wrap items-center justify-between gap-3">
-                                        <label className="flex items-center gap-3">
-                                          <input type="checkbox" checked={selected} onChange={() => toggleStaffTransportVehicle(vehicle._id, vehicle.assignedDriver?._id || '')} className="h-4 w-4" />
+                                        <label className={`flex items-center gap-3 ${isCoded ? 'cursor-not-allowed' : ''}`}>
+                                          <input type="checkbox" checked={selected} disabled={isCoded} onChange={() => toggleStaffTransportVehicle(vehicle._id, vehicle.assignedDriver?._id || '')} className="h-4 w-4" />
                                           <span>
                                             <span className="font-medium">{vehicle.plateNumber}</span>
                                             <span className="text-muted-foreground"> · {(vehicle.truckType || '').replace(/_/g, ' ')} · {vehicle.passengerCapacity} seats</span>
+                                            {isCoded ? (
+                                              <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900">
+                                                Number-coded
+                                              </span>
+                                            ) : null}
                                           </span>
                                         </label>
                                         {selected ? (

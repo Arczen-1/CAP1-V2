@@ -13,6 +13,7 @@ const StockroomInventory = require('../models/StockroomInventory');
 const BanquetStaff = require('../models/BanquetStaff');
 const User = require('../models/User');
 const { Driver, Truck } = require('../models/Logistics');
+const { evaluateVehicleCoding, getEventCodingSummary } = require('../utils/numberCoding');
 const { reconcileTruckStatus } = require('../logisticsStatusSync');
 const { auth, requireRole } = require('../middleware/auth');
 
@@ -1756,6 +1757,9 @@ const buildOperationsSummary = async (contract) => {
         phone: driver.phone,
         status: driver.status
       })),
+      // Metro Manila number coding for this event's date and venue. Stated once
+      // here so the UI can explain the restriction without repeating it per row.
+      numberCoding: getEventCodingSummary({ eventDate: contract.eventDate, venue: contract.venue }),
       availableTrucks: availableTrucks.map(truck => ({
         _id: truck._id,
         truckId: truck.truckId,
@@ -1763,6 +1767,8 @@ const buildOperationsSummary = async (contract) => {
         truckType: truck.truckType,
         status: truck.status,
         capacityVolume: truck.capacity?.volume || 0,
+        // `coded` vehicles are barred from the venue that day; the UI disables them.
+        ...describeTruckCoding(truck, contract),
         assignedDriver: truck.assignedDriver
           ? {
               _id: truck.assignedDriver._id,
@@ -1783,6 +1789,7 @@ const buildOperationsSummary = async (contract) => {
           plateNumber: truck.plateNumber,
           truckType: truck.truckType,
           passengerCapacity: getPassengerSeats(truck),
+          ...describeTruckCoding(truck, contract),
           assignedDriver: truck.assignedDriver
             ? {
                 _id: truck.assignedDriver._id,
@@ -2778,6 +2785,17 @@ router.put('/:id/logistics-assignment', auth, requireRole(['logistics', 'admin']
       if (!['available', 'in_use'].includes(truck.status)) {
         return res.status(400).json({ message: 'Selected truck is not available for dispatch' });
       }
+
+      // Metro Manila number coding applies to the delivery truck too. Admin may
+      // override for an exempt vehicle or a window-hours schedule.
+      const truckCoding = evaluateVehicleCoding({
+        plateNumber: truck.plateNumber,
+        eventDate: contract.eventDate,
+        venue: contract.venue
+      });
+      if (truckCoding.coded && req.user.role !== 'admin') {
+        return res.status(400).json({ message: `${truckCoding.reason} Choose a truck with a different ending plate digit, or ask management to approve an exemption.` });
+      }
     }
 
     const driverConflict = driverId && conflictingContracts.find(entry => String(entry.logisticsAssignment?.driver || '') === String(driverId));
@@ -2868,6 +2886,22 @@ const getStaffHeadcount = (contract) => (
   (contract.banquetAssignment?.assignments || []).length + (contract.assignedSupervisor ? 1 : 0)
 );
 
+// Metro Manila number coding for one vehicle against one event, flattened onto
+// the vehicle option so the UI can disable and label it without recomputing.
+const describeTruckCoding = (truck, contract) => {
+  const result = evaluateVehicleCoding({
+    plateNumber: truck.plateNumber,
+    eventDate: contract.eventDate,
+    venue: contract.venue
+  });
+
+  return {
+    coded: result.coded,
+    codingReason: result.reason,
+    codingApplies: result.applies
+  };
+};
+
 // Passenger vehicles already committed to staff transport on the SAME event date
 // by other active contracts. Used to avoid double-booking one van across two
 // same-day events (mirrors the same-day conflict handling for the cargo truck).
@@ -2922,7 +2956,14 @@ router.post('/:id/staff-transport/auto-assign', auth, requireRole(['logistics', 
       .filter((truck) => getPassengerSeats(truck) > 0)
       // A vehicle can only be auto-booked if it already has a driver — staff
       // transport must never end up with a car and no one to drive it.
-      .filter((truck) => Boolean(truck.assignedDriver));
+      .filter((truck) => Boolean(truck.assignedDriver))
+      // Metro Manila number coding: a plate barred from the venue on the event
+      // date is never auto-selected.
+      .filter((truck) => !evaluateVehicleCoding({
+        plateNumber: truck.plateNumber,
+        eventDate: contract.eventDate,
+        venue: contract.venue
+      }).coded);
 
     const chosen = [];
     let totalCapacity = 0;
@@ -2950,7 +2991,11 @@ router.post('/:id/staff-transport/auto-assign', auth, requireRole(['logistics', 
     }
 
     if (chosen.length === 0) {
-      return res.status(400).json({ message: 'No driver-paired passenger vehicles are available. In Drivers & Trucks, tag vehicles as passenger vehicles (with seat capacity) and assign each a driver, or book staff transport manually.' });
+      const codingSummary = getEventCodingSummary({ eventDate: contract.eventDate, venue: contract.venue });
+      const codingNote = codingSummary.active
+        ? ` ${codingSummary.note}`
+        : '';
+      return res.status(400).json({ message: `No driver-paired passenger vehicles are available. In Drivers & Trucks, tag vehicles as passenger vehicles (with seat capacity) and assign each a driver, or book staff transport manually.${codingNote}` });
     }
 
     const seatsShort = Math.max(0, staffCount - totalCapacity);
@@ -3029,6 +3074,17 @@ router.put('/:id/staff-transport', auth, requireRole(['logistics', 'admin']), as
       }
       if (!truck.passengerVehicle) {
         return res.status(400).json({ message: `${truck.plateNumber || 'This vehicle'} is not tagged as a passenger vehicle, so it cannot carry staff.` });
+      }
+
+      // Metro Manila number coding. Admin may override for an exempt vehicle or
+      // a window-hours schedule; everyone else is blocked.
+      const staffCoding = evaluateVehicleCoding({
+        plateNumber: truck.plateNumber,
+        eventDate: contract.eventDate,
+        venue: contract.venue
+      });
+      if (staffCoding.coded && req.user.role !== 'admin') {
+        return res.status(400).json({ message: `${staffCoding.reason} Choose a vehicle with a different ending plate digit, or ask management to approve an exemption.` });
       }
 
       // Every staff-transport vehicle must have a driver — a car with no one to

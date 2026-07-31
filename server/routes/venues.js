@@ -1,5 +1,6 @@
 const express = require('express');
 const { auth } = require('../middleware/auth');
+const { isMetroManilaVenue } = require('../utils/numberCoding');
 
 const router = express.Router();
 
@@ -54,8 +55,25 @@ const VENUES = {
   }
 };
 
+// Each venue is tagged with whether it sits inside the Metro Manila number-coding
+// zone, so Sales can see at booking time that vehicle choice will be restricted.
+// Derived from the address rather than hardcoded, keeping one source of truth
+// with the logistics-side checks.
 router.get('/', auth, (req, res) => {
-  res.json(VENUES);
+  const tagged = Object.fromEntries(
+    Object.entries(VENUES).map(([name, venue]) => {
+      const inZone = isMetroManilaVenue({ name, address: venue.address });
+      return [name, {
+        ...venue,
+        numberCodingZone: inZone,
+        codingNote: inZone
+          ? 'Inside Metro Manila: vehicle plates are number-coded on the event weekday.'
+          : 'Outside Metro Manila: number coding does not apply.'
+      }];
+    })
+  );
+
+  res.json(tagged);
 });
 
 module.exports = router;
