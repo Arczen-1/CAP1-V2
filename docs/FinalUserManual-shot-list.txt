@@ -1,0 +1,4 @@
+All screenshots complete (Pass 3, 2026-08-02).
+
+New figures captured and embedded (7): signature-ready PDF, accounting procurement queue, monthly budget editor, logistics workflow (Inventory Transport), staff transportation, load & dispatch readiness/manifest, return reconciliation.
+Outdated screenshots replaced (3): Kitchen Dashboard (Items relabel), Reports page (expanded analytics), Contract Summary tab (Payment Term N/A).
