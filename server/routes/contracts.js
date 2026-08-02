@@ -3595,8 +3595,17 @@ router.post('/:id/payment', auth, requireRole(['accounting', 'admin']), [
       });
     }
 
+    // `paymentSchema.date` has no default, so omitting it stored `undefined`
+    // and the payment history rendered "Invalid Date". The collection timeline
+    // depends on this field, so it is never left to chance.
+    const paymentDate = req.body.date ? new Date(req.body.date) : new Date();
+    if (Number.isNaN(paymentDate.getTime())) {
+      return res.status(400).json({ message: 'Payment date is not a valid date.' });
+    }
+
     contract.payments.push({
       ...req.body,
+      date: paymentDate,
       amount,
       receiptIssuedBy: 'Juan Carlos',
       receiptGeneratedAt: new Date(),

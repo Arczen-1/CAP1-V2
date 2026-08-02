@@ -19,3 +19,6 @@ agent-artifacts/runs/*.log
 
 # Thesis source PDFs are large binaries — keep them out of git history.
 docs/thesis/*.pdf
+
+# Temporary walkthrough screenshot bootstrap (contains dev seed credentials)
+public/_shot.html

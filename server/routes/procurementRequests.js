@@ -457,15 +457,42 @@ router.post('/', auth, async (req, res) => {
       }
     }
 
+    // The stored field is `inventoryItem` but the route reads `inventoryItemId`.
+    // A caller posting the stored name used to be ignored, the request created
+    // anyway, and the omission only surfaced at fulfilment — two departments
+    // later. Accept either spelling.
+    const resolvedInventoryItemId = inventoryItemId || req.body?.inventoryItem || null;
+
     let inventoryItem = null;
-    if (inventoryItemId) {
-      if (!mongoose.isValidObjectId(inventoryItemId)) {
+    if (resolvedInventoryItemId) {
+      if (!mongoose.isValidObjectId(resolvedInventoryItemId)) {
         return res.status(400).json({ message: 'Invalid inventory item selected' });
       }
 
-      inventoryItem = await departmentConfig.model.findById(inventoryItemId);
+      inventoryItem = await departmentConfig.model.findById(resolvedInventoryItemId);
       if (!inventoryItem) {
         return res.status(404).json({ message: 'Inventory item not found' });
+      }
+    }
+
+    // A shortage must name the item it is short of: `inventoryItem` is never
+    // assigned after creation, so a request without it can never be marked
+    // fulfilled. The contract form omits the id for items with no catalogue
+    // link, so try to resolve one from the code or name before giving up.
+    const normalizedSource = ['contract_shortage', 'inventory_low_stock', 'manual'].includes(source) ? source : 'manual';
+    if (normalizedSource === 'contract_shortage' && !inventoryItem) {
+      const code = String(itemCode || '').trim();
+      const name = String(itemName || '').trim();
+      if (code) {
+        inventoryItem = await departmentConfig.model.findOne({ itemCode: code });
+      }
+      if (!inventoryItem && name) {
+        inventoryItem = await departmentConfig.model.findOne({ name });
+      }
+      if (!inventoryItem) {
+        return res.status(400).json({
+          message: 'This shortage could not be matched to an item in the department inventory. Link the item first — a request without one cannot be marked fulfilled later.'
+        });
       }
     }
 
@@ -477,7 +504,7 @@ router.post('/', auth, async (req, res) => {
     const normalizedRequisitionType = normalizeRequisitionType({
       value: requisitionType,
       requestType,
-      inventoryItemId
+      inventoryItemId: resolvedInventoryItemId
     });
     const slaSnapshot = buildSlaSnapshot(normalizedRequisitionType, normalizedNeededBy);
 
@@ -492,7 +519,7 @@ router.post('/', auth, async (req, res) => {
       department,
       requestType,
       requisitionType: normalizedRequisitionType,
-      source: ['contract_shortage', 'inventory_low_stock', 'manual'].includes(source) ? source : 'manual',
+      source: normalizedSource,
       sourceSection: String(sourceSection || '').trim(),
       contract: contract?._id || null,
       eventDate: contract?.eventDate || null,

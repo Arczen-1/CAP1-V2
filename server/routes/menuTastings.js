@@ -72,6 +72,31 @@ const sanitizeMenuItems = (value) => {
     .slice(0, 60);
 };
 
+// The sub-document field is `itemName`. Posting `name` (or any other spelling)
+// used to be silently discarded and still return 201, so the caller believed
+// the dishes were saved. Name the dropped entries instead of losing them.
+const describeDroppedMenuItems = (value) => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item, index) => {
+      const hasItemName = typeof item?.itemName === 'string' && item.itemName.trim().length > 0;
+      if (hasItemName) {
+        return null;
+      }
+      // Only complain about entries that clearly meant to name a dish.
+      const alias = ['name', 'dish', 'dishName', 'item', 'title', 'label']
+        .find((key) => typeof item?.[key] === 'string' && item[key].trim().length > 0);
+      if (!alias) {
+        return null;
+      }
+      return `entry ${index + 1} used "${alias}" instead of "itemName" (value: ${String(item[alias]).trim()})`;
+    })
+    .filter(Boolean);
+};
+
 const getLinkedContractId = (tasting) => {
   if (!tasting?.contract) {
     return '';
@@ -223,6 +248,14 @@ router.post('/', auth, requireRole(['sales', 'admin']), tastingValidation, async
           message: `The ${req.body.tastingTime} slot on that date is already booked. Please choose another slot.`,
         });
       }
+    }
+
+    const droppedMenuItems = describeDroppedMenuItems(req.body.menuItems);
+    if (droppedMenuItems.length) {
+      return res.status(400).json({
+        message: `${droppedMenuItems.length} menu item(s) could not be read. Each dish must use the field "itemName".`,
+        errors: droppedMenuItems.map((detail) => ({ field: 'menuItems', message: detail }))
+      });
     }
 
     const tasting = new MenuTasting({

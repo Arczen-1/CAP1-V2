@@ -3866,7 +3866,13 @@ export default function ContractDetail() {
         return false;
     }
   });
-  const activeTab = visibleTabs.includes(rawActiveTab) ? rawActiveTab : visibleTabs[0] || 'details';
+  // Tab permissions are derived from the loaded contract, so until it arrives
+  // `visibleTabs` collapses and any requested tab would look unauthorised. Hold
+  // the requested tab while loading and only fall back once we can really tell.
+  const canResolveTabs = Boolean(contract) && !isLoading;
+  const activeTab = !canResolveTabs
+    ? rawActiveTab
+    : visibleTabs.includes(rawActiveTab) ? rawActiveTab : visibleTabs[0] || 'details';
   const canManageBanquet = (isAdmin() || isBanquet() || isSales()) && Boolean(contract && ['approved', 'completed'].includes(contract.status));
   const banquetSummary = operationsSummary?.banquet;
   const banquetSelectedAssignments = banquetSummary?.selectedAssignments || [];
@@ -4022,7 +4028,9 @@ export default function ContractDetail() {
   const banquetDecisionReady = banquetDecisionChecks.every((check) => check.ready);
 
   useEffect(() => {
-    if (visibleTabs.includes(rawActiveTab)) {
+    // Rewriting the URL before the contract loads would drop the requested tab
+    // permanently — the deep-link would be lost even once permissions resolve.
+    if (!canResolveTabs || visibleTabs.includes(rawActiveTab)) {
       return;
     }
 
@@ -4033,7 +4041,7 @@ export default function ContractDetail() {
       next.set('tab', activeTab);
     }
     setSearchParams(next, { replace: true });
-  }, [activeTab, rawActiveTab, searchParams, setSearchParams, visibleTabs]);
+  }, [activeTab, canResolveTabs, rawActiveTab, searchParams, setSearchParams, visibleTabs]);
 
   useEffect(() => {
     if (!contract || !canManageLogistics || contract.status !== 'approved' || isOperationsLoading) {
