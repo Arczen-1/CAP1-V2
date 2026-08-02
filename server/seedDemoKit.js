@@ -101,6 +101,7 @@ const run = async () => {
     Contract.deleteMany({ contractNumber: new RegExp(`^${TAG}`) }),
     ProcurementRequest.deleteMany({ requestNumber: new RegExp(`^${TAG}`) }),
     Incident.deleteMany({ description: new RegExp(`^\\[${TAG}\\]`) }),
+    LinenInventory.deleteMany({ itemCode: 'DK-LN-90' }),
   ]);
   summary.push(`Cleared previous demo kit: ${wipes[0].deletedCount} contracts, ${wipes[1].deletedCount} requests, ${wipes[2].deletedCount} incidents.`);
 
@@ -117,6 +118,26 @@ const run = async () => {
       || await Supplier.findOne();
   }
   const linenItem = await LinenInventory.findOne({ status: 'available' }).sort({ availableQuantity: -1 });
+
+  // Part 5 needs an item that genuinely runs out. Picking an existing line by
+  // "most available" guarantees the opposite — the winner had 7,660 units, so
+  // 220 + 180 reserved against it produced no shortage and the scenario showed
+  // nothing. Use a dedicated DK item stocked to exactly what event A reserves,
+  // so event B is short by its full requirement and no real stock is touched.
+  const SAMEDAY_STOCK = 220;
+  await LinenInventory.deleteMany({ itemCode: 'DK-LN-90' });
+  const sameDayLinen = await LinenInventory.create({
+    name: 'DK Seat Cover Black (same-day demo)',
+    itemCode: 'DK-LN-90',
+    category: 'Chair Cover',
+    quantity: SAMEDAY_STOCK,
+    availableQuantity: SAMEDAY_STOCK,
+    status: 'available',
+    color: 'Black',
+    material: 'Spandex',
+    size: 'medium',
+    unitPrice: 45,
+  });
   const stockItem = await StockroomInventory.findOne({ status: 'available' }).sort({ availableQuantity: -1 });
   const creativeItem = await CreativeInventory.findOne({ status: 'available' }).sort({ availableQuantity: -1 });
 
@@ -242,10 +263,11 @@ const run = async () => {
   // compliance sweep would put both contracts on hold and mask the scenario.
   const sameDay = day(85);
   const scarceLinen = {
-    type: linenItem?.name || 'Table Napkin Champagne',
-    itemCode: linenItem?.itemCode || 'DK-LN-90',
-    category: linenItem?.category || 'Napkin',
-    quantity: 220,
+    itemId: sameDayLinen._id,
+    type: sameDayLinen.name,
+    itemCode: sameDayLinen.itemCode,
+    category: sameDayLinen.category,
+    quantity: SAMEDAY_STOCK,
     status: 'pending',
   };
   const sameDayA = await Contract.create(contractBase({
