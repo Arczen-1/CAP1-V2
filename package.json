@@ -19,7 +19,8 @@
     "rebuild:legacy:curated": "node server/rebuildLegacyInventoryCurated.js",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "seed:demokit": "node server/seedDemoKit.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
