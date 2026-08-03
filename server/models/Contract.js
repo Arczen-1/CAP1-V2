@@ -136,8 +136,28 @@ const signedDocumentSchema = new mongoose.Schema({
   }
 }, { _id: false });
 
+// Provenance for an item that was swapped after being reported damaged, lost,
+// or spoiled. The material freeze locks what the event is owed, not which
+// physical unit satisfies it, so a like-for-like replacement stays permitted
+// inside the freeze window - but only through the incident-backed path, and it
+// always leaves this trail. Mixed into all three material sections.
+const replacementProvenance = {
+  replacedFrom: String,
+  replacementReason: String,
+  replacementIncident: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Incident'
+  },
+  replacedAt: Date,
+  replacedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }
+};
+
 // Creative Assets Schema - Connected to database
 const creativeAssetSchema = new mongoose.Schema({
+  ...replacementProvenance,
   itemId: String,
   item: {
     type: String,
@@ -177,6 +197,7 @@ const creativeAssetSchema = new mongoose.Schema({
 });
 
 const equipmentChecklistItemSchema = new mongoose.Schema({
+  ...replacementProvenance,
   itemId: String,
   item: String,
   itemCode: String,
@@ -199,6 +220,7 @@ const equipmentChecklistItemSchema = new mongoose.Schema({
 });
 
 const linenRequirementSchema = new mongoose.Schema({
+  ...replacementProvenance,
   itemId: String,
   type: String,
   itemCode: String,

@@ -2686,6 +2686,128 @@ router.post('/:id/complete', auth, requireRole(['accounting', 'admin']), async (
 // Cancel a contract. Per policy a cancellation needs a formal letter reviewed
 // by Execom outside the system, so only management records the outcome here.
 // The reservation fee and any collected milestones stay non-refundable.
+// Replace a reserved material item that was damaged, lost, or spoiled.
+//
+// The material freeze locks what the event is owed, not which physical unit
+// satisfies it. Blocking every edit inside the freeze window meant a department
+// that broke something four days out could report it but not fix it, and had to
+// find an admin. This is the controlled path: it swaps one item for an
+// equivalent at the same quantity, so nothing can be quietly withdrawn from the
+// event, and it always records an incident so the change leaves a trail.
+//
+// Quantity is deliberately not editable here - reducing what the event receives
+// is exactly what the freeze exists to prevent, and remains admin-only.
+router.post('/:id/material-replacement', auth, async (req, res) => {
+  try {
+    const { section, itemIndex, replacementName, replacementItemId, replacementItemCode, reason, incidentType } = req.body || {};
+
+    const sectionRules = INVENTORY_STATUS_RULES[section];
+    if (!sectionRules) {
+      return res.status(400).json({ message: 'Unknown material section.' });
+    }
+    if (!sectionRules.allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ message: `Only ${sectionRules.allowedRoles.join(' or ')} may replace items in this section.` });
+    }
+
+    const trimmedReason = String(reason || '').trim();
+    if (trimmedReason.length < 5) {
+      return res.status(400).json({ message: 'Describe what happened to the item - this is recorded as the incident report.' });
+    }
+
+    const newName = String(replacementName || '').trim();
+    if (!newName) {
+      return res.status(400).json({ message: 'A replacement item is required.' });
+    }
+
+    const contract = await Contract.findById(req.params.id);
+    if (!contract) {
+      return res.status(404).json({ message: 'Contract not found' });
+    }
+
+    const items = contract[section] || [];
+    const index = Number(itemIndex);
+    if (!Number.isInteger(index) || index < 0 || index >= items.length) {
+      return res.status(400).json({ message: 'Checklist item not found' });
+    }
+
+    const target = items[index];
+    // Linen names its item field "type"; creative and stockroom use "item".
+    const nameField = section === 'linenRequirements' ? 'type' : 'item';
+    const previousName = target[nameField];
+
+    const allowedIncidentTypes = ['damaged_equipment', 'missing_item', 'burnt_cloth', 'food_spoilage', 'other'];
+    const resolvedIncidentType = allowedIncidentTypes.includes(incidentType) ? incidentType : 'damaged_equipment';
+
+    const incident = await Incident.create({
+      contract: contract._id,
+      department: sectionRules.incidentDepartment,
+      incidentType: resolvedIncidentType,
+      description: `${previousName} replaced with ${newName}: ${trimmedReason}`,
+      sourceSection: section,
+      inventoryItemName: previousName,
+      inventoryItemCode: target.itemCode,
+      affectedQuantity: target.quantity || 1,
+      eventDate: contract.eventDate,
+      reportedBy: req.user._id,
+      severity: isMaterialFreezeActive(contract) ? 'high' : 'medium'
+    });
+
+    target[nameField] = newName;
+    target.itemId = replacementItemId || undefined;
+    target.itemCode = replacementItemCode || undefined;
+    // The replacement has not been prepared yet, so preparation restarts for
+    // this item only. Everything else on the contract keeps its status.
+    target.status = 'pending';
+    target.replacedFrom = previousName;
+    target.replacementReason = trimmedReason;
+    target.replacementIncident = incident._id;
+    target.replacedAt = new Date();
+    target.replacedBy = req.user._id;
+
+    contract.departmentProgress[sectionRules.progressKey] =
+      calculateProgressFromItems(items, sectionRules.readyStatuses);
+    contract.internalNotes = [
+      contract.internalNotes,
+      `${formatDateLabel(new Date())}: ${previousName} replaced with ${newName} (${trimmedReason}) by ${req.user.role}.`
+    ].filter(Boolean).join('\n');
+
+    await contract.save();
+
+    const replacementTitle = `Item replaced${isMaterialFreezeActive(contract) ? ' inside freeze window' : ''}: ${contract.contractNumber}`;
+    const replacementMessage = `${previousName} was replaced with ${newName} for ${contract.clientName}'s event on ${formatDateLabel(contract.eventDate)}. Reason: ${trimmedReason}. The quantity is unchanged, so the event still receives what it was promised; the replacement item is back to pending preparation.`;
+
+    await notifyDepartmentsForContract({
+      contract,
+      departments: ['accounting', sectionRules.incidentDepartment],
+      type: 'incident_reported',
+      title: replacementTitle,
+      message: replacementMessage,
+      priority: 'high',
+      actionLabel: 'View contract',
+      excludeUserId: req.user._id
+    });
+
+    // Admin is not a department in the routing map, but a freeze-window
+    // exception is exactly what management needs to see, so notify it directly.
+    await notifyRolesForContract({
+      contract,
+      roles: ['admin'],
+      type: 'incident_reported',
+      title: replacementTitle,
+      message: replacementMessage,
+      priority: 'high',
+      actionUrl: buildContractActionUrl(contract, 'details'),
+      actionLabel: 'View contract',
+      excludeUserId: req.user._id
+    });
+
+    res.json({ contract, incident });
+  } catch (error) {
+    console.error('Material replacement failed:', error.message);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 router.post('/:id/cancel', auth, requireRole(['admin']), async (req, res) => {
   try {
     const reason = String(req.body?.reason || '').trim();
