@@ -288,6 +288,21 @@ class ApiService {
     });
   }
 
+  // Swap a damaged, lost, or spoiled item for an equivalent. Permitted inside
+  // the material freeze because the quantity is unchanged - see the route.
+  async replaceMaterialItem(id: string, data: {
+    section: string;
+    itemIndex: number;
+    replacementName: string;
+    reason: string;
+    incidentType?: string;
+  }) {
+    return this.request(`/contracts/${id}/material-replacement`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
   async updateInventoryPostEventStatus(id: string, data: any) {
     return this.request(`/contracts/${id}/inventory-post-event-status`, {
       method: 'PUT',

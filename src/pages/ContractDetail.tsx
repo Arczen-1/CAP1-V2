@@ -857,6 +857,20 @@ export default function ContractDetail() {
     description: '',
     attachmentUrl: '',
   });
+  // Report-and-replace: swaps a damaged/lost/spoiled item for an equivalent.
+  // Allowed inside the material freeze because the quantity never changes.
+  const [replaceDialogOpen, setReplaceDialogOpen] = useState(false);
+  const [replaceTarget, setReplaceTarget] = useState<{
+    section: InventorySectionKey;
+    index: number;
+    item: InventorySummaryItem;
+  } | null>(null);
+  const [replaceSubmitting, setReplaceSubmitting] = useState(false);
+  const [replaceForm, setReplaceForm] = useState({
+    replacementName: '',
+    reason: '',
+    incidentType: 'damaged_equipment',
+  });
   const [procurementRequestForm, setProcurementRequestForm] = useState({
     requestType: 'purchase',
     requisitionType: 'purchase_requisition',
@@ -1711,6 +1725,50 @@ export default function ContractDetail() {
       fetchContractData();
     } catch (error: any) {
       toast.error(error.message || 'Failed to update post-event check');
+    }
+  };
+
+  const openReplaceDialog = (section: InventorySectionKey, index: number, item: InventorySummaryItem) => {
+    setReplaceTarget({ section, index, item });
+    setReplaceForm({
+      replacementName: '',
+      reason: '',
+      incidentType: section === 'linenRequirements' ? 'burnt_cloth' : 'damaged_equipment',
+    });
+    setReplaceDialogOpen(true);
+  };
+
+  const handleReplaceMaterialItem = async () => {
+    if (!replaceTarget) {
+      return;
+    }
+
+    if (!replaceForm.replacementName.trim()) {
+      toast.error('Enter the replacement item');
+      return;
+    }
+    if (replaceForm.reason.trim().length < 5) {
+      toast.error('Describe what happened - this is recorded as the incident report');
+      return;
+    }
+
+    try {
+      setReplaceSubmitting(true);
+      await api.replaceMaterialItem(id!, {
+        section: replaceTarget.section,
+        itemIndex: replaceTarget.index,
+        replacementName: replaceForm.replacementName.trim(),
+        reason: replaceForm.reason.trim(),
+        incidentType: replaceForm.incidentType,
+      });
+      toast.success('Item replaced and incident recorded');
+      setReplaceDialogOpen(false);
+      setReplaceTarget(null);
+      fetchContractData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to replace item');
+    } finally {
+      setReplaceSubmitting(false);
     }
   };
 
@@ -3815,6 +3873,27 @@ export default function ContractDetail() {
                               </p>
                             )}
                           </div>
+                          {/* Something went wrong with the physical item. The
+                              freeze locks what the event is owed, not which
+                              unit satisfies it, so a like-for-like swap stays
+                              available - it just always files an incident. */}
+                          {canEdit ? (
+                            <div className="mt-3">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openReplaceDialog(sectionKey, index, item)}
+                              >
+                                Report Damage Or Loss &amp; Replace
+                              </Button>
+                              {operationsSummary?.materialFreeze?.active ? (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  Materials are frozen, but a like-for-like replacement is still allowed and is recorded as an incident.
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
                       )}
                     </div>
@@ -7857,6 +7936,72 @@ export default function ContractDetail() {
                 </Button>
                 <Button type="button" variant="destructive" onClick={handleSubmitInventoryIncident}>
                   Submit Incident Report
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={replaceDialogOpen} onOpenChange={setReplaceDialogOpen}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Report Damage Or Loss And Replace</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="rounded-lg border bg-muted/20 px-4 py-3 text-sm">
+                <p className="font-medium">{replaceTarget?.item.itemName}</p>
+                <p className="text-muted-foreground">
+                  {replaceTarget?.item.requestedQuantity} reserved for this event
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  The quantity stays the same, so this event still receives what it was
+                  promised. An incident is filed automatically and the replacement returns
+                  to pending preparation.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>What happened?</Label>
+                <Select
+                  value={replaceForm.incidentType}
+                  onValueChange={(value) => setReplaceForm((prev) => ({ ...prev, incidentType: value }))}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="damaged_equipment">Damaged</SelectItem>
+                    <SelectItem value="missing_item">Missing or lost</SelectItem>
+                    <SelectItem value="burnt_cloth">Burnt or stained cloth</SelectItem>
+                    <SelectItem value="food_spoilage">Spoiled</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Replacement item</Label>
+                <Input
+                  value={replaceForm.replacementName}
+                  onChange={(event) => setReplaceForm((prev) => ({ ...prev, replacementName: event.target.value }))}
+                  placeholder="Which item is going in its place?"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Explanation (recorded as the incident report)</Label>
+                <Textarea
+                  rows={3}
+                  value={replaceForm.reason}
+                  onChange={(event) => setReplaceForm((prev) => ({ ...prev, reason: event.target.value }))}
+                  placeholder="e.g. Six chargers cracked in storage and cannot be used."
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setReplaceDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="button" onClick={handleReplaceMaterialItem} disabled={replaceSubmitting}>
+                  {replaceSubmitting ? 'Replacing...' : 'Replace Item'}
                 </Button>
               </div>
             </div>
