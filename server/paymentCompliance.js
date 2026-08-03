@@ -155,6 +155,60 @@ const notifyRolesOnce = async ({
   return true;
 };
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Recurring reminder. notifyRolesOnce deliberately never repeats, which is
+// right for a milestone but leaves an account that is already overdue silent
+// until the next deadline - a month of nothing while the balance sits
+// uncollected. This re-fires on a fixed cadence for as long as the condition
+// holds.
+//
+// The title carries the number of days outstanding, so each reminder is
+// naturally distinct (the once-per-title dedup cannot collapse them) and the
+// recipient can see how long this has been running without opening anything.
+// Cadence is measured from the newest notification of the same type on the
+// same contract, so re-running the sweep four times a day cannot stack them.
+const notifyRolesRecurring = async ({
+  contract,
+  roles,
+  type,
+  everyDays = 7,
+  title,
+  message,
+  priority = 'high',
+  actionUrl = `/contracts/${contract._id}?tab=payments`,
+  actionLabel = 'Review payment',
+  department = 'accounting'
+}) => {
+  const [latest] = await Notification.find({ contract: contract._id, type })
+    .sort({ createdAt: -1 })
+    .limit(1)
+    .lean();
+
+  if (latest && Date.now() - new Date(latest.createdAt).getTime() < everyDays * DAY_MS) {
+    return false;
+  }
+
+  const users = await User.find({ role: { $in: roles }, isActive: true }).select('_id role');
+  if (users.length === 0) {
+    return false;
+  }
+
+  await Notification.insertMany(users.map((user) => ({
+    recipient: user._id,
+    type,
+    title,
+    message,
+    contract: contract._id,
+    actionUrl,
+    actionLabel,
+    department: department || DEPARTMENT_BY_ROLE[user.role] || 'accounting',
+    priority
+  })));
+
+  return true;
+};
+
 let sweepRunning = false;
 
 const runPaymentComplianceSweep = async () => {
@@ -163,7 +217,7 @@ const runPaymentComplianceSweep = async () => {
   }
 
   sweepRunning = true;
-  const summary = { checked: 0, notified: 0, held: [], released: [] };
+  const summary = { checked: 0, notified: 0, held: [], released: [], reminded: [] };
 
   try {
     const now = new Date();
@@ -233,6 +287,28 @@ const runPaymentComplianceSweep = async () => {
         if (sent) summary.notified += 1;
       }
 
+      // Between the down payment due date and the end of the aging window the
+      // account is overdue but nothing else fires, so collections would hear
+      // nothing for 30 days. Remind weekly for as long as it stays unpaid.
+      // Starts a week after the due date so the first reminder does not land on
+      // the same day as the milestone task above.
+      const daysOverdue = milestones.downPaymentSatisfied
+        ? 0
+        : Math.floor((now - startOfDay(milestones.fortyPercentDueDate)) / DAY_MS);
+
+      if (!milestones.downPaymentSatisfied && daysOverdue >= 7 && !milestones.uncollectible) {
+        const sent = await notifyRolesRecurring({
+          contract,
+          roles: ['accounting'],
+          type: 'payment_followup',
+          everyDays: 7,
+          title: `Still uncollected after ${daysOverdue} day${daysOverdue === 1 ? '' : 's'}: ${contract.contractNumber}`,
+          message: `${contract.clientName}'s ${dpLabel} collection of ${formatAmount(milestones.requiredDownPayment)} has been outstanding since ${formatDate(milestones.fortyPercentDueDate)}. The 30-day aging window ends ${formatDate(milestones.agingEndsAt)}, after which the account is marked uncollectible. This reminder repeats weekly until the payment is recorded.`,
+          priority: 'high'
+        });
+        if (sent) { summary.notified += 1; summary.reminded.push(contract.contractNumber); }
+      }
+
       // Aging window expired without payment: the account is uncollectible.
       if (milestones.uncollectible) {
         const sent = await notifyRolesOnce({
@@ -282,6 +358,25 @@ const runPaymentComplianceSweep = async () => {
             message: `${contract.clientName}'s event on ${formatDate(contract.eventDate)} is on hold. The remaining balance of ${formatAmount(milestones.remainingBalance)} was not collected by ${formatDate(milestones.finalBalanceDueDate)}. Preparation is blocked until payment is settled or management releases the hold. The PHP 30,000 reservation fee and the 40% collection remain non-refundable; refunds require a formal cancellation letter and Execom review.`
           });
           continue;
+        }
+
+        // A contract already on hold otherwise goes quiet until the event. The
+        // balance is still owed and preparation is still blocked, so repeat the
+        // notice weekly while the hold stands.
+        if (contract.paymentHold?.active && now < eventStart) {
+          const heldSince = contract.paymentHold.startedAt || milestones.finalBalanceDueDate;
+          const daysHeld = Math.max(1, Math.floor((now - startOfDay(heldSince)) / DAY_MS));
+          const daysToEvent = Math.max(0, Math.ceil((eventStart - now) / DAY_MS));
+          const sent = await notifyRolesRecurring({
+            contract,
+            roles: ['accounting', 'sales', 'admin'],
+            type: 'contract_on_hold',
+            everyDays: 7,
+            title: `Still on hold after ${daysHeld} day${daysHeld === 1 ? '' : 's'}: ${contract.contractNumber}`,
+            message: `${contract.clientName}'s event is ${daysToEvent} day${daysToEvent === 1 ? '' : 's'} away and remains on hold. ${formatAmount(milestones.remainingBalance)} is still outstanding and preparation stays blocked until it is settled or management releases the hold. This reminder repeats weekly while the hold is active.`,
+            department: null
+          });
+          if (sent) { summary.notified += 1; summary.reminded.push(contract.contractNumber); }
         }
 
         // Milestone 2 notification: final 60% balance due 2 months before the event.

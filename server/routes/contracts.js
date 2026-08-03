@@ -2714,17 +2714,77 @@ router.post('/:id/cancel', auth, requireRole(['admin']), async (req, res) => {
     }
     await contract.save();
 
+    // Cancelling an event frees everything that was held for it. Telling each
+    // department only to "stop preparation" leaves the reserved stock, staff,
+    // and vehicles committed to a date that no longer has an event, so each
+    // one is told what specifically it needs to release.
     const involvedDepartments = ['sales', 'accounting', 'kitchen', 'banquet', 'logistics', ...getInventoryValidationDepartments(contract)];
-    await notifyDepartmentsForContract({
+    const releaseInstructions = {
+      creative: 'Release the decorations and creative assets reserved for this event - they are available again for other bookings on that date.',
+      linen: 'Release the linens reserved for this event - they are available again for other bookings on that date.',
+      stockroom: 'Release the equipment reserved for this event - it is available again for other bookings on that date.',
+      kitchen: 'Stop all sourcing and preparation for this event. Do not proceed with any remaining ingredient purchases.',
+      logistics: 'Cancel the truck, driver, and staff transport bookings held for this event date so the vehicles are free for other events.',
+      banquet: 'Release the staff assigned to this event - they are available again for other events on that date.',
+      accounting: 'Stop any further purchase or rental spending for this event. Open requisitions that were not yet approved have been voided automatically; anything already approved needs your decision. Collected payments remain non-refundable pending Execom review.',
+      sales: 'No further action is required on the booking. Collected payments remain non-refundable pending Execom review.'
+    };
+
+    await Promise.all([...new Set(involvedDepartments)].map((department) => notifyDepartmentsForContract({
       contract,
-      departments: involvedDepartments,
+      departments: [department],
       type: 'contract_auto_cancelled',
-      title: `Contract cancelled: ${contract.contractNumber}`,
-      message: `${contract.clientName}'s event on ${formatDateLabel(contract.eventDate)} was cancelled by management. Reason: ${reason}. Stop preparation for this event; collected payments remain non-refundable pending Execom review.`,
+      title: `Contract cancelled - release resources: ${contract.contractNumber}`,
+      message: `${contract.clientName}'s event on ${formatDateLabel(contract.eventDate)} was cancelled by management. Reason: ${reason}. `
+        + (releaseInstructions[department] || 'Stop preparation for this event and release anything reserved for it.'),
       priority: 'high',
       actionLabel: 'View contract',
       excludeUserId: req.user._id
+    })));
+
+    // Open procurement for a cancelled event is never correct. Requests that
+    // have not yet been approved carry no committed spend, so they are voided
+    // outright. Anything already approved may already have been bought, so it
+    // is left alone and raised with Accounting and Purchasing instead of being
+    // silently cancelled.
+    const voidable = await ProcurementRequest.find({
+      contract: contract._id,
+      status: { $in: ['requested', 'awaiting_accounting_approval'] }
     });
+
+    for (const request of voidable) {
+      request.status = 'cancelled';
+      request.requestNotes = [request.requestNotes, `Voided automatically on ${formatDateLabel(new Date())}: contract ${contract.contractNumber} was cancelled.`]
+        .filter(Boolean)
+        .join('\n');
+      await request.save();
+    }
+
+    const committed = await ProcurementRequest.find({
+      contract: contract._id,
+      status: { $in: ['approved', 'proof_submitted', 'proof_needs_revision'] }
+    }).select('requestNumber itemName').lean();
+
+    if (voidable.length > 0 || committed.length > 0) {
+      const parts = [];
+      if (voidable.length > 0) {
+        parts.push(`${voidable.length} unapproved request(s) were voided automatically (${voidable.map((r) => r.requestNumber).join(', ')}).`);
+      }
+      if (committed.length > 0) {
+        parts.push(`${committed.length} already-approved request(s) need a decision because the item may already have been purchased: ${committed.map((r) => r.requestNumber).join(', ')}.`);
+      }
+
+      await notifyDepartmentsForContract({
+        contract,
+        departments: ['accounting', 'purchasing'],
+        type: 'contract_auto_cancelled',
+        title: `Procurement affected by cancellation: ${contract.contractNumber}`,
+        message: `${contract.clientName}'s event was cancelled. ${parts.join(' ')}`,
+        priority: 'high',
+        actionLabel: 'Review requests',
+        excludeUserId: req.user._id
+      });
+    }
 
     res.json(contract);
   } catch (error) {
