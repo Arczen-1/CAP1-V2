@@ -286,6 +286,78 @@ export const getProcurementLocationText = (request: ProcurementRequest) => [
   request.requestReason,
 ].filter(Boolean).join(' ').toLowerCase();
 
+export interface SupplierVerificationCheck {
+  label: string;
+  passed: boolean;
+  detail: string;
+}
+
+// The basis for Accounting's "Supplier verified" tick.
+//
+// Purchasing verifies the supplier can DELIVER - right item, has stock, can
+// meet the date. Accounting verifies the supplier is PAYABLE - that money is
+// being released to an accredited business on file, cleared for this kind of
+// spend, and reachable afterwards for the receipt and proof trail. The two
+// checks answer different questions, and keeping them apart is the ordinary
+// separation of duties: whoever chooses the vendor does not also release the
+// funds to them.
+export const getSupplierVerificationChecks = (
+  request: ProcurementRequest,
+): SupplierVerificationCheck[] => {
+  const supplier = request.quote?.supplier;
+  const quotedName = request.quote?.supplierName;
+
+  if (!supplier) {
+    return [{
+      label: 'Accredited supplier on file',
+      passed: false,
+      detail: quotedName
+        ? `"${quotedName}" was typed in by hand and is not linked to a supplier in the directory. There is no accredited record to pay against.`
+        : 'No supplier has been recorded on this quotation yet.',
+    }];
+  }
+
+  const departments = supplier.departments || [];
+  const requestTypes = supplier.requestTypes || [];
+  const contactable = Boolean(supplier.contactPerson || supplier.phone || supplier.email);
+
+  return [
+    {
+      label: 'Accredited supplier on file',
+      passed: true,
+      detail: `Linked to the directory record for ${supplier.name}${supplier.isPreferred ? ' (preferred supplier)' : ''}.`,
+    },
+    {
+      label: 'Supplier still active',
+      passed: supplier.isActive !== false,
+      detail: supplier.isActive === false
+        ? 'This supplier is marked inactive in the directory and should not receive new orders.'
+        : 'The supplier is active in the directory.',
+    },
+    {
+      label: 'Cleared for this department',
+      passed: departments.includes(request.department),
+      detail: departments.length
+        ? `Accredited for ${departments.join(', ')}; this request is from ${request.department}.`
+        : 'No departments are recorded against this supplier.',
+    },
+    {
+      label: 'Cleared for this request type',
+      passed: requestTypes.includes(request.requestType),
+      detail: requestTypes.length
+        ? `Handles ${requestTypes.join(', ')}; this request is a ${request.requestType}.`
+        : 'No request types are recorded against this supplier.',
+    },
+    {
+      label: 'Contactable for the payment trail',
+      passed: contactable,
+      detail: contactable
+        ? [supplier.contactPerson, supplier.phone, supplier.email].filter(Boolean).join(' · ')
+        : 'No contact person, phone, or email on file, so the payment and proof trail cannot be followed up.',
+    },
+  ];
+};
+
 export const scoreSupplierForRequest = (
   request: ProcurementRequest,
   supplier: ProcurementSupplierSummary,

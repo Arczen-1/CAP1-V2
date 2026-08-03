@@ -19,6 +19,7 @@ import {
   getProcurementRequisitionTypeLabel,
   getProcurementReleaseLabel,
   getProcurementReviewBasis,
+  getSupplierVerificationChecks,
   getProcurementSlaStatusLabel,
   PROCUREMENT_REQUEST_TYPE_LABELS,
   PROCUREMENT_SLA_STATUS_STYLES,
@@ -37,7 +38,10 @@ const REVIEW_FIELDS: Array<{
   {
     key: 'supplierVerified',
     label: 'Supplier verified',
-    description: 'The supplier details are complete and appropriate for the request.',
+    // Purchasing checks the supplier can deliver; Accounting checks the
+    // supplier is payable. Same separation of duties as anywhere else money
+    // moves - whoever chooses the vendor does not also release the funds.
+    description: 'The quoted supplier is an accredited directory supplier, still active, and cleared for this department and request type. See the checks below.',
   },
   {
     key: 'pricingReviewed',
@@ -415,6 +419,45 @@ export default function AccountingProcurementQueue() {
                         <p className="pt-1 text-muted-foreground">
                           Directory match: {[supplierProfile.city, supplierProfile.province].filter(Boolean).join(', ') || 'Supplier profile linked'}
                         </p>
+                      ) : null}
+                    </div>
+
+                    {/* The basis for the "Supplier verified" tick. Purchasing
+                        confirms the supplier can deliver; these are the
+                        separate checks Accounting is answering before it
+                        releases money. */}
+                    <div className="mt-4 border-t pt-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Basis for supplier verification
+                      </p>
+                      <ul className="mt-2 space-y-2">
+                        {getSupplierVerificationChecks(request).map((check) => (
+                          <li key={check.label} className="flex items-start gap-2 text-sm">
+                            {check.passed
+                              ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                              : <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />}
+                            <span>
+                              <span className={check.passed ? 'font-medium' : 'font-medium text-destructive'}>{check.label}</span>
+                              <span className="block text-xs text-muted-foreground">{check.detail}</span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      {/* The supplier directory itself sits inside the
+                          Purchasing dashboard, which Accounting cannot open,
+                          so the record is shown here rather than linked. */}
+                      {supplierProfile ? (
+                        <div className="mt-3 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+                          <p className="font-medium text-foreground">{supplierProfile.name}</p>
+                          {[supplierProfile.address, supplierProfile.city, supplierProfile.province]
+                            .filter(Boolean).length ? (
+                            <p>{[supplierProfile.address, supplierProfile.city, supplierProfile.province].filter(Boolean).join(', ')}</p>
+                          ) : null}
+                          {supplierProfile.supportedCategories?.length ? (
+                            <p className="mt-1">Supplies: {supplierProfile.supportedCategories.join(', ')}</p>
+                          ) : null}
+                          {supplierProfile.notes ? <p className="mt-1 italic">{supplierProfile.notes}</p> : null}
+                        </div>
                       ) : null}
                     </div>
                   </div>
