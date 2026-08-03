@@ -20,7 +20,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "seed:demokit": "node server/seedDemoKit.js"
+    "seed:demokit": "node server/seedDemoKit.js",
+    "seed:advisor": "node server/seedAdvisorDemo.js",
+    "seed:menunotes": "node server/seedSameDayMenuNotes.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
