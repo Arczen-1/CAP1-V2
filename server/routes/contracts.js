@@ -2755,7 +2755,7 @@ router.post('/:id/complete', auth, requireRole(['accounting', 'admin']), async (
 // is exactly what the freeze exists to prevent, and remains admin-only.
 router.post('/:id/material-replacement', auth, async (req, res) => {
   try {
-    const { section, itemIndex, replacementName, replacementItemId, replacementItemCode, reason, incidentType } = req.body || {};
+    const { section, itemIndex, replacementName, replacementItemId, replacementItemCode, reason, incidentType, affectedQuantity } = req.body || {};
 
     const sectionRules = INVENTORY_STATUS_RULES[section];
     if (!sectionRules) {
@@ -2770,11 +2770,6 @@ router.post('/:id/material-replacement', auth, async (req, res) => {
       return res.status(400).json({ message: 'Describe what happened to the item - this is recorded as the incident report.' });
     }
 
-    const newName = String(replacementName || '').trim();
-    if (!newName) {
-      return res.status(400).json({ message: 'A replacement item is required.' });
-    }
-
     const contract = await Contract.findById(req.params.id);
     if (!contract) {
       return res.status(404).json({ message: 'Contract not found' });
@@ -2787,9 +2782,60 @@ router.post('/:id/material-replacement', auth, async (req, res) => {
     }
 
     const target = items[index];
+
+    // The replacement has to be something the company actually holds. A typed
+    // name produces a line with no stock record behind it - the contract then
+    // shows "Not Linked" and no availability, which is a worse position than
+    // the damage it was meant to resolve. Where nothing suitable is in stock
+    // the correct route is a procurement request, not a line we cannot fill.
+    const INVENTORY_MODEL_BY_SECTION = {
+      creativeAssets: CreativeInventory,
+      linenRequirements: LinenInventory,
+      equipmentChecklist: StockroomInventory
+    };
+    const InventoryModel = INVENTORY_MODEL_BY_SECTION[section];
+
+    if (!replacementItemId || !mongoose.isValidObjectId(replacementItemId)) {
+      return res.status(400).json({
+        message: 'Choose the replacement from the department’s inventory. If nothing suitable is in stock, raise a purchase or rental request instead.'
+      });
+    }
+
+    const replacementItem = await InventoryModel.findById(replacementItemId);
+    if (!replacementItem) {
+      return res.status(404).json({ message: 'That replacement item is no longer in the inventory.' });
+    }
+    if (replacementItem.status !== 'available') {
+      return res.status(400).json({ message: `${replacementItem.name} is not currently available.` });
+    }
+    if (String(replacementItem._id) === String(target.itemId)) {
+      return res.status(400).json({ message: 'The replacement must be a different item from the one being replaced.' });
+    }
+
+    const newName = replacementItem.name;
     // Linen names its item field "type"; creative and stockroom use "item".
     const nameField = section === 'linenRequirements' ? 'type' : 'item';
     const previousName = target[nameField];
+
+    // How many of the line actually went wrong. Rarely the whole line - six
+    // cracked chargers out of forty is the ordinary case - so replacing all
+    // forty would overstate the loss on the incident and send the intact
+    // thirty-four back to pending for no reason.
+    const lineQuantity = Number(target.quantity) || 0;
+    const requestedAffected = affectedQuantity === undefined || affectedQuantity === null || affectedQuantity === ''
+      ? lineQuantity
+      : Number(affectedQuantity);
+
+    if (!Number.isInteger(requestedAffected) || requestedAffected < 1) {
+      return res.status(400).json({ message: 'Enter how many units are affected.' });
+    }
+    if (lineQuantity && requestedAffected > lineQuantity) {
+      return res.status(400).json({
+        message: `Only ${lineQuantity} unit(s) are reserved for this event, so at most ${lineQuantity} can be replaced.`
+      });
+    }
+
+    const isWholeLine = !lineQuantity || requestedAffected === lineQuantity;
 
     const allowedIncidentTypes = ['damaged_equipment', 'missing_item', 'burnt_cloth', 'food_spoilage', 'other'];
     const resolvedIncidentType = allowedIncidentTypes.includes(incidentType) ? incidentType : 'damaged_equipment';
@@ -2798,39 +2844,76 @@ router.post('/:id/material-replacement', auth, async (req, res) => {
       contract: contract._id,
       department: sectionRules.incidentDepartment,
       incidentType: resolvedIncidentType,
-      description: `${previousName} replaced with ${newName}: ${trimmedReason}`,
+      description: `${requestedAffected} of ${lineQuantity || requestedAffected} ${previousName} replaced with ${newName}: ${trimmedReason}`,
       sourceSection: section,
       inventoryItemName: previousName,
       inventoryItemCode: target.itemCode,
-      affectedQuantity: target.quantity || 1,
+      affectedQuantity: requestedAffected,
       eventDate: contract.eventDate,
       reportedBy: req.user._id,
       severity: isMaterialFreezeActive(contract) ? 'high' : 'medium'
     });
 
-    target[nameField] = newName;
-    target.itemId = replacementItemId || undefined;
-    target.itemCode = replacementItemCode || undefined;
-    // The replacement has not been prepared yet, so preparation restarts for
-    // this item only. Everything else on the contract keeps its status.
-    target.status = 'pending';
-    target.replacedFrom = previousName;
-    target.replacementReason = trimmedReason;
-    target.replacementIncident = incident._id;
-    target.replacedAt = new Date();
-    target.replacedBy = req.user._id;
+    const provenance = {
+      replacedFrom: previousName,
+      replacementReason: trimmedReason,
+      replacementIncident: incident._id,
+      replacedAt: new Date(),
+      replacedBy: req.user._id
+    };
+
+    // Carried from the stock record rather than the request body, so the new
+    // line is linked to real inventory and its availability resolves.
+    const replacementIdentity = {
+      itemId: String(replacementItem._id),
+      itemCode: replacementItem.itemCode || replacementItemCode || undefined,
+      category: replacementItem.category || target.category,
+      imageUrl: replacementItem.imageUrl || undefined
+    };
+
+    if (isWholeLine) {
+      target[nameField] = newName;
+      Object.assign(target, replacementIdentity);
+      // The replacement has not been prepared yet, so preparation restarts for
+      // this item only. Everything else on the contract keeps its status.
+      target.status = 'pending';
+      Object.assign(target, provenance);
+    } else {
+      // Part of the line survived. Split it: the intact units keep their name
+      // and their prepared status, and the affected units become a second line
+      // carrying the replacement. The total the event receives is unchanged,
+      // which is the freeze's whole concern.
+      target.quantity = lineQuantity - requestedAffected;
+      items.push({
+        ...target.toObject(),
+        _id: undefined,
+        [nameField]: newName,
+        ...replacementIdentity,
+        quantity: requestedAffected,
+        status: 'pending',
+        postEventStatus: 'pending_check',
+        ...provenance
+      });
+    }
 
     contract.departmentProgress[sectionRules.progressKey] =
       calculateProgressFromItems(items, sectionRules.readyStatuses);
+    const scope = isWholeLine
+      ? `all ${lineQuantity || requestedAffected}`
+      : `${requestedAffected} of ${lineQuantity}`;
+
     contract.internalNotes = [
       contract.internalNotes,
-      `${formatDateLabel(new Date())}: ${previousName} replaced with ${newName} (${trimmedReason}) by ${req.user.role}.`
+      `${formatDateLabel(new Date())}: ${scope} ${previousName} replaced with ${newName} (${trimmedReason}) by ${req.user.role}.`
     ].filter(Boolean).join('\n');
 
     await contract.save();
 
     const replacementTitle = `Item replaced${isMaterialFreezeActive(contract) ? ' inside freeze window' : ''}: ${contract.contractNumber}`;
-    const replacementMessage = `${previousName} was replaced with ${newName} for ${contract.clientName}'s event on ${formatDateLabel(contract.eventDate)}. Reason: ${trimmedReason}. The quantity is unchanged, so the event still receives what it was promised; the replacement item is back to pending preparation.`;
+    const replacementMessage = `${scope} ${previousName} was replaced with ${newName} for ${contract.clientName}'s event on ${formatDateLabel(contract.eventDate)}. Reason: ${trimmedReason}. The total quantity is unchanged, so the event still receives what it was promised`
+      + (isWholeLine
+        ? '; the replacement is back to pending preparation.'
+        : `; the remaining ${lineQuantity - requestedAffected} stay prepared and only the ${requestedAffected} replacement unit(s) return to pending.`);
 
     await notifyDepartmentsForContract({
       contract,

@@ -293,9 +293,12 @@ class ApiService {
   async replaceMaterialItem(id: string, data: {
     section: string;
     itemIndex: number;
-    replacementName: string;
+    /** A stock record, not a typed name - the new line has to link to inventory. */
+    replacementItemId: string;
     reason: string;
     incidentType?: string;
+    /** How many of the line went wrong; the rest stay as they are. */
+    affectedQuantity?: number;
   }) {
     return this.request(`/contracts/${id}/material-replacement`, {
       method: 'POST',

@@ -940,9 +940,12 @@ export default function ContractDetail() {
   } | null>(null);
   const [replaceSubmitting, setReplaceSubmitting] = useState(false);
   const [replaceForm, setReplaceForm] = useState({
-    replacementName: '',
+    // The chosen stock record, not a typed name - a replacement that is not in
+    // inventory produces a contract line with no availability behind it.
+    replacementItemId: '',
     reason: '',
     incidentType: 'damaged_equipment',
+    affectedQuantity: '',
   });
   const [procurementRequestForm, setProcurementRequestForm] = useState({
     requestType: 'purchase',
@@ -1804,9 +1807,12 @@ export default function ContractDetail() {
   const openReplaceDialog = (section: InventorySectionKey, index: number, item: InventorySummaryItem) => {
     setReplaceTarget({ section, index, item });
     setReplaceForm({
-      replacementName: '',
+      replacementItemId: '',
       reason: '',
       incidentType: section === 'linenRequirements' ? 'burnt_cloth' : 'damaged_equipment',
+      // Defaults to the whole line, which is the simple case; the usual one is
+      // a few units out of many, so the field is there to be lowered.
+      affectedQuantity: String(item.requestedQuantity ?? ''),
     });
     setReplaceDialogOpen(true);
   };
@@ -1816,12 +1822,23 @@ export default function ContractDetail() {
       return;
     }
 
-    if (!replaceForm.replacementName.trim()) {
-      toast.error('Enter the replacement item');
+    if (!replaceForm.replacementItemId) {
+      toast.error('Choose the replacement from inventory');
       return;
     }
     if (replaceForm.reason.trim().length < 5) {
       toast.error('Describe what happened - this is recorded as the incident report');
+      return;
+    }
+
+    const affected = Number(replaceForm.affectedQuantity);
+    const reserved = replaceTarget.item.requestedQuantity ?? 0;
+    if (!Number.isInteger(affected) || affected < 1) {
+      toast.error('Enter how many units are affected');
+      return;
+    }
+    if (reserved && affected > reserved) {
+      toast.error(`Only ${reserved} unit(s) are reserved for this event`);
       return;
     }
 
@@ -1830,11 +1847,16 @@ export default function ContractDetail() {
       await api.replaceMaterialItem(id!, {
         section: replaceTarget.section,
         itemIndex: replaceTarget.index,
-        replacementName: replaceForm.replacementName.trim(),
+        replacementItemId: replaceForm.replacementItemId,
         reason: replaceForm.reason.trim(),
         incidentType: replaceForm.incidentType,
+        affectedQuantity: affected,
       });
-      toast.success('Item replaced and incident recorded');
+      toast.success(
+        affected < reserved
+          ? `${affected} of ${reserved} replaced; the rest stay prepared`
+          : 'Item replaced and incident recorded'
+      );
       setReplaceDialogOpen(false);
       setReplaceTarget(null);
       fetchContractData();
@@ -8103,12 +8125,56 @@ export default function ContractDetail() {
               </div>
 
               <div className="space-y-2">
-                <Label>Replacement item</Label>
+                <Label>How many are affected?</Label>
                 <Input
-                  value={replaceForm.replacementName}
-                  onChange={(event) => setReplaceForm((prev) => ({ ...prev, replacementName: event.target.value }))}
-                  placeholder="Which item is going in its place?"
+                  type="number"
+                  min={1}
+                  max={replaceTarget?.item.requestedQuantity ?? undefined}
+                  value={replaceForm.affectedQuantity}
+                  onChange={(event) => setReplaceForm((prev) => ({ ...prev, affectedQuantity: event.target.value }))}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Of {replaceTarget?.item.requestedQuantity ?? 0} reserved. Any units left over keep
+                  their current item and stay prepared.
+                </p>
+              </div>
+
+              {/* Picked from stock, never typed. A free-text name produces a
+                  contract line with no inventory record behind it, which then
+                  reads as "Not Linked" with no availability. */}
+              <div className="space-y-2">
+                <Label>Replacement item</Label>
+                {(replaceTarget?.item.alternativeSuggestions || []).length > 0 ? (
+                  <>
+                    <Select
+                      value={replaceForm.replacementItemId}
+                      onValueChange={(value) => setReplaceForm((prev) => ({ ...prev, replacementItemId: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose from available stock" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(replaceTarget?.item.alternativeSuggestions || []).map((option) => (
+                          <SelectItem key={option.itemId} value={option.itemId}>
+                            {option.itemName}
+                            {option.itemCode ? ` (${option.itemCode})` : ''} — {option.availableQuantity} available
+                            {option.canCoverFullRequest ? ' · covers this line' : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Same category as {replaceTarget?.item.itemName}, with availability counted for this
+                      event date.
+                    </p>
+                  </>
+                ) : (
+                  <p className="rounded-md border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900">
+                    No other item of this category is available for this event date, so there is nothing
+                    to swap in. Close this and raise a purchase or rental request instead — replacing a
+                    line with something the company does not hold would leave the event short.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
