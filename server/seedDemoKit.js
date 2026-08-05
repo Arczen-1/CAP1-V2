@@ -118,6 +118,8 @@ const run = async () => {
     supplierByDept[dept] = await Supplier.findOne({ departments: dept })
       || await Supplier.findOne();
   }
+  // Used to build the comparison quotations further down.
+  const allSuppliers = await Supplier.find({ isActive: true }).lean();
   const linenItem = await LinenInventory.findOne({ status: 'available' }).sort({ availableQuantity: -1 });
 
   // Part 5 needs an item that genuinely runs out. Picking an existing line by
@@ -426,8 +428,50 @@ const run = async () => {
       reason: 'A tent this size is not held in stock and is only needed for this event, so it is rented.',
     },
   ];
+  // Two alternative suppliers per department, so the canvassed requests below
+  // carry three quotations from three different suppliers rather than repeating
+  // the department's usual one.
+  const alternativeSuppliers = {};
+  for (const dept of ['creative', 'linen', 'stockroom']) {
+    alternativeSuppliers[dept] = allSuppliers
+      .filter((s) => String(s._id) !== String(supplierByDept[dept]?._id))
+      .slice(0, 2);
+  }
+
   for (const r of requests) {
     const total = r.qty * r.unit;
+    // A canvass on the two requests Accounting actually opens during the demo.
+    // The others keep a single quotation on purpose, so both cases are visible:
+    // a request where a choice exists, and one where Accounting can only send it
+    // back and ask Purchasing to canvass.
+    const canvassed = [`${TAG}PR-0001`, `${TAG}PR-0004`].includes(r.number);
+    const alternates = canvassed ? (alternativeSuppliers[r.dept] || []) : [];
+    const quotes = canvassed
+      ? [
+        {
+          supplier: supplierByDept[r.dept]?._id,
+          supplierName: supplierByDept[r.dept]?.name,
+          supplierContact: '0917-555-0188',
+          quotedUnitPrice: r.unit,
+          quotedTotal: total,
+          leadTimeDays: 7,
+          quoteReference: `${r.number}-Q1`,
+          notes: `[${TAG}] Quotation prepared by Purchasing.`,
+        },
+        // Priced around the first so the cheapest is not always the one
+        // Purchasing listed first - otherwise the selection has nothing to show.
+        ...alternates.map((s, i) => ({
+          supplier: s._id,
+          supplierName: s.name,
+          quotedUnitPrice: Math.round(r.unit * (i === 0 ? 0.92 : 1.14)),
+          quotedTotal: Math.round(r.unit * (i === 0 ? 0.92 : 1.14)) * r.qty,
+          leadTimeDays: i === 0 ? 10 : 5,
+          quoteReference: `${r.number}-Q${i + 2}`,
+          notes: `[${TAG}] Comparison quotation gathered during canvassing.`,
+        })),
+      ]
+      : [];
+
     await ProcurementRequest.create({
       requestNumber: r.number,
       status: 'awaiting_accounting_approval',
@@ -445,6 +489,7 @@ const run = async () => {
       shortageQuantity: r.shortage,
       neededBy: r.needed,
       requestReason: `[${TAG}] ${r.reason}`,
+      quotes,
       quote: {
         supplier: supplierByDept[r.dept]?._id,
         supplierName: supplierByDept[r.dept]?.name,
@@ -456,6 +501,20 @@ const run = async () => {
         notes: `[${TAG}] Quotation prepared by Purchasing.`,
       },
     });
+
+    // Fund the cheapest of the canvass, which is what submitting through the
+    // form would have done. Written after creation so the subdocument _ids
+    // exist to select by.
+    if (canvassed) {
+      const saved = await ProcurementRequest.findOne({ requestNumber: r.number });
+      const cheapest = saved.quotes.reduce(
+        (best, entry) => (entry.quotedTotal < best.quotedTotal ? entry : best),
+        saved.quotes[0]
+      );
+      saved.selectedQuoteId = cheapest._id;
+      saved.syncSelectedQuote();
+      await saved.save();
+    }
   }
   summary.push('Part 2 · DK-PR-0001 (₱1,850 stockroom — approve live) and DK-PR-0002 (₱48,000 creative — blocked live).');
   summary.push('Part 5 · DK-PR-0003 (purchase) and DK-PR-0004 (rental) both raised from the same-day shortage.');
