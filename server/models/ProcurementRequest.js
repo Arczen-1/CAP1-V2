@@ -79,6 +79,13 @@ const procurementQuoteSchema = new mongoose.Schema({
   }
 }, { _id: false });
 
+// Same fields as a quotation, but each entry keeps its own _id so a specific
+// quotation in a canvass can be selected by reference rather than by position -
+// a position would silently point at a different supplier if the canvass were
+// ever re-ordered. Reuses the definition above rather than restating it, so the
+// two shapes cannot drift apart.
+const canvassQuoteSchema = new mongoose.Schema(procurementQuoteSchema.obj, { _id: true });
+
 const procurementSlaSchema = new mongoose.Schema({
   requiredLeadDays: {
     type: Number,
@@ -341,6 +348,22 @@ const procurementRequestSchema = new mongoose.Schema({
     type: procurementSlaSchema,
     default: () => ({})
   },
+  // The canvass: every quotation Purchasing gathered for this request.
+  //
+  // `quote` below stays the SELECTED quotation and is kept in sync with the
+  // chosen entry here. Everything downstream - the budget check, the rent-vs-buy
+  // overlap, reports, printing - reads `quote`, so keeping it as the selected
+  // snapshot means the canvass could be added without touching any of them.
+  quotes: {
+    type: [canvassQuoteSchema],
+    default: () => []
+  },
+  // Which entry in `quotes` is funded. Null on older records that only ever had
+  // a single quotation.
+  selectedQuoteId: {
+    type: mongoose.Schema.Types.ObjectId,
+    default: null
+  },
   quote: {
     type: procurementQuoteSchema,
     default: () => ({})
@@ -381,6 +404,31 @@ procurementRequestSchema.pre('save', async function generateRequestNumber() {
   const count = await mongoose.model('ProcurementRequest').countDocuments();
   this.requestNumber = `PR-${year}-${String(count + 1).padStart(4, '0')}`;
 });
+
+// Points `quote` at the selected entry in `quotes`, so the rest of the system -
+// which reads `quote` and knows nothing about the canvass - always sees the
+// quotation that is actually being funded.
+//
+// Falls back to the first entry when nothing is selected yet, and leaves an
+// existing single `quote` untouched when there is no canvass at all, which is
+// the shape every record created before the canvass existed still has.
+procurementRequestSchema.methods.syncSelectedQuote = function syncSelectedQuote() {
+  if (!this.quotes || this.quotes.length === 0) {
+    return this.quote;
+  }
+
+  const selected = (this.selectedQuoteId
+    && this.quotes.id(this.selectedQuoteId))
+    || this.quotes[0];
+
+  this.selectedQuoteId = selected._id;
+  // toObject() so the subdocument is copied by value rather than shared - a
+  // later edit to `quote` must not silently rewrite the canvass entry.
+  const { _id, ...rest } = selected.toObject();
+  this.quote = rest;
+
+  return this.quote;
+};
 
 module.exports = mongoose.model('ProcurementRequest', procurementRequestSchema);
 module.exports.PROCUREMENT_STATUSES = PROCUREMENT_STATUSES;

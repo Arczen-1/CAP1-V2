@@ -14,6 +14,14 @@ const { annotateRequests, buildOverlapIndex, getItemKey, DECIDABLE_STATUSES } = 
 
 const router = express.Router();
 
+// Three quotations is the usual canvass; the cap stops the form being used as a
+// general supplier list.
+const MAX_QUOTES_PER_REQUEST = 3;
+
+// Lets a single bad quotation in a canvass report which one it was, without
+// unwinding the whole request through nested returns.
+class QuoteError extends Error {}
+
 const DEPARTMENT_CONFIG = {
   creative: {
     label: 'Creative',
@@ -54,6 +62,10 @@ const populateProcurementRequest = (query) => query
   .populate('updatedBy', 'name role department')
   .populate('quote.supplier', 'name contactPerson phone email address city province serviceAreas departments requestTypes supportedCategories supportedKeywords isPreferred priority notes isActive')
   .populate('quote.submittedBy', 'name role department')
+  // The canvass entries carry the same supplier detail, so the approval screen
+  // can show what each quotation is and not just its price.
+  .populate('quotes.supplier', 'name contactPerson phone email address city province serviceAreas departments requestTypes supportedCategories supportedKeywords isPreferred priority notes isActive')
+  .populate('quotes.submittedBy', 'name role department')
   .populate('accounting.reviewedBy', 'name role department')
   .populate('releaseAuthorization.authorizedBy', 'name role department')
   .populate('fulfillment.fulfilledBy', 'name role department')
@@ -718,62 +730,114 @@ router.put('/:id/quote', auth, requireRole(['purchasing', 'admin']), async (req,
       return res.status(400).json({ message: 'This procurement request can no longer be quoted' });
     }
 
-    const {
-      supplierId,
-      supplierName,
-      supplierContact,
-      supplierEmail,
-      quotedUnitPrice,
-      expectedFulfillmentDate,
-      rentalStartDate,
-      rentalEndDate,
-      notes
-    } = req.body || {};
+    // A canvass of up to three quotations. The body may carry `quotes: [...]`,
+    // or a single quotation at the top level - the shape used before the canvass
+    // existed, and still what the department panel sends.
+    const rawQuotes = Array.isArray(req.body?.quotes) && req.body.quotes.length > 0
+      ? req.body.quotes
+      : [req.body || {}];
 
-    let supplier = null;
-    if (supplierId) {
-      supplier = await Supplier.findById(supplierId);
-      if (!supplier) {
-        return res.status(404).json({ message: 'Selected supplier was not found' });
+    if (rawQuotes.length > MAX_QUOTES_PER_REQUEST) {
+      return res.status(400).json({
+        message: `A canvass may carry at most ${MAX_QUOTES_PER_REQUEST} quotations.`
+      });
+    }
+
+    const buildQuote = async (raw, index) => {
+      const {
+        supplierId,
+        supplierName,
+        supplierContact,
+        supplierEmail,
+        quotedUnitPrice,
+        quoteReference,
+        expectedFulfillmentDate,
+        rentalStartDate,
+        rentalEndDate,
+        notes
+      } = raw || {};
+
+      let supplier = null;
+      if (supplierId) {
+        supplier = await Supplier.findById(supplierId);
+        if (!supplier) {
+          throw new QuoteError(`Quotation ${index + 1}: the selected supplier was not found`);
+        }
       }
-    }
 
-    const resolvedSupplierName = String(supplier?.name || supplierName || '').trim();
-    if (!resolvedSupplierName) {
-      return res.status(400).json({ message: 'Supplier name is required' });
-    }
+      const resolvedSupplierName = String(supplier?.name || supplierName || '').trim();
+      if (!resolvedSupplierName) {
+        throw new QuoteError(`Quotation ${index + 1}: supplier name is required`);
+      }
 
-    const parsedUnitPrice = Number(quotedUnitPrice);
+      const parsedUnitPrice = Number(quotedUnitPrice);
+      if (!Number.isFinite(parsedUnitPrice) || parsedUnitPrice <= 0) {
+        throw new QuoteError(`Quotation ${index + 1}: enter a supplier unit price greater than 0`);
+      }
 
-    if (!Number.isFinite(parsedUnitPrice) || parsedUnitPrice <= 0) {
-      return res.status(400).json({ message: 'Enter a supplier unit price greater than 0' });
-    }
+      if (request.requestType === 'rental' && rentalEndDate && !isValidDate(rentalEndDate)) {
+        throw new QuoteError(`Quotation ${index + 1}: invalid rental return date`);
+      }
 
-    if (request.requestType === 'rental' && rentalEndDate && !isValidDate(rentalEndDate)) {
-      return res.status(400).json({ message: 'Invalid rental return date' });
-    }
-
-    request.quote = {
-      supplier: supplier?._id || null,
-      supplierName: resolvedSupplierName,
-      supplierContact: String(
-        supplierContact
-        || [
-          supplier?.contactPerson || '',
-          supplier?.phone || ''
-        ].filter(Boolean).join(' | ')
-        || ''
-      ).trim(),
-      supplierEmail: String(supplier?.email || supplierEmail || '').trim(),
-      quotedUnitPrice: parsedUnitPrice,
-      quotedTotal: parsedUnitPrice * (request.requestedQuantity || 0),
-      expectedFulfillmentDate: isValidDate(expectedFulfillmentDate) ? new Date(expectedFulfillmentDate) : undefined,
-      rentalStartDate: isValidDate(rentalStartDate) ? new Date(rentalStartDate) : undefined,
-      rentalEndDate: isValidDate(rentalEndDate) ? new Date(rentalEndDate) : undefined,
-      notes: String(notes || '').trim(),
-      submittedAt: new Date(),
-      submittedBy: req.user._id
+      return {
+        supplier: supplier?._id || null,
+        supplierName: resolvedSupplierName,
+        supplierContact: String(
+          supplierContact
+          || [
+            supplier?.contactPerson || '',
+            supplier?.phone || ''
+          ].filter(Boolean).join(' | ')
+          || ''
+        ).trim(),
+        supplierEmail: String(supplier?.email || supplierEmail || '').trim(),
+        quotedUnitPrice: parsedUnitPrice,
+        quotedTotal: parsedUnitPrice * (request.requestedQuantity || 0),
+        quoteReference: String(quoteReference || '').trim(),
+        expectedFulfillmentDate: isValidDate(expectedFulfillmentDate) ? new Date(expectedFulfillmentDate) : undefined,
+        rentalStartDate: isValidDate(rentalStartDate) ? new Date(rentalStartDate) : undefined,
+        rentalEndDate: isValidDate(rentalEndDate) ? new Date(rentalEndDate) : undefined,
+        notes: String(notes || '').trim(),
+        submittedAt: new Date(),
+        submittedBy: req.user._id
+      };
     };
+
+    let builtQuotes;
+    try {
+      builtQuotes = await Promise.all(rawQuotes.map(buildQuote));
+    } catch (quoteError) {
+      if (quoteError instanceof QuoteError) {
+        return res.status(400).json({ message: quoteError.message });
+      }
+      throw quoteError;
+    }
+
+    const duplicateSupplier = builtQuotes
+      .map((entry) => entry.supplierName.toLowerCase())
+      .find((name, index, all) => all.indexOf(name) !== index);
+    if (duplicateSupplier) {
+      return res.status(400).json({
+        message: 'Each quotation in a canvass must come from a different supplier.'
+      });
+    }
+
+    request.quotes = builtQuotes;
+
+    // Purchasing may nominate which quotation it is recommending; otherwise the
+    // cheapest is selected, since that is the choice that needs no explanation.
+    const requestedIndex = Number(req.body?.selectedIndex);
+    const chosenIndex = Number.isInteger(requestedIndex)
+      && requestedIndex >= 0
+      && requestedIndex < request.quotes.length
+      ? requestedIndex
+      : request.quotes.reduce(
+        (cheapest, entry, index, all) => (entry.quotedTotal < all[cheapest].quotedTotal ? index : cheapest),
+        0
+      );
+
+    request.selectedQuoteId = request.quotes[chosenIndex]._id;
+    request.syncSelectedQuote();
     request.accounting = {
       status: 'pending',
       reviewedAt: null,
@@ -815,6 +879,55 @@ router.put('/:id/quote', auth, requireRole(['purchasing', 'admin']), async (req,
       actionLabel: 'View request status',
       department: request.department
     });
+
+    const populatedRequest = await populateProcurementRequest(
+      ProcurementRequest.findById(request._id)
+    );
+
+    res.json(populatedRequest);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Select which quotation in the canvass gets funded.
+//
+// Choosing between quotations Purchasing already gathered is a price decision,
+// which is Accounting's remit - unlike choosing WHICH suppliers to canvass,
+// which stays with Purchasing. Accounting can only pick from what was canvassed;
+// it cannot introduce a supplier here.
+router.post('/:id/select-quote', auth, requireRole(['accounting', 'admin']), async (req, res) => {
+  try {
+    const request = await ProcurementRequest.findById(req.params.id);
+
+    if (!request) {
+      return res.status(404).json({ message: 'Procurement request not found' });
+    }
+
+    if (request.status !== 'awaiting_accounting_approval') {
+      return res.status(400).json({
+        message: 'The quotation can only be changed while the request is awaiting budget approval.'
+      });
+    }
+
+    const { quoteId } = req.body || {};
+    const chosen = quoteId && request.quotes?.id(quoteId);
+    if (!chosen) {
+      return res.status(400).json({ message: 'That quotation is not part of this canvass.' });
+    }
+
+    const previous = request.quote?.supplierName;
+    request.selectedQuoteId = chosen._id;
+    request.syncSelectedQuote();
+
+    if (previous && previous !== chosen.supplierName) {
+      request.requestNotes = [
+        request.requestNotes,
+        `Accounting selected ${chosen.supplierName} over ${previous} on ${new Date().toLocaleDateString('en-PH')}.`
+      ].filter(Boolean).join('\n');
+    }
+
+    await request.save();
 
     const populatedRequest = await populateProcurementRequest(
       ProcurementRequest.findById(request._id)
