@@ -1,4 +1,17 @@
-All screenshots complete (Pass 3, 2026-08-02).
+All screenshots complete (Pass 4, 2026-08-06).
 
+Pass 3 (2026-08-02)
 New figures captured and embedded (7): signature-ready PDF, accounting procurement queue, monthly budget editor, logistics workflow (Inventory Transport), staff transportation, load & dispatch readiness/manifest, return reconciliation.
 Outdated screenshots replaced (3): Kitchen Dashboard (Items relabel), Reports page (expanded analytics), Contract Summary tab (Payment Term N/A).
+
+Pass 4 (2026-08-06) — figures for the revisions made after the defense
+New figures captured and embedded (2):
+  Figure 4.7.2  Procurement approval showing the checklist evidence and the canvass
+                (per-line evidence, the five supplier checks, "Why this supplier",
+                 and the three-quotation canvass with the funded quotation marked)
+  Figure 5.4.1  Report Damage Or Loss and Replace, inside the material freeze
+                (shown once under Creative; the dialog is identical in Linen and
+                 Stockroom, which share the same procedure text)
+
+No existing figure was invalidated by the Pass 4 text changes, so none were
+recaptured. Total: 49 figures.
