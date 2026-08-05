@@ -1675,6 +1675,41 @@ const buildOperationsSummary = async (contract) => {
     return selectedBanquetStaffIds.has(staffId) || !reservedBanquetStaffIds.has(staffId);
   });
 
+  // Trucks, drivers, and staff committed to another event on this date are
+  // filtered out of the options above. Removing them silently leaves the user
+  // staring at a shorter list with no way to find out why, so the competing
+  // events are reported alongside what each one is holding.
+  const sameDayEvents = sameDayContracts.map((other) => {
+    const truckIds = new Set();
+    const driverIds = new Set();
+    if (other.logisticsAssignment?.truck) truckIds.add(String(other.logisticsAssignment.truck));
+    if (other.logisticsAssignment?.driver) driverIds.add(String(other.logisticsAssignment.driver));
+    (other.staffTransport?.vehicles || []).forEach((vehicle) => {
+      if (vehicle?.truck) truckIds.add(String(vehicle.truck));
+      if (vehicle?.driver) driverIds.add(String(vehicle.driver));
+    });
+
+    const staffCount = (other.banquetAssignment?.assignments || [])
+      .filter((assignment) => assignment?.staff).length;
+
+    return {
+      contractNumber: other.contractNumber,
+      trucksHeld: truckIds.size,
+      driversHeld: driverIds.size,
+      banquetStaffHeld: staffCount,
+      // Named so the UI can say what this event actually takes away.
+      holdsSomething: truckIds.size > 0 || driverIds.size > 0 || staffCount > 0
+    };
+  });
+
+  const sameDayContention = {
+    eventCount: sameDayEvents.length,
+    events: sameDayEvents,
+    trucksUnavailable: reservedTruckIds.size,
+    driversUnavailable: reservedDriverIds.size,
+    banquetStaffUnavailable: reservedBanquetStaffIds.size
+  };
+
   const selectedBanquetAssignments = (contract.banquetAssignment?.assignments || []).map((assignment) => {
     const staffId = String(assignment.staff);
     const staff = banquetStaffById.get(staffId);
@@ -1765,6 +1800,7 @@ const buildOperationsSummary = async (contract) => {
         ? 'This event is inside the 1-week material freeze window. Reserved materials are locked to this event: item lists cannot be edited and prepared items cannot be released without a management override.'
         : 'Materials remain editable until the 1-week freeze window starts.'
     },
+    sameDayContention,
     logistics: {
       eventDate: contract.eventDate,
       estimatedVolumeCubicMeters: roundToTwo(totalEstimatedVolume),

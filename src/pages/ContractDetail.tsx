@@ -366,6 +366,22 @@ interface OperationsSummary {
     label: string;
     note: string;
   };
+  // Other events on this date and what they hold. The options lists are already
+  // filtered against these, so this exists to explain a shorter list rather
+  // than to change it.
+  sameDayContention?: {
+    eventCount: number;
+    events: Array<{
+      contractNumber: string;
+      trucksHeld: number;
+      driversHeld: number;
+      banquetStaffHeld: number;
+      holdsSomething: boolean;
+    }>;
+    trucksUnavailable: number;
+    driversUnavailable: number;
+    banquetStaffUnavailable: number;
+  };
   banquet: {
     planningGuestCount: number;
     suggestedPlan: Record<BanquetAssignmentRole, number>;
@@ -660,6 +676,42 @@ const pluralize = (count: number, singular: string, plural = `${singular}s`) => 
 
 const formatEnumLabel = (value?: string) => (value || 'pending').replace(/_/g, ' ');
 const formatStatusLabel = (value?: string) => (value || '').replace(/_/g, ' ');
+
+// Explains a shortened options list. Vehicles, drivers, and banquet staff
+// already committed to another event on the same date are filtered out before
+// the user ever sees them; without this they would just find fewer choices and
+// no reason for it.
+const describeSameDayHold = (
+  contention: OperationsSummary['sameDayContention'],
+  scope: 'logistics' | 'banquet',
+) => {
+  if (!contention || contention.eventCount === 0) {
+    return '';
+  }
+
+  const holders = contention.events.filter((event) => (
+    scope === 'logistics'
+      ? event.trucksHeld > 0 || event.driversHeld > 0
+      : event.banquetStaffHeld > 0
+  ));
+
+  const eventWord = contention.eventCount === 1 ? 'event' : 'events';
+  if (holders.length === 0) {
+    return ` ${contention.eventCount} other ${eventWord} share this date but hold nothing yet.`;
+  }
+
+  const detail = holders.map((event) => {
+    const parts = scope === 'logistics'
+      ? [
+        event.trucksHeld > 0 ? `${event.trucksHeld} truck${event.trucksHeld === 1 ? '' : 's'}` : '',
+        event.driversHeld > 0 ? `${event.driversHeld} driver${event.driversHeld === 1 ? '' : 's'}` : '',
+      ]
+      : [event.banquetStaffHeld > 0 ? `${event.banquetStaffHeld} staff` : ''];
+    return `${event.contractNumber} holds ${parts.filter(Boolean).join(' and ')}`;
+  }).join('; ');
+
+  return ` Already committed on this date: ${detail}. Those options are not listed above.`;
+};
 const createEmptyBanquetPlan = (): Record<BanquetAssignmentRole, number> => ({
   head_captain: 0,
   service_staff: 0,
@@ -4112,11 +4164,14 @@ export default function ContractDetail() {
     {
       label: 'Same-day staff availability',
       ready: banquetMissingRoles.length === 0 && banquetPlannedTotal > 0,
-      detail: banquetMissingRoles.length === 0 && banquetPlannedTotal > 0
+      // Staff already assigned to another event on this date never appear in
+      // the roster below, so name the events that took them.
+      detail: (banquetMissingRoles.length === 0 && banquetPlannedTotal > 0
         ? 'All planned banquet slots have assigned names that are available on the event date.'
         : banquetMissingRoles.length > 0
           ? `Still missing ${banquetMissingRoles.reduce((sum, item) => sum + item.missing, 0)} staff: ${banquetMissingRoles.map((item) => `${item.missing} ${item.label}`).join(', ')}.`
-          : 'No staffing target has been saved yet.',
+          : 'No staffing target has been saved yet.')
+        + describeSameDayHold(operationsSummary?.sameDayContention, 'banquet'),
     },
     {
       label: 'Operational blockers',
@@ -5219,8 +5274,11 @@ export default function ContractDetail() {
     {
       label: 'Event-date availability',
       ready: Boolean(operationsSummary),
+      // The option lists are already filtered against other events on this
+      // date. Saying only how many are free leaves the user guessing why the
+      // list is short, so the competing events are named here.
       detail: operationsSummary
-        ? `${operationsSummary.logistics.availableTrucks.length} truck option(s) and ${operationsSummary.logistics.availableDrivers.length} driver option(s) are free for ${new Date(contract.eventDate).toLocaleDateString()}.`
+        ? `${operationsSummary.logistics.availableTrucks.length} truck option(s) and ${operationsSummary.logistics.availableDrivers.length} driver option(s) are free for ${new Date(contract.eventDate).toLocaleDateString()}.${describeSameDayHold(operationsSummary.sameDayContention, 'logistics')}`
         : 'Availability checks are unavailable right now.',
     },
     {
