@@ -41,7 +41,7 @@ function ChecklistEvidence({ field, request }: { field: keyof ProcurementReviewB
 
   if (field === 'inventoryNeedValidated') {
     return (
-      <div className="mt-2 space-y-1 rounded-md bg-muted/50 p-2 text-xs">
+      <div className="h-full space-y-1.5 rounded-md bg-muted/40 p-3 text-xs">
         {row('Item', `${request.itemName}${request.itemCategory ? ` (${request.itemCategory})` : ''}`)}
         {row('Quantity', `${request.requestedQuantity} unit(s)${request.shortageQuantity ? ` - short ${request.shortageQuantity}` : ''}`)}
         {request.contract
@@ -56,7 +56,7 @@ function ChecklistEvidence({ field, request }: { field: keyof ProcurementReviewB
     const checks = getSupplierVerificationChecks(request);
     const reasons = getSupplierMatchReasons(request);
     return (
-      <div className="mt-2 space-y-2 rounded-md bg-muted/50 p-2 text-xs">
+      <div className="h-full space-y-2 rounded-md bg-muted/40 p-3 text-xs">
         <ul className="space-y-1">
           {checks.map((check) => (
             <li key={check.label} className="flex items-start gap-1.5">
@@ -85,7 +85,7 @@ function ChecklistEvidence({ field, request }: { field: keyof ProcurementReviewB
 
   if (field === 'pricingReviewed') {
     return (
-      <div className="mt-2 space-y-1 rounded-md bg-muted/50 p-2 text-xs">
+      <div className="h-full space-y-1.5 rounded-md bg-muted/40 p-3 text-xs">
         {row('Unit price', formatProcurementCurrency(request.quote?.quotedUnitPrice))}
         {row('Total', formatProcurementCurrency(request.quote?.quotedTotal))}
         {row('Quote ref', request.quote?.quoteReference || 'Not recorded')}
@@ -95,7 +95,7 @@ function ChecklistEvidence({ field, request }: { field: keyof ProcurementReviewB
   }
 
   return (
-    <div className="mt-2 space-y-1 rounded-md bg-muted/50 p-2 text-xs">
+    <div className="h-full space-y-1.5 rounded-md bg-muted/40 p-3 text-xs">
       {row('Needed by', formatProcurementDate(request.neededBy))}
       {row('Expected', formatProcurementDate(request.quote?.expectedFulfillmentDate))}
       {row('Lead time', request.quote?.leadTimeDays != null ? `${request.quote.leadTimeDays} day(s)` : 'Not recorded')}
@@ -748,7 +748,7 @@ export default function AccountingProcurementQueue() {
       </Tabs>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+        <DialogContent className="max-h-[88vh] w-[95vw] sm:max-w-4xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {reviewMode === 'budget'
@@ -820,22 +820,28 @@ export default function AccountingProcurementQueue() {
                       </p>
                     ) : null}
                     {REVIEW_FIELDS.map((field) => (
-                      <label key={field.key} className="flex items-start gap-3 rounded-lg border p-3">
-                        <Checkbox
-                          className="mt-0.5"
-                          checked={reviewChecklist[field.key]}
-                          onCheckedChange={(checked) => setReviewChecklist((current) => ({
-                            ...current,
-                            [field.key]: Boolean(checked),
-                          }))}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium">{field.label}</p>
-                          <p className="text-sm text-muted-foreground">{field.description}</p>
-                          {/* The evidence for this specific line, so the box is
-                              ticked against data rather than against a claim. */}
-                          <ChecklistEvidence field={field.key} request={selectedRequest} />
+                      // Statement on the left, the evidence for it on the right,
+                      // so each line reads across instead of stacking into a
+                      // narrow column. Falls back to stacked on small screens.
+                      <label
+                        key={field.key}
+                        className="grid items-start gap-3 rounded-lg border p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] md:gap-5"
+                      >
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            className="mt-0.5"
+                            checked={reviewChecklist[field.key]}
+                            onCheckedChange={(checked) => setReviewChecklist((current) => ({
+                              ...current,
+                              [field.key]: Boolean(checked),
+                            }))}
+                          />
+                          <div className="min-w-0">
+                            <p className="font-medium">{field.label}</p>
+                            <p className="text-sm text-muted-foreground">{field.description}</p>
+                          </div>
                         </div>
+                        <ChecklistEvidence field={field.key} request={selectedRequest} />
                       </label>
                     ))}
                   </div>
