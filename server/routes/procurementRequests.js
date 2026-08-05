@@ -10,7 +10,7 @@ const StockroomInventory = require('../models/StockroomInventory');
 const Supplier = require('../models/Supplier');
 const { auth, requireRole } = require('../middleware/auth');
 const { getBudgetCheckForRequest } = require('../utils/financeBudgeting');
-const { annotateRequests, buildOverlapIndex, getItemKey, DECIDABLE_STATUSES } = require('../procurementOverlap');
+const { annotateRequests, buildOverlapIndex, getItemKey, notifyRentVsBuy, DECIDABLE_STATUSES } = require('../procurementOverlap');
 
 const router = express.Router();
 
@@ -153,46 +153,6 @@ const notifyRoles = async (roles, payload) => {
     ...payload,
     recipient: recipient._id
   })));
-};
-
-// Raises the rent-vs-buy question the moment a second rental request for the
-// same item arrives. Deliberately quiet unless buying is genuinely the cheaper
-// option: a duplicate that is still cheaper to rent is not worth interrupting
-// anyone over, and it is visible on the queue anyway.
-//
-// Deduped on the item, not the request, so a third request for the same item
-// does not send the same advice again.
-const notifyRentVsBuy = async (request) => {
-  try {
-    const index = await buildOverlapIndex();
-    const evaluation = index.get(getItemKey(request));
-
-    if (!evaluation || evaluation.recommendation !== 'buy') {
-      return;
-    }
-
-    const title = `Consider buying instead of renting: ${evaluation.itemLabel}`;
-    const alreadyRaised = await Notification.exists({ type: 'conflict_alert', title });
-    if (alreadyRaised) {
-      return;
-    }
-
-    await notifyRoles(['accounting', 'purchasing', 'admin'], {
-      type: 'conflict_alert',
-      title,
-      message: `${evaluation.summary} ${evaluation.overlapping
-        ? `The rentals overlap in time, so ${evaluation.unitsNeeded} unit(s) would be needed - buying is still the cheaper option here.`
-        : 'The rentals fall on separate dates, so one purchase covers both.'} Review before approving either request.`,
-      procurementRequest: request._id,
-      priority: 'medium',
-      actionUrl: `/accounting?tab=procurement&request=${request._id}`,
-      actionLabel: 'Compare rent vs buy',
-      department: 'accounting'
-    });
-  } catch (error) {
-    // Advisory only - never block a request from being raised.
-    console.error('Rent-vs-buy check failed:', error.message);
-  }
 };
 
 const notifyUserIds = async (userIds, payload) => {

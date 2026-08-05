@@ -22,7 +22,8 @@
     "preview": "vite preview",
     "seed:demokit": "node server/seedDemoKit.js",
     "seed:advisor": "node server/seedAdvisorDemo.js",
-    "seed:menunotes": "node server/seedSameDayMenuNotes.js"
+    "seed:menunotes": "node server/seedSameDayMenuNotes.js",
+    "seed:redefense": "node server/seedRedefenseDemo.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
