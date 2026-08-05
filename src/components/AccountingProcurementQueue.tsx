@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import RentVsBuyPanel from '@/components/RentVsBuyPanel';
 import { toast } from 'sonner';
 import { CheckCircle2, Clock3, FileCheck2, ReceiptText, RotateCcw, XCircle } from 'lucide-react';
-import type { ProcurementRequest, ProcurementReviewBasis } from '@/lib/procurement';
+import type { ProcurementRequest, ProcurementReviewBasis, ProcurementSupplierSummary } from '@/lib/procurement';
 import {
   formatProcurementCurrency,
   formatProcurementDate,
@@ -23,6 +23,7 @@ import {
   getProcurementReviewBasis,
   getSupplierVerificationChecks,
   getSupplierMatchReasons,
+  getRecommendedSuppliersForRequest,
   getProcurementSlaStatusLabel,
   PROCUREMENT_REQUEST_TYPE_LABELS,
   PROCUREMENT_SLA_STATUS_STYLES,
@@ -31,7 +32,11 @@ import {
 // The evidence behind one checklist line, shown beside the box being ticked.
 // Reviewers were confirming four statements with only the statements on screen;
 // the data that answers them lived on the card behind the dialog.
-function ChecklistEvidence({ field, request }: { field: keyof ProcurementReviewBasis; request: ProcurementRequest }) {
+function ChecklistEvidence({ field, request, suppliers }: {
+  field: keyof ProcurementReviewBasis;
+  request: ProcurementRequest;
+  suppliers: ProcurementSupplierSummary[];
+}) {
   const row = (label: string, value: ReactNode) => (
     <div className="flex gap-2">
       <span className="shrink-0 text-muted-foreground">{label}</span>
@@ -79,6 +84,35 @@ function ChecklistEvidence({ field, request }: { field: keyof ProcurementReviewB
             Nothing on the supplier record matches this request, so there is no recorded reason for choosing them.
           </p>
         )}
+        {/* Who else could have supplied this. Read-only on purpose: Accounting
+            reviews Purchasing's choice, it does not make it. If the choice looks
+            wrong the request is returned with "Supplier issue" so Purchasing
+            re-sources, which keeps the decision and the payment separate. */}
+        {(() => {
+          const chosenId = request.quote?.supplier?._id;
+          const alternatives = getRecommendedSuppliersForRequest(request, suppliers, 4)
+            .filter((entry) => entry.supplier._id !== chosenId)
+            .slice(0, 3);
+          if (!alternatives.length) {
+            return null;
+          }
+          return (
+            <div className="border-t pt-2">
+              <p className="font-medium">Other suppliers that could have been used</p>
+              <ul className="mt-1 space-y-0.5 text-muted-foreground">
+                {alternatives.map((entry) => (
+                  <li key={entry.supplier._id}>
+                    {entry.supplier.name}
+                    {entry.supplier.isPreferred ? ' (preferred)' : ''}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 italic">
+                Purchasing selects the supplier. Return the request with &quot;Supplier issue&quot; if this choice should be reconsidered.
+              </p>
+            </div>
+          );
+        })()}
       </div>
     );
   }
@@ -156,6 +190,11 @@ const createEmptyChecklist = (): ProcurementReviewBasis => ({
 
 export default function AccountingProcurementQueue() {
   const [requests, setRequests] = useState<ProcurementRequest[]>([]);
+  // Read-only. Used to show which other suppliers the request could have gone
+  // to, so Accounting can see Purchasing's choice was considered rather than
+  // arbitrary. Accounting cannot change the supplier from here - if the choice
+  // looks wrong the request is returned with "Supplier issue".
+  const [suppliers, setSuppliers] = useState<ProcurementSupplierSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<ProcurementRequest | null>(null);
@@ -186,6 +225,14 @@ export default function AccountingProcurementQueue() {
 
   useEffect(() => {
     fetchRequests();
+  }, []);
+
+  // The alternatives panel is supporting context, so a failure here must not
+  // block the queue from loading - it just means no alternatives are shown.
+  useEffect(() => {
+    api.getSuppliers()
+      .then((data) => setSuppliers(data as ProcurementSupplierSummary[]))
+      .catch(() => setSuppliers([]));
   }, []);
 
   const sortRequests = useMemo(() => {
@@ -841,7 +888,7 @@ export default function AccountingProcurementQueue() {
                             <p className="text-sm text-muted-foreground">{field.description}</p>
                           </div>
                         </div>
-                        <ChecklistEvidence field={field.key} request={selectedRequest} />
+                        <ChecklistEvidence field={field.key} request={selectedRequest} suppliers={suppliers} />
                       </label>
                     ))}
                   </div>
