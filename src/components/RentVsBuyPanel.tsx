@@ -67,11 +67,11 @@ export default function RentVsBuyPanel({
             <p className="mt-0.5 font-semibold">{formatProcurementCurrency(analysis.rentalCost)}</p>
           </div>
           <div className="rounded-md border bg-white/70 px-3 py-2 text-sm">
-            <p className="text-muted-foreground">Buy {analysis.unitsNeeded} unit(s)</p>
+            <p className="text-muted-foreground">Buy {analysis.unitsNeeded} unit(s) (indicative)</p>
             <p className="mt-0.5 font-semibold">{formatProcurementCurrency(analysis.purchaseCost)}</p>
           </div>
           <div className="rounded-md border bg-white/70 px-3 py-2 text-sm">
-            <p className="text-muted-foreground">{analysis.savings > 0 ? 'Saved by buying' : 'Buying costs more'}</p>
+            <p className="text-muted-foreground">{analysis.savings > 0 ? 'Indicative saving' : 'Buying costs more'}</p>
             <p className="mt-0.5 font-semibold">
               {analysis.savings > 0
                 ? formatProcurementCurrency(analysis.savings)
@@ -90,9 +90,19 @@ export default function RentVsBuyPanel({
         </p>
       ) : null}
 
-      {analysis.estimated ? (
+      {/* The two sides are not equally firm and the panel has to say so. The
+          rental figure is a quote Purchasing negotiated; the buy figure is the
+          price recorded on the inventory item, which no supplier has committed
+          to. Purchasing sources the real one when the purchase is quoted. */}
+      {analysis.comparable ? (
         <p className="mt-2 text-xs text-muted-foreground">
-          Part of this comparison is estimated from the inventory daily rate, not an agreed supplier quote.
+          The buy figure is indicative - it uses the purchase price recorded on the inventory item
+          ({formatProcurementCurrency(analysis.purchaseUnitPrice)} per unit), not a supplier quote.
+          Purchasing sources the actual price when a purchase request is quoted, and Accounting
+          approves against that.
+          {analysis.estimated
+            ? ' The rental side also includes a figure estimated from the inventory daily rate.'
+            : ''}
         </p>
       ) : null}
 

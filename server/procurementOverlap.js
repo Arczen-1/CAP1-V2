@@ -201,8 +201,14 @@ const evaluateGroup = (requests) => {
   // the purchasing list and the notification all say the same thing.
   // Appended whenever any leg of the comparison was priced from a daily rate
   // rather than an agreed quote.
+  //
+  // The purchase side is ALWAYS indicative: it comes from the price recorded on
+  // the inventory item, not from a supplier. Purchasing sources the real figure
+  // when the purchase request is quoted. Saying so matters - the rental side is
+  // a negotiated number, and showing both with equal weight would imply the
+  // purchase price had been agreed with someone when it has not.
   const estimateNote = estimated
-    ? ' One or more legs are estimated from the inventory daily rate rather than a supplier quote.'
+    ? ' The rental side includes a figure estimated from the inventory daily rate rather than a supplier quote.'
     : '';
 
   let summary = '';

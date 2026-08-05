@@ -664,6 +664,46 @@ open against it; the purchase warning fired on `PR-26-0053` naming both rentals;
 each appeared only on the correct side. Probe records deleted and the demo kit
 re-seeded, leaving `DK-PR-0005` / `0006` clean.
 
+### 15d. The two sides of the comparison were not equally firm — FIXED
+
+Asked during review: *how does Accounting know the price of buying one unit
+instead of renting two — doesn't Purchasing dictate prices?*
+
+Correct, and the panel was not honest about it.
+
+| Side | Source | Firmness |
+|---|---|---|
+| Rent | `quote.quotedTotal` — a supplier quote Purchasing negotiated | agreed |
+| Buy | `purchasePrice` / `pricePerItem` on the **inventory record** | a recorded book value; no supplier has committed to it |
+
+The panel displayed both with identical weight. Worse, it was internally
+inconsistent: the `estimated` flag was raised when the *rental* side fell back to
+a daily rate, while the purchase side — which is *never* a quote — said nothing.
+
+**Why the design still holds.** The recommendation does not bypass Purchasing's
+pricing authority. A raised purchase starts at `requested` and must be quoted
+before it reaches the accounting queue — confirmed in testing, `PR-26-0053` only
+appeared for Accounting after a supplier quote was attached. So the book price
+flags the opportunity; Purchasing sources the real figure; Accounting approves
+against that. Money is never committed on the catalogue number.
+
+**Fix — labelling, not arithmetic.** The tile reads "Buy N unit(s)
+(indicative)", the savings tile reads "Indicative saving", and the panel states
+the basis and the per-unit figure used, plus who supplies the real price.
+
+**Coverage limitation, worth knowing before the defense:**
+
+| Department | Items with a recorded purchase price |
+|---|---|
+| Stockroom | 46 / 47 |
+| Creative | 10 / 38 |
+| Linen | 6 / 39 |
+
+Where no purchase price is recorded the analysis reports `compare_manually`
+rather than inventing a number — so today this is effectively a stockroom tool.
+Populating prices on creative and linen inventory would widen it; no code change
+is needed for that.
+
 ---
 
 ## Notes for the defense
