@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '@/services/api';
 import { Badge } from '@/components/ui/badge';
@@ -21,10 +22,87 @@ import {
   getProcurementReleaseLabel,
   getProcurementReviewBasis,
   getSupplierVerificationChecks,
+  getSupplierMatchReasons,
   getProcurementSlaStatusLabel,
   PROCUREMENT_REQUEST_TYPE_LABELS,
   PROCUREMENT_SLA_STATUS_STYLES,
 } from '@/lib/procurement';
+
+// The evidence behind one checklist line, shown beside the box being ticked.
+// Reviewers were confirming four statements with only the statements on screen;
+// the data that answers them lived on the card behind the dialog.
+function ChecklistEvidence({ field, request }: { field: keyof ProcurementReviewBasis; request: ProcurementRequest }) {
+  const row = (label: string, value: ReactNode) => (
+    <div className="flex gap-2">
+      <span className="shrink-0 text-muted-foreground">{label}</span>
+      <span className="font-medium">{value}</span>
+    </div>
+  );
+
+  if (field === 'inventoryNeedValidated') {
+    return (
+      <div className="mt-2 space-y-1 rounded-md bg-muted/50 p-2 text-xs">
+        {row('Item', `${request.itemName}${request.itemCategory ? ` (${request.itemCategory})` : ''}`)}
+        {row('Quantity', `${request.requestedQuantity} unit(s)${request.shortageQuantity ? ` - short ${request.shortageQuantity}` : ''}`)}
+        {request.contract
+          ? row('For', `${request.contract.contractNumber} - ${request.contract.clientName}${request.contract.eventDate ? `, ${formatProcurementDate(request.contract.eventDate)}` : ''}`)
+          : row('For', 'Stock replenishment (no contract)')}
+        {request.requestReason ? <p className="pt-1 italic text-muted-foreground">{request.requestReason}</p> : null}
+      </div>
+    );
+  }
+
+  if (field === 'supplierVerified') {
+    const checks = getSupplierVerificationChecks(request);
+    const reasons = getSupplierMatchReasons(request);
+    return (
+      <div className="mt-2 space-y-2 rounded-md bg-muted/50 p-2 text-xs">
+        <ul className="space-y-1">
+          {checks.map((check) => (
+            <li key={check.label} className="flex items-start gap-1.5">
+              {check.passed
+                ? <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
+                : <XCircle className="mt-0.5 h-3 w-3 shrink-0 text-destructive" />}
+              <span className={check.passed ? '' : 'text-destructive'}>
+                <span className="font-medium">{check.label}</span> — {check.detail}
+              </span>
+            </li>
+          ))}
+        </ul>
+        {reasons.length ? (
+          <div className="border-t pt-2">
+            <p className="font-medium">Why this supplier</p>
+            <p className="text-muted-foreground">{reasons.join(' · ')}</p>
+          </div>
+        ) : (
+          <p className="border-t pt-2 text-muted-foreground">
+            Nothing on the supplier record matches this request, so there is no recorded reason for choosing them.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (field === 'pricingReviewed') {
+    return (
+      <div className="mt-2 space-y-1 rounded-md bg-muted/50 p-2 text-xs">
+        {row('Unit price', formatProcurementCurrency(request.quote?.quotedUnitPrice))}
+        {row('Total', formatProcurementCurrency(request.quote?.quotedTotal))}
+        {row('Quote ref', request.quote?.quoteReference || 'Not recorded')}
+        {row('Quoted by', request.quote?.submittedBy?.name || request.quote?.supplierName || 'Not recorded')}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 space-y-1 rounded-md bg-muted/50 p-2 text-xs">
+      {row('Needed by', formatProcurementDate(request.neededBy))}
+      {row('Expected', formatProcurementDate(request.quote?.expectedFulfillmentDate))}
+      {row('Lead time', request.quote?.leadTimeDays != null ? `${request.quote.leadTimeDays} day(s)` : 'Not recorded')}
+      {row('SLA', `${getProcurementSlaStatusLabel(request.sla?.status)}${request.sla?.daysUntilNeeded != null ? ` - ${request.sla.daysUntilNeeded} day(s) until needed` : ''}`)}
+    </div>
+  );
+}
 
 const REVIEW_FIELDS: Array<{
   key: keyof ProcurementReviewBasis;
@@ -670,7 +748,7 @@ export default function AccountingProcurementQueue() {
       </Tabs>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {reviewMode === 'budget'
@@ -744,15 +822,19 @@ export default function AccountingProcurementQueue() {
                     {REVIEW_FIELDS.map((field) => (
                       <label key={field.key} className="flex items-start gap-3 rounded-lg border p-3">
                         <Checkbox
+                          className="mt-0.5"
                           checked={reviewChecklist[field.key]}
                           onCheckedChange={(checked) => setReviewChecklist((current) => ({
                             ...current,
                             [field.key]: Boolean(checked),
                           }))}
                         />
-                        <div>
+                        <div className="min-w-0 flex-1">
                           <p className="font-medium">{field.label}</p>
                           <p className="text-sm text-muted-foreground">{field.description}</p>
+                          {/* The evidence for this specific line, so the box is
+                              ticked against data rather than against a claim. */}
+                          <ChecklistEvidence field={field.key} request={selectedRequest} />
                         </div>
                       </label>
                     ))}

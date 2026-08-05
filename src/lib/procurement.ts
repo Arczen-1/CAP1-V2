@@ -402,6 +402,49 @@ export const getSupplierVerificationChecks = (
   ];
 };
 
+// Why this particular supplier fits this request. Mirrors the signals
+// scoreSupplierForRequest ranks on, so the reason Accounting reads is the same
+// reason the system would have recommended them - rather than a separate
+// explanation that could drift out of step with the matching.
+export const getSupplierMatchReasons = (request: ProcurementRequest): string[] => {
+  const supplier = request.quote?.supplier;
+  if (!supplier) {
+    return [];
+  }
+
+  const reasons: string[] = [];
+  const itemName = normalizeText(request.itemName);
+  const itemCategory = normalizeText(request.itemCategory);
+  const locationText = getProcurementLocationText(request);
+
+  if ((supplier.departments || []).includes(request.department)) {
+    reasons.push(`Accredited for ${PROCUREMENT_DEPARTMENT_LABELS[request.department]}`);
+  }
+  if ((supplier.requestTypes || []).includes(request.requestType)) {
+    reasons.push(`Handles ${PROCUREMENT_REQUEST_TYPE_LABELS[request.requestType].toLowerCase()} requests`);
+  }
+  const category = (supplier.supportedCategories || [])
+    .find((entry) => normalizeText(entry) === itemCategory);
+  if (category) {
+    reasons.push(`Supplies the ${category} category`);
+  }
+  const keyword = (supplier.supportedKeywords || [])
+    .find((entry) => textIncludes(itemName, normalizeText(entry)));
+  if (keyword) {
+    reasons.push(`Listed for "${keyword}" items`);
+  }
+  const area = (supplier.serviceAreas || [])
+    .find((entry) => textIncludes(locationText, normalizeText(entry)));
+  if (area) {
+    reasons.push(`Serves ${area}, where this event is held`);
+  }
+  if (supplier.isPreferred) {
+    reasons.push('Marked as a preferred supplier');
+  }
+
+  return reasons;
+};
+
 export const scoreSupplierForRequest = (
   request: ProcurementRequest,
   supplier: ProcurementSupplierSummary,
