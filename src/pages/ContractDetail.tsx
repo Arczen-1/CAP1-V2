@@ -8090,7 +8090,9 @@ export default function ContractDetail() {
         </Dialog>
 
         <Dialog open={replaceDialogOpen} onOpenChange={setReplaceDialogOpen}>
-          <DialogContent className="sm:max-w-lg">
+          {/* w-[95vw] so the frame never exceeds the viewport on a laptop, and
+              overflow-hidden so no control can paint outside the dialog. */}
+          <DialogContent className="max-h-[88vh] w-[95vw] overflow-y-auto overflow-x-hidden sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Report Damage Or Loss And Replace</DialogTitle>
             </DialogHeader>
@@ -8113,7 +8115,9 @@ export default function ContractDetail() {
                   value={replaceForm.incidentType}
                   onValueChange={(value) => setReplaceForm((prev) => ({ ...prev, incidentType: value }))}
                 >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  {/* SelectTrigger is w-fit by default, so it grows to fit its
+                      label and can push past the dialog. Constrain it. */}
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="damaged_equipment">Damaged</SelectItem>
                     <SelectItem value="missing_item">Missing or lost</SelectItem>
@@ -8150,15 +8154,22 @@ export default function ContractDetail() {
                       value={replaceForm.replacementItemId}
                       onValueChange={(value) => setReplaceForm((prev) => ({ ...prev, replacementItemId: value }))}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="w-full">
                         <SelectValue placeholder="Choose from available stock" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="max-w-[--radix-select-trigger-width]">
                         {(replaceTarget?.item.alternativeSuggestions || []).map((option) => (
                           <SelectItem key={option.itemId} value={option.itemId}>
-                            {option.itemName}
-                            {option.itemCode ? ` (${option.itemCode})` : ''} — {option.availableQuantity} available
-                            {option.canCoverFullRequest ? ' · covers this line' : ''}
+                            {/* Name on one line, the stock detail under it, so a
+                                long item name cannot widen the control. */}
+                            <span className="flex min-w-0 flex-col">
+                              <span className="truncate">{option.itemName}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {option.itemCode ? `${option.itemCode} · ` : ''}
+                                {option.availableQuantity} available
+                                {option.canCoverFullRequest ? ' · covers this line' : ''}
+                              </span>
+                            </span>
                           </SelectItem>
                         ))}
                       </SelectContent>
