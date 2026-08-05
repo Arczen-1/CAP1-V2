@@ -314,7 +314,7 @@ export default function PurchasingDashboard() {
       });
       toast.success('Purchase request raised. The rental requests stay open until you return them.');
       setBuyInsteadDialogOpen(false);
-      await fetchData();
+      await fetchRequests();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to raise the purchase request');
     }
