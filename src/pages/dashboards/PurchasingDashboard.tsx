@@ -81,6 +81,14 @@ export default function PurchasingDashboard() {
   const [fulfillmentDialogOpen, setFulfillmentDialogOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<ProcurementRequest | null>(null);
   const [quoteForm, setQuoteForm] = useState(buildEmptyQuoteForm());
+  // Comparison quotations gathered alongside the main one. Two at most, since a
+  // canvass is three quotations including the one in the form above.
+  const [comparisonQuotes, setComparisonQuotes] = useState<Array<{
+    supplierId: string;
+    supplierName: string;
+    quotedUnitPrice: string;
+    quoteReference: string;
+  }>>([]);
   const [fulfillmentForm, setFulfillmentForm] = useState(buildEmptyFulfillmentForm());
   const [buyInsteadDialogOpen, setBuyInsteadDialogOpen] = useState(false);
   const [buyInsteadForm, setBuyInsteadForm] = useState({
@@ -245,6 +253,20 @@ export default function PurchasingDashboard() {
       rentalEndDate: request.quote?.rentalEndDate?.slice(0, 10) || '',
       notes: request.quote?.notes || matchedSupplier?.notes || '',
     });
+    // Re-quoting a request re-opens its canvass. Any comparison quotations
+    // already recorded are loaded back so they are not silently dropped on
+    // resubmission; rows from a previously opened request never carry over.
+    setComparisonQuotes(
+      (request.quotes || [])
+        .filter((entry) => entry._id !== request.selectedQuoteId)
+        .slice(0, 2)
+        .map((entry) => ({
+          supplierId: entry.supplier?._id || '',
+          supplierName: entry.supplierName || '',
+          quotedUnitPrice: entry.quotedUnitPrice ? String(entry.quotedUnitPrice) : '',
+          quoteReference: entry.quoteReference || '',
+        }))
+    );
     setQuoteDialogOpen(true);
   };
 
@@ -378,22 +400,44 @@ export default function PurchasingDashboard() {
       return;
     }
 
-    try {
-      await api.updateProcurementQuote(selectedRequest._id, {
+    // The canvass: the main quotation, plus any comparison quotations gathered
+    // for the same item. Accounting selects which one is funded, so the prices
+    // have to reach it together rather than one at a time.
+    const filledComparisons = comparisonQuotes.filter(
+      (entry) => entry.supplierName.trim() && entry.quotedUnitPrice
+    );
+
+    const canvass = [
+      {
         supplierId: quoteForm.supplierId || undefined,
         supplierName: quoteForm.supplierName.trim(),
         supplierContact: quoteForm.supplierContact.trim(),
         supplierEmail: quoteForm.supplierEmail.trim(),
-        quotedUnitPrice: quoteForm.quotedUnitPrice ? Number(quoteForm.quotedUnitPrice) : undefined,
+        quotedUnitPrice: Number(quoteForm.quotedUnitPrice),
         expectedFulfillmentDate: quoteForm.expectedFulfillmentDate || undefined,
         rentalStartDate: quoteForm.rentalStartDate || undefined,
         rentalEndDate: quoteForm.rentalEndDate || undefined,
         notes: quoteForm.notes.trim(),
-      });
-      toast.success('Budget request sent to accounting');
+      },
+      ...filledComparisons.map((entry) => ({
+        supplierId: entry.supplierId || undefined,
+        supplierName: entry.supplierName.trim(),
+        quotedUnitPrice: Number(entry.quotedUnitPrice),
+        quoteReference: entry.quoteReference.trim(),
+      })),
+    ];
+
+    try {
+      await api.updateProcurementQuote(selectedRequest._id, { quotes: canvass });
+      toast.success(
+        canvass.length > 1
+          ? `Canvass of ${canvass.length} quotations sent to accounting`
+          : 'Budget request sent to accounting'
+      );
       setQuoteDialogOpen(false);
       setSelectedRequest(null);
       setQuoteForm(buildEmptyQuoteForm());
+      setComparisonQuotes([]);
       fetchRequests();
     } catch (error: any) {
       toast.error(error.message || 'Failed to submit purchasing report');
@@ -1047,6 +1091,72 @@ export default function PurchasingDashboard() {
                             rows={5}
                             placeholder="Add supplier terms, delivery notes, rental details, or anything accounting should review."
                           />
+                        </div>
+
+                        {/* Comparison quotations. Sending the prices together is
+                            what lets Accounting choose on price; sent one at a
+                            time there is nothing to compare against. */}
+                        <div className="space-y-3 rounded-lg border p-4">
+                          <div>
+                            <p className="font-medium">Comparison Quotations</p>
+                            <p className="text-sm text-muted-foreground">
+                              Optional. Add the other suppliers you canvassed for this item, up to two more.
+                              Accounting funds the cheapest unless it records a reason to choose otherwise.
+                            </p>
+                          </div>
+
+                          {comparisonQuotes.map((entry, index) => (
+                            <div key={index} className="grid gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                              <Input
+                                value={entry.supplierName}
+                                onChange={(event) => setComparisonQuotes((current) => current.map((row, i) => (
+                                  i === index ? { ...row, supplierName: event.target.value } : row
+                                )))}
+                                placeholder="Supplier name"
+                              />
+                              <Input
+                                type="number"
+                                min="0"
+                                value={entry.quotedUnitPrice}
+                                onChange={(event) => setComparisonQuotes((current) => current.map((row, i) => (
+                                  i === index ? { ...row, quotedUnitPrice: event.target.value } : row
+                                )))}
+                                placeholder="Unit price"
+                              />
+                              <Input
+                                value={entry.quoteReference}
+                                onChange={(event) => setComparisonQuotes((current) => current.map((row, i) => (
+                                  i === index ? { ...row, quoteReference: event.target.value } : row
+                                )))}
+                                placeholder="Quote ref"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => setComparisonQuotes((current) => current.filter((_, i) => i !== index))}
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          ))}
+
+                          {comparisonQuotes.length < 2 ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setComparisonQuotes((current) => [
+                                ...current,
+                                { supplierId: '', supplierName: '', quotedUnitPrice: '', quoteReference: '' },
+                              ])}
+                            >
+                              Add Comparison Quotation
+                            </Button>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              Three quotations is the full canvass.
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>

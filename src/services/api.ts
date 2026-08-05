@@ -345,6 +345,15 @@ class ApiService {
     });
   }
 
+  // Accounting picks which canvassed quotation is funded. Only chooses among
+  // what Purchasing already gathered - it cannot introduce a supplier.
+  async selectProcurementQuote(id: string, quoteId: string) {
+    return this.request(`/procurement-requests/${id}/select-quote`, {
+      method: 'POST',
+      body: JSON.stringify({ quoteId })
+    });
+  }
+
   async reviewProcurementRequest(id: string, data: any) {
     return this.request(`/procurement-requests/${id}/accounting-review`, {
       method: 'POST',

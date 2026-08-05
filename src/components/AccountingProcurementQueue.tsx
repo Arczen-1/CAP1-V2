@@ -32,10 +32,11 @@ import {
 // The evidence behind one checklist line, shown beside the box being ticked.
 // Reviewers were confirming four statements with only the statements on screen;
 // the data that answers them lived on the card behind the dialog.
-function ChecklistEvidence({ field, request, suppliers }: {
+function ChecklistEvidence({ field, request, suppliers, onSelectQuote }: {
   field: keyof ProcurementReviewBasis;
   request: ProcurementRequest;
   suppliers: ProcurementSupplierSummary[];
+  onSelectQuote?: (quoteId: string) => void;
 }) {
   const row = (label: string, value: ReactNode) => (
     <div className="flex gap-2">
@@ -84,11 +85,45 @@ function ChecklistEvidence({ field, request, suppliers }: {
             Nothing on the supplier record matches this request, so there is no recorded reason for choosing them.
           </p>
         )}
-        {/* Who else could have supplied this. Read-only on purpose: Accounting
-            reviews Purchasing's choice, it does not make it. If the choice looks
-            wrong the request is returned with "Supplier issue" so Purchasing
-            re-sources, which keeps the decision and the payment separate. */}
-        {(() => {
+        {/* The canvass. Choosing between quotations Purchasing already gathered
+            is a price decision, so Accounting may select here - but only from
+            what was canvassed. Introducing a supplier stays with Purchasing. */}
+        {(request.quotes?.length || 0) > 1 ? (
+          <div className="border-t pt-2">
+            <p className="font-medium">Canvass — {request.quotes!.length} quotations</p>
+            <ul className="mt-1.5 space-y-1">
+              {[...request.quotes!]
+                .sort((a, b) => (a.quotedTotal || 0) - (b.quotedTotal || 0))
+                .map((entry) => {
+                  const isSelected = entry._id === request.selectedQuoteId;
+                  return (
+                    <li key={entry._id}>
+                      <button
+                        type="button"
+                        disabled={!onSelectQuote || isSelected}
+                        onClick={() => onSelectQuote?.(entry._id)}
+                        className={`flex w-full items-start justify-between gap-2 rounded border px-2 py-1.5 text-left ${
+                          isSelected ? 'border-primary bg-background font-medium' : 'hover:bg-background'
+                        }`}
+                      >
+                        <span className="min-w-0">
+                          {entry.supplierName}
+                          {entry.quoteReference ? <span className="text-muted-foreground"> · {entry.quoteReference}</span> : null}
+                          {isSelected ? <span className="text-primary"> · funded</span> : null}
+                        </span>
+                        <span className="shrink-0">{formatProcurementCurrency(entry.quotedTotal)}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+            </ul>
+            <p className="mt-1.5 italic text-muted-foreground">
+              Cheapest is selected by default. Selecting a dearer quotation is recorded on the request.
+            </p>
+          </div>
+        ) : (() => {
+          // No canvass on this request - fall back to naming who else could have
+          // supplied it, so the single choice is still visible as a choice.
           const chosenId = request.quote?.supplier?._id;
           const alternatives = getRecommendedSuppliersForRequest(request, suppliers, 4)
             .filter((entry) => entry.supplier._id !== chosenId)
@@ -108,7 +143,7 @@ function ChecklistEvidence({ field, request, suppliers }: {
                 ))}
               </ul>
               <p className="mt-1 italic">
-                Purchasing selects the supplier. Return the request with &quot;Supplier issue&quot; if this choice should be reconsidered.
+                Only one quotation was gathered. Return the request with &quot;Supplier issue&quot; to ask Purchasing to canvass.
               </p>
             </div>
           );
@@ -291,6 +326,24 @@ export default function AccountingProcurementQueue() {
     }, 200);
     return () => window.clearTimeout(timer);
   }, [highlightRequestId, requests, activeQueue]);
+
+  // Selecting a canvassed quotation rewrites the funded amount, so the open
+  // dialog is refreshed from the server response rather than patched locally -
+  // the budget check on approval reads the same figure.
+  const handleSelectQuote = async (quoteId: string) => {
+    if (!selectedRequest) {
+      return;
+    }
+
+    try {
+      const updated = await api.selectProcurementQuote(selectedRequest._id, quoteId) as ProcurementRequest;
+      setSelectedRequest(updated);
+      setRequests((current) => current.map((entry) => (entry._id === updated._id ? updated : entry)));
+      toast.success(`Now funding ${updated.quote?.supplierName}`);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to select that quotation');
+    }
+  };
 
   const handleQueueChange = (value: string) => {
     const nextQueue = value === 'expense' ? 'expense' : 'budget';
@@ -888,7 +941,7 @@ export default function AccountingProcurementQueue() {
                             <p className="text-sm text-muted-foreground">{field.description}</p>
                           </div>
                         </div>
-                        <ChecklistEvidence field={field.key} request={selectedRequest} suppliers={suppliers} />
+                        <ChecklistEvidence field={field.key} request={selectedRequest} suppliers={suppliers} onSelectQuote={handleSelectQuote} />
                       </label>
                     ))}
                   </div>

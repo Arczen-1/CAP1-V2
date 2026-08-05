@@ -92,8 +92,25 @@ export interface ProcurementRentVsBuy {
   }[];
 }
 
+// One quotation inside the canvass. Same shape as `quote`, plus its own _id so
+// a specific quotation can be selected by reference.
+export interface ProcurementCanvassQuote {
+  _id: string;
+  supplier?: ProcurementSupplierSummary | null;
+  supplierName?: string;
+  quotedUnitPrice?: number;
+  quotedTotal?: number;
+  quoteReference?: string;
+  leadTimeDays?: number;
+  expectedFulfillmentDate?: string;
+  notes?: string;
+}
+
 export interface ProcurementRequest {
   _id: string;
+  /** Every quotation Purchasing gathered. `quote` mirrors the selected one. */
+  quotes?: ProcurementCanvassQuote[];
+  selectedQuoteId?: string | null;
   rentVsBuy?: ProcurementRentVsBuy;
   /** Set on a purchase raised in place of rentals, populated with those rentals. */
   replacesRequests?: {
