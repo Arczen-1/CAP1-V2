@@ -34,6 +34,11 @@ mongoose.connect(MONGODB_URI)
     // days with the truck and/or staff transport still unbooked (Appendix H).
     const { startTransportLeadTimeSweep } = require('./transportLeadTimeNotifications');
     startTransportLeadTimeSweep();
+    // Loading readiness: clears an event for loading once every department has
+    // finished, and escalates by name when the loading window arrives and one
+    // has not.
+    const { startLoadingReadinessSweep } = require('./loadingReadinessNotifications');
+    startLoadingReadinessSweep();
   })
   .catch(err => console.error('MongoDB connection error:', err));
 

@@ -325,6 +325,18 @@ const procurementRequestSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  // Set when a purchase request is raised in place of rental requests, after the
+  // rent-vs-buy comparison showed buying was cheaper. Keeps the link so that
+  // months later it is still clear why the purchase happened, rather than the
+  // two rentals simply disappearing from the queue.
+  //
+  // The rentals are deliberately NOT closed automatically - the purchase may
+  // still be refused on budget, and the rental fallback has to stay live until
+  // a person decides.
+  replacesRequests: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ProcurementRequest'
+  }],
   sla: {
     type: procurementSlaSchema,
     default: () => ({})

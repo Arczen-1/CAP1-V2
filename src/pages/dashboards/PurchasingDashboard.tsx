@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { CalendarClock, ClipboardList, FileText, PackageCheck, Printer, ShoppingCart } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { printRequisitionForm } from '@/lib/requisitionPrint';
+import RentVsBuyPanel from '@/components/RentVsBuyPanel';
 import type { ProcurementRequest, ProcurementSupplierSummary } from '@/lib/procurement';
 import {
   formatProcurementCurrency,
@@ -81,6 +82,11 @@ export default function PurchasingDashboard() {
   const [selectedRequest, setSelectedRequest] = useState<ProcurementRequest | null>(null);
   const [quoteForm, setQuoteForm] = useState(buildEmptyQuoteForm());
   const [fulfillmentForm, setFulfillmentForm] = useState(buildEmptyFulfillmentForm());
+  const [buyInsteadDialogOpen, setBuyInsteadDialogOpen] = useState(false);
+  const [buyInsteadForm, setBuyInsteadForm] = useState({
+    quantity: '', neededBy: '', requestReason: '', requestNotes: '',
+    replacesIds: [] as string[], replacedNumbers: '',
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [requisitionTypeFilter, setRequisitionTypeFilter] = useState('all');
@@ -240,6 +246,78 @@ export default function PurchasingDashboard() {
       notes: request.quote?.notes || matchedSupplier?.notes || '',
     });
     setQuoteDialogOpen(true);
+  };
+
+  // Raising a purchase in place of the rentals the comparison flagged.
+  //
+  // Pre-filled rather than automatic: the quantity comes from the peak units the
+  // analysis computed (which is the number a person retyping this would most
+  // easily get wrong), but Purchasing still reviews and submits it. Buying is a
+  // capital decision and stays with a person.
+  const openBuyInsteadDialog = (request: ProcurementRequest) => {
+    const analysis = request.rentVsBuy;
+    if (!analysis) return;
+
+    const replaced = [request, ...analysis.relatedRequests.filter((r) => r.requestType === 'rental')];
+    const eventList = analysis.relatedRequests
+      .filter((r) => r.requestType === 'rental')
+      .map((r) => r.contractNumber || r.requestNumber)
+      .concat(request.contract?.contractNumber || request.requestNumber);
+
+    setSelectedRequest(request);
+    setBuyInsteadForm({
+      quantity: String(analysis.unitsNeeded || request.requestedQuantity || 1),
+      // Earliest date any of the rentals needed it - buying later than that
+      // would leave the first event uncovered.
+      neededBy: [request.neededBy, ...analysis.relatedRequests.map((r) => r.neededBy)]
+        .filter(Boolean)
+        .map((d) => String(d).slice(0, 10))
+        .sort()[0] || getTodayValue(),
+      requestReason: `Buying instead of renting: the same item is needed for ${eventList.length} events (${eventList.join(', ')}). ${analysis.summary}`,
+      requestNotes: '',
+      replacesIds: replaced.map((r) => r._id),
+      replacedNumbers: replaced.map((r) => r.requestNumber).join(', '),
+    });
+    setBuyInsteadDialogOpen(true);
+  };
+
+  const handleRaisePurchase = async () => {
+    if (!selectedRequest) return;
+
+    const quantity = Number(buyInsteadForm.quantity);
+    if (!Number.isFinite(quantity) || quantity < 1) {
+      toast.error('Enter how many units to buy.');
+      return;
+    }
+    if (!buyInsteadForm.neededBy) {
+      toast.error('Set the needed-by date.');
+      return;
+    }
+
+    try {
+      await api.createProcurementRequest({
+        department: selectedRequest.department,
+        requestType: 'purchase',
+        ...(selectedRequest.inventoryItem?._id
+          ? { inventoryItemId: selectedRequest.inventoryItem._id }
+          : {
+              itemName: selectedRequest.itemName,
+              itemCode: selectedRequest.itemCode,
+              itemCategory: selectedRequest.itemCategory,
+            }),
+        requestedQuantity: quantity,
+        neededBy: buyInsteadForm.neededBy,
+        requestReason: buyInsteadForm.requestReason,
+        requestNotes: buyInsteadForm.requestNotes,
+        source: 'manual',
+        replacesRequests: buyInsteadForm.replacesIds,
+      });
+      toast.success('Purchase request raised. The rental requests stay open until you return them.');
+      setBuyInsteadDialogOpen(false);
+      await fetchData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to raise the purchase request');
+    }
   };
 
   const openFulfillmentDialog = (request: ProcurementRequest) => {
@@ -445,6 +523,19 @@ export default function PurchasingDashboard() {
                     </div>
                   </div>
                 </div>
+
+                {/* Caught here, before the request reaches Accounting, so the
+                    buy-instead question can be settled while the quote is
+                    still being sourced. */}
+                <RentVsBuyPanel
+                  analysis={request.rentVsBuy}
+                  action={request.rentVsBuy?.recommendation === 'buy' ? (
+                    <Button size="sm" variant="outline" onClick={() => openBuyInsteadDialog(request)}>
+                      <ShoppingCart className="mr-2 h-4 w-4" />
+                      Raise purchase instead
+                    </Button>
+                  ) : null}
+                />
 
                 <div className="grid gap-4 lg:grid-cols-3">
                   <div className="rounded-lg border p-4">
@@ -1081,6 +1172,86 @@ export default function PurchasingDashboard() {
                   </div>
                 </div>
               </>
+            ) : null}
+          </DialogContent>
+        </Dialog>
+
+        {/* Raise a purchase in place of the flagged rentals. Pre-filled from the
+            comparison, but submitted by a person. */}
+        <Dialog open={buyInsteadDialogOpen} onOpenChange={setBuyInsteadDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Raise a purchase instead of renting</DialogTitle>
+            </DialogHeader>
+            {selectedRequest ? (
+              <div className="space-y-4">
+                <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+                  <p className="font-medium">{selectedRequest.itemName}</p>
+                  <p className="mt-1 text-muted-foreground">
+                    {selectedRequest.rentVsBuy?.summary}
+                  </p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="buy-qty">Quantity to buy</Label>
+                    <Input
+                      id="buy-qty" type="number" min={1}
+                      value={buyInsteadForm.quantity}
+                      onChange={(event) => setBuyInsteadForm((current) => ({ ...current, quantity: event.target.value }))}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Pre-filled with the peak units needed at any one time, not the number of requests.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="buy-needed">Needed by</Label>
+                    <Input
+                      id="buy-needed" type="date"
+                      value={buyInsteadForm.neededBy}
+                      onChange={(event) => setBuyInsteadForm((current) => ({ ...current, neededBy: event.target.value }))}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Earliest date any of the rentals needed it.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="buy-reason">Reason</Label>
+                  <Textarea
+                    id="buy-reason" rows={3}
+                    value={buyInsteadForm.requestReason}
+                    onChange={(event) => setBuyInsteadForm((current) => ({ ...current, requestReason: event.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="buy-notes">Notes for accounting (optional)</Label>
+                  <Textarea
+                    id="buy-notes" rows={2}
+                    value={buyInsteadForm.requestNotes}
+                    onChange={(event) => setBuyInsteadForm((current) => ({ ...current, requestNotes: event.target.value }))}
+                  />
+                </div>
+
+                <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-900">
+                  <p className="font-medium">The rentals stay open</p>
+                  <p className="mt-1">
+                    {buyInsteadForm.replacedNumbers} will be linked to this purchase but not closed. If the
+                    purchase is refused on budget, the rental fallback is still there. Return them once the
+                    purchase is approved.
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setBuyInsteadDialogOpen(false)}>Cancel</Button>
+                  <Button onClick={handleRaisePurchase}>
+                    <ShoppingCart className="mr-2 h-4 w-4" />
+                    Raise Purchase Request
+                  </Button>
+                </div>
+              </div>
             ) : null}
           </DialogContent>
         </Dialog>

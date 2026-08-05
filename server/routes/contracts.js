@@ -15,6 +15,7 @@ const User = require('../models/User');
 const { Driver, Truck } = require('../models/Logistics');
 const { evaluateVehicleCoding, getEventCodingSummary } = require('../utils/numberCoding');
 const { reconcileTruckStatus } = require('../logisticsStatusSync');
+const { getLoadingReadiness } = require('../loadingReadiness');
 const { auth, requireRole } = require('../middleware/auth');
 
 const ACTIVE_CONTRACT_STATUSES = ['draft', 'pending_client_signature', 'submitted', 'accounting_review', 'approved'];
@@ -1166,6 +1167,9 @@ const getPaymentMilestones = (contract) => {
   const fortyPercentDueDate = addMonths(bookingDate, 2);
   const fortyPercentFollowUpDate = addMonths(fortyPercentDueDate, -1);
   const finalBalanceDueDate = getFinalPaymentDueDate(contract);
+  // Last date the balance can be settled before the booking is cancelled.
+  // Kept in step with paymentCompliance.getFinalSettlementDeadline.
+  const finalSettlementDeadline = addMonths(contract.eventDate || new Date(), -1);
   const agingEndsAt = addDays(fortyPercentDueDate, PAYMENT_AGING_WINDOW_DAYS);
   const today = new Date();
   const reservationFeePaid = totalPaid + MONEY_EPSILON >= Math.min(reservationFee, totalContractValue);
@@ -1176,6 +1180,8 @@ const getPaymentMilestones = (contract) => {
   const fortyPercentPastDue = !downPaymentSatisfied && today > endOfDay(fortyPercentDueDate);
   const uncollectible = !downPaymentSatisfied && today > endOfDay(agingEndsAt);
   const finalBalancePastDue = !fullyPaid && today > endOfDay(finalBalanceDueDate);
+  const settlementDeadlinePassed = !fullyPaid && today > endOfDay(finalSettlementDeadline);
+  const daysToSettlementDeadline = Math.ceil((endOfDay(finalSettlementDeadline) - today) / (1000 * 60 * 60 * 24));
   const accountingStatus = fullyPaid
     ? 'fully_paid'
     : uncollectible
@@ -1206,12 +1212,15 @@ const getPaymentMilestones = (contract) => {
     fortyPercentDueDate,
     fortyPercentFollowUpDate,
     finalBalanceDueDate,
+    finalSettlementDeadline,
     agingEndsAt,
     reservationFeePaid,
     downPaymentSatisfied,
     fullyPaid,
     fortyPercentPastDue,
     finalBalancePastDue,
+    settlementDeadlinePassed,
+    daysToSettlementDeadline,
     uncollectible,
     accountingStatus
   };
@@ -1860,7 +1869,11 @@ const buildOperationsSummary = async (contract) => {
       equipmentChecklist: stockroomItems,
       allItemsReady: [...creativeItems, ...linenItems, ...stockroomItems].every(item => item.readyForDispatch),
       shortages: [...creativeItems, ...linenItems, ...stockroomItems].filter(item => !item.enoughStock)
-    }
+    },
+    // Per-department loading readiness, from the same definition the sweep and
+    // the logistics dashboard use. Unlike `allItemsReady` above this includes
+    // the kitchen and says which department is outstanding.
+    loadingReadiness: getLoadingReadiness(contract)
   };
 };
 
@@ -1904,7 +1917,14 @@ router.get('/', auth, async (req, res) => {
       .populate('assignedSupervisor', 'name')
       .sort({ createdAt: -1 });
 
-    res.json(contracts);
+    // Loading readiness is derived from statuses already on the document, so it
+    // costs nothing to attach here. Computing it server-side keeps the one
+    // definition of "ready to load" shared with the reminder sweep instead of
+    // being restated in the dashboard.
+    res.json(contracts.map((contract) => ({
+      ...contract.toObject(),
+      loadingReadiness: getLoadingReadiness(contract)
+    })));
   } catch (error) {
     if (error?.code === 11000 && error?.keyPattern?.contractNumber) {
       return res.status(409).json({

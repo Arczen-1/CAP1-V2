@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import RentVsBuyPanel from '@/components/RentVsBuyPanel';
 import { toast } from 'sonner';
 import { CheckCircle2, Clock3, FileCheck2, ReceiptText, RotateCcw, XCircle } from 'lucide-react';
 import type { ProcurementRequest, ProcurementReviewBasis } from '@/lib/procurement';
@@ -202,6 +203,27 @@ export default function AccountingProcurementQueue() {
     setDecision(nextDecision);
     setNotes('');
     setRejectionReason('');
+    setReviewChecklist(getProcurementReviewBasis(request));
+    setDialogOpen(true);
+  };
+
+  // Accounting cannot raise procurement requests - only Purchasing and the
+  // owning departments can. So the follow-through here is to return the request
+  // with the comparison already written out, rather than making someone retype
+  // the numbers into a note.
+  const openRecommendPurchaseDialog = (request: ProcurementRequest) => {
+    const analysis = request.rentVsBuy;
+    if (!analysis) return;
+
+    setSelectedRequest(request);
+    setReviewMode('budget');
+    setDecision('rejected');
+    setRejectionReason('');
+    setNotes(
+      `Returning this rental: buying looks cheaper. ${analysis.summary} `
+      + `Please raise a purchase request for ${analysis.unitsNeeded} unit(s) instead, `
+      + `or reply explaining why renting is still the better option.`
+    );
     setReviewChecklist(getProcurementReviewBasis(request));
     setDialogOpen(true);
   };
@@ -489,6 +511,18 @@ export default function AccountingProcurementQueue() {
                   </div>
                 </div>
 
+                {/* Another event wants this same item. Shown before the approve
+                    buttons, because it is the one thing that might change the
+                    decision about to be made. */}
+                <RentVsBuyPanel
+                  analysis={request.rentVsBuy}
+                  action={request.rentVsBuy?.recommendation === 'buy' ? (
+                    <Button size="sm" variant="outline" onClick={() => openRecommendPurchaseDialog(request)}>
+                      Recommend purchase to Purchasing
+                    </Button>
+                  ) : null}
+                />
+
                 <div className="flex flex-wrap gap-2">
                   <Button onClick={() => openBudgetDialog(request, 'approved')}>
                     <FileCheck2 className="mr-2 h-4 w-4" />
@@ -656,6 +690,47 @@ export default function AccountingProcurementQueue() {
                   {selectedRequest.itemName} | {selectedRequest.requestedQuantity} unit(s) | Needed by {formatProcurementDate(selectedRequest.neededBy)}
                 </p>
               </div>
+
+              {/* Money is committed on this screen, so the rent-vs-buy overlap
+                  has to be said here and not only on the queue card behind the
+                  dialog. Warned, never blocked: if the purchase is refused on
+                  budget, approving the rental is the correct call. */}
+              {reviewMode === 'budget' && decision === 'approved' ? (() => {
+                const openPurchases = (selectedRequest.rentVsBuy?.relatedRequests || [])
+                  .filter((related) => related.requestType === 'purchase');
+                const openRentals = (selectedRequest.replacesRequests || [])
+                  .filter((replaced) => !['rejected', 'cancelled', 'fulfilled'].includes(replaced.status));
+
+                if (selectedRequest.requestType === 'rental' && openPurchases.length) {
+                  return (
+                    <div className="rounded-lg border border-red-200 bg-red-50/80 p-4 text-sm text-red-900">
+                      <p className="font-medium">A purchase is already open for this item</p>
+                      <p className="mt-1">
+                        {openPurchases.map((purchase) => purchase.requestNumber).join(', ')} was raised to buy this
+                        item instead of renting it. Approving this rental as well would pay for the same need twice.
+                      </p>
+                      <p className="mt-2">
+                        Approve only if the purchase is being refused. Otherwise return this rental and approve the purchase.
+                      </p>
+                    </div>
+                  );
+                }
+
+                if (selectedRequest.requestType === 'purchase' && openRentals.length) {
+                  return (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900">
+                      <p className="font-medium">Rental requests for this item are still open</p>
+                      <p className="mt-1">
+                        This purchase replaces {openRentals.map((rental) => rental.requestNumber).join(', ')}, which
+                        are still in the queue. Approving this does not close them.
+                      </p>
+                      <p className="mt-2">Return those rentals after approving, or the item may be rented as well.</p>
+                    </div>
+                  );
+                }
+
+                return null;
+              })() : null}
 
               {reviewMode === 'budget' ? (
                 <>

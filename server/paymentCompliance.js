@@ -14,6 +14,12 @@ const User = require('./models/User');
 // - Clients may pay 100% early at any time; a fully paid contract skips every rule.
 const RESERVATION_FEE_AMOUNT = 30000;
 const PAYMENT_AGING_WINDOW_DAYS = 30;
+// The remaining balance must be settled no later than one month before the
+// event. Three days out the reminder escalates; past the deadline the contract
+// is cancelled automatically and Sales is told to contact the client.
+// The same three-day lead is used before the 40% aging window closes, so both
+// milestones give a final warning before their terminal state.
+const FINAL_NOTICE_DAYS = 3;
 const ACTIVE_STATUSES = ['submitted', 'accounting_review', 'approved'];
 
 const startOfDay = (value) => { const d = new Date(value); d.setHours(0, 0, 0, 0); return d; };
@@ -48,6 +54,16 @@ const getFinalPaymentDueDate = (contract) => {
   return dueDate;
 };
 
+// The last date the client can settle the remaining balance. A contract held
+// for non-payment stays recoverable until this point; past it the booking is
+// cancelled automatically so the date is not held for an event that will not
+// be paid for.
+const getFinalSettlementDeadline = (contract) => {
+  const deadline = new Date(contract.eventDate || new Date());
+  deadline.setMonth(deadline.getMonth() - 1);
+  return deadline;
+};
+
 const getPaymentMilestones = (contract) => {
   const totalContractValue = Number(contract.totalContractValue) || 0;
   const { downPaymentPercent, finalPaymentPercent } = getNormalizedPaymentSplit(contract);
@@ -61,7 +77,11 @@ const getPaymentMilestones = (contract) => {
   const fortyPercentDueDate = addMonths(bookingDate, 2);
   const fortyPercentFollowUpDate = addMonths(fortyPercentDueDate, -1);
   const finalBalanceDueDate = getFinalPaymentDueDate(contract);
+  const finalSettlementDeadline = getFinalSettlementDeadline(contract);
+  const finalSettlementWarningDate = addDays(finalSettlementDeadline, -FINAL_NOTICE_DAYS);
   const agingEndsAt = addDays(fortyPercentDueDate, PAYMENT_AGING_WINDOW_DAYS);
+  // Last warning before the 40% account is written off.
+  const agingFinalNoticeDate = addDays(agingEndsAt, -FINAL_NOTICE_DAYS);
   const now = new Date();
   const downPaymentSatisfied = fullPaymentPlan
     ? totalPaid + MONEY_EPSILON >= totalContractValue
@@ -77,10 +97,16 @@ const getPaymentMilestones = (contract) => {
     fortyPercentDueDate,
     fortyPercentFollowUpDate,
     finalBalanceDueDate,
+    finalSettlementDeadline,
+    finalSettlementWarningDate,
     agingEndsAt,
+    agingFinalNoticeDate,
     downPaymentSatisfied,
     fullyPaid,
-    uncollectible: !downPaymentSatisfied && now > endOfDay(agingEndsAt)
+    uncollectible: !downPaymentSatisfied && now > endOfDay(agingEndsAt),
+    // Past the settlement deadline with money still owed: the booking is
+    // forfeited. Evaluated here so the sweep and any caller agree.
+    settlementDeadlinePassed: !fullyPaid && now > endOfDay(finalSettlementDeadline)
   };
 };
 
@@ -166,12 +192,17 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // The title carries the number of days outstanding, so each reminder is
 // naturally distinct (the once-per-title dedup cannot collapse them) and the
 // recipient can see how long this has been running without opening anything.
-// Cadence is measured from the newest notification of the same type on the
-// same contract, so re-running the sweep four times a day cannot stack them.
+//
+// Cadence is measured from the newest notification in this reminder's own
+// series, identified by `series` (the fixed part of the title). Measuring it
+// against every notification of the same type instead would let an unrelated
+// alert that happens to share the type - payment_followup covers several -
+// silently push the next reminder back by a full cycle.
 const notifyRolesRecurring = async ({
   contract,
   roles,
   type,
+  series,
   everyDays = 7,
   title,
   message,
@@ -180,7 +211,11 @@ const notifyRolesRecurring = async ({
   actionLabel = 'Review payment',
   department = 'accounting'
 }) => {
-  const [latest] = await Notification.find({ contract: contract._id, type })
+  const [latest] = await Notification.find({
+    contract: contract._id,
+    type,
+    title: new RegExp(`^${series.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)
+  })
     .sort({ createdAt: -1 })
     .limit(1)
     .lean();
@@ -217,7 +252,7 @@ const runPaymentComplianceSweep = async () => {
   }
 
   sweepRunning = true;
-  const summary = { checked: 0, notified: 0, held: [], released: [], reminded: [] };
+  const summary = { checked: 0, notified: 0, held: [], released: [], reminded: [], cancelled: [] };
 
   try {
     const now = new Date();
@@ -296,17 +331,42 @@ const runPaymentComplianceSweep = async () => {
         ? 0
         : Math.floor((now - startOfDay(milestones.fortyPercentDueDate)) / DAY_MS);
 
-      if (!milestones.downPaymentSatisfied && daysOverdue >= 7 && !milestones.uncollectible) {
+      if (!milestones.downPaymentSatisfied
+        && daysOverdue >= 7
+        && !milestones.uncollectible
+        // Stops once the final notice below takes over, so the last few days
+        // do not carry two overlapping reminders.
+        && now < startOfDay(milestones.agingFinalNoticeDate)) {
         const sent = await notifyRolesRecurring({
           contract,
           roles: ['accounting'],
           type: 'payment_followup',
+          series: 'Still uncollected after',
           everyDays: 7,
           title: `Still uncollected after ${daysOverdue} day${daysOverdue === 1 ? '' : 's'}: ${contract.contractNumber}`,
           message: `${contract.clientName}'s ${dpLabel} collection of ${formatAmount(milestones.requiredDownPayment)} has been outstanding since ${formatDate(milestones.fortyPercentDueDate)}. The 30-day aging window ends ${formatDate(milestones.agingEndsAt)}, after which the account is marked uncollectible. This reminder repeats weekly until the payment is recorded.`,
           priority: 'high'
         });
         if (sent) { summary.notified += 1; summary.reminded.push(contract.contractNumber); }
+      }
+
+      // Last call before the account is written off. The 60% milestone warns
+      // three days before its deadline; the 40% now does the same so neither
+      // terminal state arrives without notice.
+      if (!milestones.downPaymentSatisfied
+        && !milestones.uncollectible
+        && now >= startOfDay(milestones.agingFinalNoticeDate)) {
+        const daysLeft = Math.max(0, Math.ceil((endOfDay(milestones.agingEndsAt) - now) / DAY_MS));
+        const sent = await notifyRolesOnce({
+          contract,
+          roles: ['accounting'],
+          type: 'payment_milestone_due',
+          title: `Final notice - ${daysLeft} day${daysLeft === 1 ? '' : 's'} before write-off: ${contract.contractNumber}`,
+          message: `${contract.clientName}'s ${dpLabel} collection of ${formatAmount(milestones.requiredDownPayment)} is still outstanding and the 30-day aging window closes on ${formatDate(milestones.agingEndsAt)}. After that the account is marked uncollectible. This is the last chance to collect or escalate before it is written off.`,
+          priority: 'high',
+          actionLabel: 'Contact customer'
+        });
+        if (sent) summary.notified += 1;
       }
 
       // Aging window expired without payment: the account is uncollectible.
@@ -333,6 +393,67 @@ const runPaymentComplianceSweep = async () => {
 
       if (!milestones.fullyPaid) {
         const pastFinalDue = now > endOfDay(milestones.finalBalanceDueDate);
+
+        // Settlement deadline reached with money still owed: the booking is
+        // cancelled so the date is released. Management override is respected —
+        // if a person has deliberately let this contract through, the sweep
+        // does not overrule them.
+        if (milestones.settlementDeadlinePassed
+          && now < eventStart
+          && !contract.paymentHold?.managementOverride) {
+          // The manual cancellation route records its reason in internalNotes;
+          // there are no dedicated cancellation fields on the schema, so follow
+          // the same convention rather than adding ones Mongoose would drop.
+          const reason = `Final balance of ${formatAmount(milestones.remainingBalance)} was not settled by ${formatDate(milestones.finalSettlementDeadline)}, the deadline one month before the event.`;
+          contract.status = 'cancelled';
+          contract.internalNotes = [contract.internalNotes, `Cancelled automatically on ${formatDate(now)}: ${reason}`]
+            .filter(Boolean).join('\n');
+          if (contract.paymentHold?.active) {
+            contract.paymentHold.active = false;
+            contract.paymentHold.releasedAt = now;
+            contract.paymentHold.overrideNote = 'Hold closed - contract cancelled for non-payment.';
+          }
+          await contract.save();
+          summary.cancelled.push(contract.contractNumber);
+
+          await notifyRolesOnce({
+            contract,
+            roles: ['accounting', 'sales', 'admin'],
+            type: 'contract_auto_cancelled',
+            title: `Contract cancelled - final balance not settled: ${contract.contractNumber}`,
+            message: `${contract.clientName}'s event on ${formatDate(contract.eventDate)} has been cancelled. The remaining balance of ${formatAmount(milestones.remainingBalance)} was not settled by ${formatDate(milestones.finalSettlementDeadline)}, which is the deadline one month before the event. Please contact the customer to inform them and to discuss their options. The PHP 30,000 reservation fee and the 40% collection remain non-refundable; any refund requires a formal cancellation letter and Execom review.`,
+            actionLabel: 'Contact customer'
+          });
+
+          // A cancelled date still holds stock, staff and vehicles unless the
+          // departments are told to let go of them.
+          await notifyRolesOnce({
+            contract,
+            roles: ['creative', 'linen', 'stockroom', 'kitchen', 'banquet', 'logistics'],
+            type: 'contract_auto_cancelled',
+            title: `Contract cancelled - release resources: ${contract.contractNumber}`,
+            message: `${contract.clientName}'s event on ${formatDate(contract.eventDate)} was cancelled because the final balance was not settled by ${formatDate(milestones.finalSettlementDeadline)}. Stop preparation and release anything reserved for this event - stock, staff and vehicles are free again for other bookings on that date.`,
+            actionLabel: 'View contract',
+            department: null
+          });
+          continue;
+        }
+
+        // Three days before the deadline, escalate: this is the last practical
+        // chance to collect before the booking is cancelled.
+        if (contract.paymentHold?.active
+          && now >= startOfDay(milestones.finalSettlementWarningDate)
+          && now <= endOfDay(milestones.finalSettlementDeadline)) {
+          const daysLeft = Math.max(0, Math.ceil((endOfDay(milestones.finalSettlementDeadline) - now) / DAY_MS));
+          await notifyRolesOnce({
+            contract,
+            roles: ['accounting', 'sales', 'admin'],
+            type: 'payment_milestone_due',
+            title: `Final notice - ${daysLeft} day${daysLeft === 1 ? '' : 's'} to settle: ${contract.contractNumber}`,
+            message: `${contract.clientName} has ${formatAmount(milestones.remainingBalance)} outstanding and until ${formatDate(milestones.finalSettlementDeadline)} to settle it. If the balance is not received by that date the contract is cancelled automatically and the event date is released. Contact the client now.`,
+            actionLabel: 'Contact customer'
+          });
+        }
 
         // Milestone 2 enforcement: an unpaid balance past event - 2 months puts
         // the contract on hold (Final Balance Overdue). Preparation, release,
@@ -371,22 +492,26 @@ const runPaymentComplianceSweep = async () => {
             contract,
             roles: ['accounting', 'sales', 'admin'],
             type: 'contract_on_hold',
+            series: 'Still on hold after',
             everyDays: 7,
             title: `Still on hold after ${daysHeld} day${daysHeld === 1 ? '' : 's'}: ${contract.contractNumber}`,
-            message: `${contract.clientName}'s event is ${daysToEvent} day${daysToEvent === 1 ? '' : 's'} away and remains on hold. ${formatAmount(milestones.remainingBalance)} is still outstanding and preparation stays blocked until it is settled or management releases the hold. This reminder repeats weekly while the hold is active.`,
+            message: `${contract.clientName}'s event is ${daysToEvent} day${daysToEvent === 1 ? '' : 's'} away and remains on hold. ${formatAmount(milestones.remainingBalance)} is still outstanding and preparation stays blocked until it is settled or management releases the hold. The balance must be settled by ${formatDate(milestones.finalSettlementDeadline)}, one month before the event, or the contract is cancelled automatically. This reminder repeats weekly while the hold is active.`,
             department: null
           });
           if (sent) { summary.notified += 1; summary.reminded.push(contract.contractNumber); }
         }
 
-        // Milestone 2 notification: final 60% balance due 2 months before the event.
+        // Milestone 2 notification: final 60% balance due 2 months before the
+        // event, announced a month ahead so collections can start early. The
+        // message names the settlement deadline as well, because a hold is no
+        // longer the end of the line - the booking is cancelled after it.
         if (now >= addMonths(milestones.finalBalanceDueDate, -1)) {
           const sent = await notifyRolesOnce({
             contract,
             roles: ['accounting'],
             type: 'final_balance_due',
             title: `Final balance due ${formatDate(milestones.finalBalanceDueDate)}: ${contract.contractNumber}`,
-            message: `${contract.clientName}'s remaining balance of ${formatAmount(milestones.remainingBalance)} must be fully collected by ${formatDate(milestones.finalBalanceDueDate)} (2 months before the event on ${formatDate(contract.eventDate)}). Contracts unpaid past that date are placed on hold automatically.`
+            message: `${contract.clientName}'s remaining balance of ${formatAmount(milestones.remainingBalance)} must be fully collected by ${formatDate(milestones.finalBalanceDueDate)} (2 months before the event on ${formatDate(contract.eventDate)}). Contracts unpaid past that date are placed on hold automatically, and if the balance is still unsettled by ${formatDate(milestones.finalSettlementDeadline)} - one month before the event - the contract is cancelled.`
           });
           if (sent) summary.notified += 1;
         }
@@ -400,6 +525,9 @@ const runPaymentComplianceSweep = async () => {
 
   if (summary.held.length > 0) {
     console.log(`Payment compliance sweep: placed on hold ${summary.held.join(', ')} (final balance unpaid past due date)`);
+  }
+  if (summary.cancelled.length > 0) {
+    console.log(`Payment compliance sweep: cancelled ${summary.cancelled.join(', ')} (balance unsettled past the deadline one month before the event)`);
   }
   if (summary.released.length > 0) {
     console.log(`Payment compliance sweep: released hold on ${summary.released.join(', ')} (balance settled)`);

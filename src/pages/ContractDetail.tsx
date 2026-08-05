@@ -464,6 +464,27 @@ interface OperationsSummary {
     allItemsReady: boolean;
     shortages: InventorySummaryItem[];
   };
+  // Per-department loading readiness, computed server-side in
+  // loadingReadiness.js and shared with the logistics dashboard and the
+  // reminder sweep.
+  loadingReadiness?: {
+    departments: {
+      key: string;
+      label: string;
+      applicable: boolean;
+      total: number;
+      prepared: number;
+      pending: number;
+      isReady: boolean;
+      detail: string;
+    }[];
+    blockers: { key: string; label: string; detail: string }[];
+    readyCount: number;
+    applicableCount: number;
+    allReady: boolean;
+    hasAnyRequirement: boolean;
+    summary: string;
+  };
 }
 
 interface InventorySummaryItem {
@@ -2310,6 +2331,7 @@ export default function ContractDetail() {
                 ${getDetailListHtml([
                   { label: fullPaymentPlan ? 'Later Balance' : `${finalPaymentPercent}% Final Balance`, value: fullPaymentPlan ? formatCurrency(0) : formatCurrency(remainingBalance) },
                   { label: fullPaymentPlan ? 'Later Balance Timing' : 'Final Due Date', value: fullPaymentPlan ? 'No later balance scheduled' : finalBalanceDueDate.toLocaleDateString() },
+                  { label: 'Settlement Deadline', value: finalSettlementDeadline.toLocaleDateString() },
                   { label: 'Collection Follow-Up', value: fullPaymentPlan ? 'At first collection milestone' : fortyPercentFollowUpDate.toLocaleDateString() },
                 ])}
               </div>
@@ -4200,6 +4222,14 @@ export default function ContractDetail() {
   agingDeadline.setHours(23, 59, 59, 999);
   const finalBalanceDeadline = new Date(finalBalanceDueDate);
   finalBalanceDeadline.setHours(23, 59, 59, 999);
+  // Last chance to settle: one month before the event. Past this the payment
+  // compliance sweep cancels the booking and releases the date.
+  const finalSettlementDeadline = new Date(contract.eventDate);
+  finalSettlementDeadline.setMonth(finalSettlementDeadline.getMonth() - 1);
+  finalSettlementDeadline.setHours(23, 59, 59, 999);
+  const daysToSettlementDeadline = Math.ceil(
+    (finalSettlementDeadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+  );
   const fortyPercentPastDue = !downPaymentSatisfied && new Date() > fortyPercentDeadline;
   const uncollectible = !downPaymentSatisfied && new Date() > agingDeadline;
   const finalBalancePastDue = !fullyPaid && new Date() > finalBalanceDeadline;
@@ -6266,7 +6296,7 @@ export default function ContractDetail() {
                       : fortyPercentPastDue
                         ? `The 40% collection was due on ${fortyPercentDueDate.toLocaleDateString()}. This account is aging until ${agingEndsAt.toLocaleDateString()}.`
                       : finalBalancePastDue
-                        ? `The final 60% balance became due on ${finalBalanceDueDate.toLocaleDateString()}. The event is on payment hold until ${formatCurrency(remainingBalance)} is settled.`
+                        ? `The final 60% balance became due on ${finalBalanceDueDate.toLocaleDateString()}. The event is on payment hold until ${formatCurrency(remainingBalance)} is settled, and must be settled by ${finalSettlementDeadline.toLocaleDateString()}${daysToSettlementDeadline >= 0 ? ` (${daysToSettlementDeadline} day${daysToSettlementDeadline === 1 ? '' : 's'} left)` : ''} or the contract is cancelled automatically.`
                       : paymentRequirementMet
                         ? fullPaymentPlan
                           ? 'Full payment requirement met. Preparation can move forward once accounting approves.'
@@ -6287,7 +6317,7 @@ export default function ContractDetail() {
                       </>
                     ) : (
                       <>
-                        Reservation fee: <strong>{formatCurrency(reservationFeeAmount)}</strong>. Follow-up for 40% starts <strong>{fortyPercentFollowUpDate.toLocaleDateString()}</strong>; 40% due <strong>{fortyPercentDueDate.toLocaleDateString()}</strong>; final {finalPaymentPercent}% due <strong>{finalBalanceDueDate.toLocaleDateString()}</strong>.
+                        Reservation fee: <strong>{formatCurrency(reservationFeeAmount)}</strong>. Follow-up for 40% starts <strong>{fortyPercentFollowUpDate.toLocaleDateString()}</strong>; 40% due <strong>{fortyPercentDueDate.toLocaleDateString()}</strong>; final {finalPaymentPercent}% due <strong>{finalBalanceDueDate.toLocaleDateString()}</strong>. Settlement deadline <strong>{finalSettlementDeadline.toLocaleDateString()}</strong> — one month before the event, after which the contract is cancelled automatically.
                         {isPreSignatureStage
                           ? ' This schedule becomes collectible after the client signs.'
                           : fullyPaid
@@ -6926,8 +6956,45 @@ export default function ContractDetail() {
                         </p>
                       </CardHeader>
                       <CardContent className="space-y-5">
+                        {/* Whether this event can actually be loaded, and who is
+                            holding it up. The tables below say what to bring;
+                            this says whether to go. */}
+                        {operationsSummary?.loadingReadiness?.hasAnyRequirement ? (
+                          <div className={`rounded-xl border p-4 ${operationsSummary.loadingReadiness.allReady ? 'border-green-200 bg-green-50/70' : 'border-amber-200 bg-amber-50/70'}`}>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-sm font-semibold">
+                                {operationsSummary.loadingReadiness.allReady ? 'Ready for loading' : 'Not ready for loading'}
+                              </p>
+                              <Badge className={operationsSummary.loadingReadiness.allReady ? 'border-green-200 bg-green-100 text-green-800' : 'border-amber-200 bg-amber-100 text-amber-900'}>
+                                {operationsSummary.loadingReadiness.summary}
+                              </Badge>
+                            </div>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              {operationsSummary.loadingReadiness.allReady
+                                ? 'Every department has marked its assigned items prepared. Loading may begin the day before the event.'
+                                : `Waiting on ${operationsSummary.loadingReadiness.blockers.map((blocker) => blocker.label).join(', ')}. Loading should not start until these are prepared or Logistics is told what cannot be sent.`}
+                            </p>
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                              {operationsSummary.loadingReadiness.departments.filter((department) => department.applicable).map((department) => (
+                                <div key={department.key} className="flex items-center justify-between gap-2 rounded-lg border bg-white/70 px-3 py-2">
+                                  <span className="text-sm font-medium">{department.label}</span>
+                                  <span className={`text-xs ${department.isReady ? 'text-green-700' : 'text-amber-800'}`}>
+                                    {department.isReady ? 'Prepared' : department.detail}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
                         {([
-                          { title: 'Kitchen & Food', rows: (contract.menuDetails || []).map((item: any) => ({ name: item.item || 'Food item', code: item.category || '-', quantity: Number(item.quantity) || 0, status: (item.confirmed || contract.ingredientStatus === 'prepared') ? 'prepared' : 'pending' })) },
+                          // A dish counts as prepared only when the menu line is
+                          // confirmed AND the kitchen has marked ingredients
+                          // prepared - the same pair the server requires before it
+                          // will accept `prepared`. This used to be an OR, so a
+                          // dish the client had merely confirmed showed as
+                          // "Prepared" and overstated readiness on the one screen
+                          // used to decide whether to load.
+                          { title: 'Kitchen & Food', rows: (contract.menuDetails || []).map((item: any) => ({ name: item.item || 'Food item', code: item.category || '-', quantity: Number(item.quantity) || 0, status: (item.confirmed && contract.ingredientStatus === 'prepared') ? 'prepared' : 'pending' })) },
                           { title: 'Stockroom & Equipment', rows: (contract.equipmentChecklist || []).map((item: any) => ({ name: item.item || 'Equipment item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0, status: item.status || 'pending' })) },
                           { title: 'Linen', rows: (contract.linenRequirements || []).map((item: any) => ({ name: item.type || 'Linen item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0, status: item.status || 'pending' })) },
                           { title: 'Creative & Decor', rows: (contract.creativeAssets || []).map((item: any) => ({ name: item.item || 'Creative item', code: item.itemCode || '-', quantity: Number(item.quantity) || 0, status: item.status || 'pending' })) },

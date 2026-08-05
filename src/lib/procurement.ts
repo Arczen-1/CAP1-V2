@@ -57,8 +57,52 @@ export interface ProcurementSupplierSummary {
   isActive?: boolean;
 }
 
+// Rent-vs-buy overlap analysis, computed server-side in procurementOverlap.js.
+// Present only when another still-decidable request wants the same item.
+export interface ProcurementRentVsBuy {
+  itemLabel: string;
+  rentalRequestCount: number;
+  purchaseRequestCount: number;
+  duplicateCount: number;
+  /** True when the rental windows collide, so one purchase cannot cover both. */
+  overlapping: boolean;
+  /** Peak units required at any single moment - what buying would have to cover. */
+  unitsNeeded: number;
+  rentalCost: number;
+  purchaseUnitPrice: number;
+  purchaseCost: number;
+  /** Only ever a positive saving; 0 when renting is cheaper or unknown. */
+  savings: number;
+  comparable: boolean;
+  /** True when any leg was priced from a daily rate rather than a supplier quote. */
+  estimated: boolean;
+  recommendation: 'buy' | 'keep_renting' | 'compare_manually' | 'none';
+  summary: string;
+  relatedRequests: {
+    _id: string;
+    requestNumber: string;
+    requestType: ProcurementRequestType;
+    status: ProcurementStatus;
+    department: ProcurementDepartment;
+    requestedQuantity: number;
+    eventDate?: string | null;
+    neededBy?: string | null;
+    contractNumber?: string | null;
+    clientName?: string | null;
+  }[];
+}
+
 export interface ProcurementRequest {
   _id: string;
+  rentVsBuy?: ProcurementRentVsBuy;
+  /** Set on a purchase raised in place of rentals, populated with those rentals. */
+  replacesRequests?: {
+    _id: string;
+    requestNumber: string;
+    status: ProcurementStatus;
+    requestType: ProcurementRequestType;
+    requestedQuantity: number;
+  }[];
   requestNumber: string;
   status: ProcurementStatus;
   department: ProcurementDepartment;

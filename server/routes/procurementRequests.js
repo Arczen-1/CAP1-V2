@@ -10,6 +10,7 @@ const StockroomInventory = require('../models/StockroomInventory');
 const Supplier = require('../models/Supplier');
 const { auth, requireRole } = require('../middleware/auth');
 const { getBudgetCheckForRequest } = require('../utils/financeBudgeting');
+const { annotateRequests, buildOverlapIndex, getItemKey, DECIDABLE_STATUSES } = require('../procurementOverlap');
 
 const router = express.Router();
 
@@ -57,7 +58,10 @@ const populateProcurementRequest = (query) => query
   .populate('releaseAuthorization.authorizedBy', 'name role department')
   .populate('fulfillment.fulfilledBy', 'name role department')
   .populate('fulfillment.confirmedBy', 'name role department')
-  .populate('inventoryItem');
+  .populate('inventoryItem')
+  // Populated so the approval screens can warn by name when a purchase is
+  // already covering the rentals being approved, rather than showing raw ids.
+  .populate('replacesRequests', 'requestNumber status requestType requestedQuantity');
 
 const isValidDate = (value) => value && !Number.isNaN(new Date(value).getTime());
 
@@ -137,6 +141,46 @@ const notifyRoles = async (roles, payload) => {
     ...payload,
     recipient: recipient._id
   })));
+};
+
+// Raises the rent-vs-buy question the moment a second rental request for the
+// same item arrives. Deliberately quiet unless buying is genuinely the cheaper
+// option: a duplicate that is still cheaper to rent is not worth interrupting
+// anyone over, and it is visible on the queue anyway.
+//
+// Deduped on the item, not the request, so a third request for the same item
+// does not send the same advice again.
+const notifyRentVsBuy = async (request) => {
+  try {
+    const index = await buildOverlapIndex();
+    const evaluation = index.get(getItemKey(request));
+
+    if (!evaluation || evaluation.recommendation !== 'buy') {
+      return;
+    }
+
+    const title = `Consider buying instead of renting: ${evaluation.itemLabel}`;
+    const alreadyRaised = await Notification.exists({ type: 'conflict_alert', title });
+    if (alreadyRaised) {
+      return;
+    }
+
+    await notifyRoles(['accounting', 'purchasing', 'admin'], {
+      type: 'conflict_alert',
+      title,
+      message: `${evaluation.summary} ${evaluation.overlapping
+        ? `The rentals overlap in time, so ${evaluation.unitsNeeded} unit(s) would be needed - buying is still the cheaper option here.`
+        : 'The rentals fall on separate dates, so one purchase covers both.'} Review before approving either request.`,
+      procurementRequest: request._id,
+      priority: 'medium',
+      actionUrl: `/accounting?tab=procurement&request=${request._id}`,
+      actionLabel: 'Compare rent vs buy',
+      department: 'accounting'
+    });
+  } catch (error) {
+    // Advisory only - never block a request from being raised.
+    console.error('Rent-vs-buy check failed:', error.message);
+  }
 };
 
 const notifyUserIds = async (userIds, payload) => {
@@ -366,7 +410,10 @@ router.get('/', auth, async (req, res) => {
       ProcurementRequest.find(query).sort({ neededBy: 1, createdAt: -1 })
     );
 
-    res.json(requests);
+    // Flags requests where another event wants the same item, with the
+    // rent-vs-buy comparison. Evaluated across every decidable request, not
+    // just the ones this query returned, so filtering cannot hide a duplicate.
+    res.json(await annotateRequests(requests));
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -382,7 +429,8 @@ router.get('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'Procurement request not found' });
     }
 
-    res.json(request);
+    const [annotated] = await annotateRequests([request]);
+    res.json(annotated);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -501,6 +549,64 @@ router.post('/', auth, async (req, res) => {
       return res.status(400).json({ message: 'Item name is required' });
     }
 
+    // A purchase raised in place of rentals carries the ids of the rentals it
+    // replaces. Validated rather than trusted: the client supplies them, so
+    // they have to be real, still open, actually rentals, and for this same
+    // item - otherwise the audit trail would record a link that is not true.
+    const replacesRequests = [];
+    if (Array.isArray(req.body.replacesRequests) && req.body.replacesRequests.length) {
+      if (requestType !== 'purchase') {
+        return res.status(400).json({ message: 'Only a purchase request can replace rental requests.' });
+      }
+
+      const candidateIds = req.body.replacesRequests
+        .map((value) => String(value))
+        .filter((value) => mongoose.isValidObjectId(value));
+
+      const candidates = await ProcurementRequest.find({
+        _id: { $in: candidateIds },
+        status: { $in: DECIDABLE_STATUSES },
+        requestType: 'rental'
+      });
+
+      if (candidates.length !== candidateIds.length) {
+        return res.status(400).json({
+          message: 'One or more of the rental requests being replaced no longer exists, is not a rental, or has already been actioned.'
+        });
+      }
+
+      // Same item, or the link is meaningless.
+      const targetKey = getItemKey({
+        inventoryItem: resolvedInventoryItemId,
+        inventoryModel: departmentConfig.inventoryModel,
+        itemCode: String(inventoryItem?.itemCode || itemCode || '').trim(),
+        itemName: resolvedItemName
+      });
+      const mismatched = candidates.filter((candidate) => getItemKey(candidate) !== targetKey);
+      if (mismatched.length) {
+        return res.status(400).json({
+          message: `A purchase can only replace rental requests for the same item. ${mismatched.map((c) => c.requestNumber).join(', ')} refers to a different item.`
+        });
+      }
+
+      // Guard against a second purchase for rentals that are already covered.
+      // The UI hides the button once a purchase exists, but the UI can be
+      // bypassed and buying the same thing twice is expensive to undo.
+      const alreadyCovered = await ProcurementRequest.findOne({
+        status: { $in: DECIDABLE_STATUSES },
+        requestType: 'purchase',
+        replacesRequests: { $in: candidateIds }
+      }).select('requestNumber');
+
+      if (alreadyCovered) {
+        return res.status(409).json({
+          message: `${alreadyCovered.requestNumber} has already been raised to buy this item in place of those rentals. Review that request instead of raising a second purchase.`
+        });
+      }
+
+      replacesRequests.push(...candidates);
+    }
+
     const normalizedRequisitionType = normalizeRequisitionType({
       value: requisitionType,
       requestType,
@@ -533,12 +639,44 @@ router.post('/', auth, async (req, res) => {
       shortageQuantity: normalizedShortageQuantity || normalizedRequestedQuantity,
       requestReason: String(requestReason).trim(),
       requestNotes: String(requestNotes || '').trim(),
+      replacesRequests: replacesRequests.map((candidate) => candidate._id),
       sla: slaSnapshot,
       createdBy: req.user._id,
       updatedBy: req.user._id
     });
 
     await request.save();
+
+    // Record the link on both sides. The rentals stay open on purpose - if the
+    // purchase is refused on budget, the rental fallback must still be there.
+    if (replacesRequests.length) {
+      const replacedNumbers = replacesRequests.map((candidate) => candidate.requestNumber).join(', ');
+      request.requestNotes = appendNote(
+        request.requestNotes,
+        `Raised as a purchase instead of renting. Replaces ${replacedNumbers}.`
+      );
+      await request.save();
+
+      for (const candidate of replacesRequests) {
+        candidate.requestNotes = appendNote(
+          candidate.requestNotes,
+          `${request.requestNumber} was raised to buy this item instead of renting it. This rental is still open - return it if the purchase is approved.`
+        );
+        candidate.updatedBy = req.user._id;
+        await candidate.save();
+      }
+
+      await notifyRoles(['accounting', 'admin'], {
+        type: 'task_assigned',
+        title: `Purchase raised instead of rental: ${request.itemName}`,
+        message: `${request.requestNumber} asks to buy ${request.requestedQuantity} ${request.itemName} rather than renting it for ${replacesRequests.length} separate event(s) (${replacedNumbers}). Those rental requests are still open - return them once this purchase is approved, or approve the rentals instead if buying is refused.`,
+        procurementRequest: request._id,
+        priority: 'medium',
+        actionUrl: `/accounting?tab=procurement&request=${request._id}`,
+        actionLabel: 'Review purchase',
+        department: 'accounting'
+      });
+    }
 
     await notifyRoles(['purchasing', 'admin'], {
       type: 'task_assigned',
@@ -552,11 +690,17 @@ router.post('/', auth, async (req, res) => {
       department: 'purchasing'
     });
 
+    // A second event asking to rent the same item is the moment the buy-instead
+    // question becomes worth asking, so raise it here rather than waiting for
+    // someone to notice two rows in a queue. Only fires on a genuine buy case.
+    await notifyRentVsBuy(request);
+
     const populatedRequest = await populateProcurementRequest(
       ProcurementRequest.findById(request._id)
     );
 
-    res.status(201).json(populatedRequest);
+    const [annotated] = await annotateRequests([populatedRequest]);
+    res.status(201).json(annotated);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

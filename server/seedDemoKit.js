@@ -102,6 +102,7 @@ const run = async () => {
     ProcurementRequest.deleteMany({ requestNumber: new RegExp(`^${TAG}`) }),
     Incident.deleteMany({ description: new RegExp(`^\\[${TAG}\\]`) }),
     LinenInventory.deleteMany({ itemCode: 'DK-LN-90' }),
+    StockroomInventory.deleteMany({ itemCode: { $in: ['DK-ST-91', 'DK-ST-92'] } }),
   ]);
   summary.push(`Cleared previous demo kit: ${wipes[0].deletedCount} contracts, ${wipes[1].deletedCount} requests, ${wipes[2].deletedCount} incidents.`);
 
@@ -197,12 +198,18 @@ const run = async () => {
 
   // ============================================================= PART 4 data
   // A contract whose final balance is overdue, so it sits on automatic hold.
+  //
+  // The event date has to land between the two milestones: past the final
+  // balance due date (event - 2 months) so the hold applies, but before the
+  // settlement deadline (event - 1 month) or the compliance sweep cancels the
+  // contract outright and the hold demonstration disappears. 45 days out puts
+  // the balance 15 days overdue with 15 days left to settle.
   const holdValue = 418000;
   await Contract.create(contractBase({
     number: `${TAG}HOLD-001`,
     client: 'DK Reyes–Villanueva Wedding',
     type: 'wedding',
-    eventDate: day(24),
+    eventDate: day(45),
     pax: 260,
     price: holdValue,
     status: 'approved',
@@ -452,6 +459,83 @@ const run = async () => {
   }
   summary.push('Part 2 · DK-PR-0001 (₱1,850 stockroom — approve live) and DK-PR-0002 (₱48,000 creative — blocked live).');
   summary.push('Part 5 · DK-PR-0003 (purchase) and DK-PR-0004 (rental) both raised from the same-day shortage.');
+
+  // ------------------------------------------------- rent-vs-buy demonstration
+  // The panel asked: if two events rent the same thing, should it be bought?
+  // Two pairs are seeded so both halves of the answer can be shown.
+  //
+  //   DK-PR-0005 / DK-PR-0006  separate dates -> one tent covers both, so buying
+  //                            is genuinely cheaper and the system says so.
+  //   DK-PR-0007 / DK-PR-0008  the same date  -> one purchased unit cannot be in
+  //                            two places, so buying is NOT recommended. This is
+  //                            the case a naive "two rentals = buy" rule gets
+  //                            wrong, and it is the more interesting demo.
+  await StockroomInventory.deleteMany({ itemCode: { $in: ['DK-ST-91', 'DK-ST-92'] } });
+
+  // Rented at PHP 11,500 an event; owning one costs PHP 18,000. Two separate
+  // rentals (PHP 23,000) therefore cost more than buying.
+  const rentBuyTent = await StockroomInventory.create({
+    name: 'DK Reception Tent 10x20m (rent-vs-buy demo)',
+    itemCode: 'DK-ST-91', category: 'Tent',
+    quantity: 0, availableQuantity: 0, status: 'available',
+    purchasePrice: 18000, rentalPricePerDay: 11500,
+  });
+
+  // Deliberately expensive to own relative to its rental: even before the
+  // same-day rule bites, buying two is the wrong call.
+  const rentBuyStage = await StockroomInventory.create({
+    name: 'DK Stage Riser 4x8ft (same-day demo)',
+    itemCode: 'DK-ST-92', category: 'Equipment',
+    quantity: 0, availableQuantity: 0, status: 'available',
+    purchasePrice: 26000, rentalPricePerDay: 9000,
+  });
+
+  const rentBuyRequests = [
+    { number: `${TAG}PR-0005`, item: rentBuyTent, qty: 1, unit: 11500, event: day(30),
+      reason: 'Marquee tent needed for the garden reception; not held in stock.' },
+    { number: `${TAG}PR-0006`, item: rentBuyTent, qty: 1, unit: 11500, event: day(75),
+      reason: 'Same marquee tent needed again for a later garden reception.' },
+    { number: `${TAG}PR-0007`, item: rentBuyStage, qty: 1, unit: 9000, event: day(45),
+      reason: 'Stage riser for the programme area.' },
+    { number: `${TAG}PR-0008`, item: rentBuyStage, qty: 1, unit: 9000, event: day(45),
+      reason: 'Stage riser for a second event running the same day.' },
+  ];
+
+  for (const r of rentBuyRequests) {
+    await ProcurementRequest.create({
+      requestNumber: r.number,
+      status: 'awaiting_accounting_approval',
+      department: 'stockroom',
+      inventoryModel: 'StockroomInventory',
+      inventoryItem: r.item._id,
+      createdBy: requesterByDept.stockroom?._id || accounting?._id,
+      requestType: 'rental',
+      requisitionType: 'purchase_requisition',
+      source: 'manual',
+      sourceSection: 'equipmentChecklist',
+      itemName: r.item.name,
+      itemCode: r.item.itemCode,
+      itemCategory: r.item.category,
+      requestedQuantity: r.qty,
+      shortageQuantity: r.qty,
+      eventDate: r.event,
+      neededBy: day(Math.max(7, Math.round((r.event - now) / 86400000) - 3)),
+      requestReason: `[${TAG}] ${r.reason}`,
+      quote: {
+        supplier: supplierByDept.stockroom?._id,
+        supplierName: supplierByDept.stockroom?.name,
+        supplierContact: '0917-555-0188',
+        quotedUnitPrice: r.unit,
+        quotedTotal: r.qty * r.unit,
+        leadTimeDays: 7,
+        quoteReference: `${r.number}-Q1`,
+        rentalStartDate: r.event,
+        rentalEndDate: r.event,
+        notes: `[${TAG}] Quotation prepared by Purchasing.`,
+      },
+    });
+  }
+  summary.push('Rent-vs-buy · DK-PR-0005/0006 (separate dates — buying wins) and DK-PR-0007/0008 (same day — renting wins).');
 
   // ------------------------------------------------------------------ report
   console.log('');
