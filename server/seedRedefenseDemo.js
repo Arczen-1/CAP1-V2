@@ -196,9 +196,12 @@ const run = async () => {
       bookingDate: month(-7),
       payments: [payment(660000 * 0.4, month(-5), 'RD-LAPSE-40')],
       paymentHold: {
+        // The 60% fell due on Jul 1 (event minus two months); the hold follows a
+        // day later. Seeding it earlier than the due date would give the panel a
+        // timeline that contradicts itself.
         active: true,
         reason: 'Final balance of PHP 396,000.00 was not fully collected by the due date (2 months before the event).',
-        startedAt: day(-38),
+        startedAt: day(-34),
         managementOverride: false,
       },
     },
