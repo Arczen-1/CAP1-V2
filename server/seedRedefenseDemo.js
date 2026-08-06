@@ -321,6 +321,19 @@ const run = async () => {
   }));
   summary.push('40% write-off · RD-AGING-LAST (aging window closes in 2 days, final notice fires).');
 
+  // The weekly reminder that runs BEFORE the final notice takes over. It cannot
+  // be shown on RD-AGING-LAST, which sits at day 28 deliberately: the weekly
+  // stops once the final notice opens so the last days do not carry two
+  // overlapping messages. This one sits mid-window, where the weekly is live.
+  const midDue = day(-15);
+  const midBooking = new Date(midDue); midBooking.setMonth(midBooking.getMonth() - 2);
+  await Contract.create(contractBase({
+    number: `${TAG}AGING-WEEKLY`, client: 'RD Fajardo Baptismal Reception', type: 'birthday',
+    eventDate: day(180), pax: 100, price: 220000, status: 'approved',
+    extra: { bookingDate: midBooking, payments: [] },
+  }));
+  summary.push('40% weekly reminder · RD-AGING-WEEKLY (15 days overdue, mid-window, weekly reminder live).');
+
   // =============================================================== RENT VS BUY
   // Two inventory items priced so the comparison lands on opposite answers.
 

@@ -71,6 +71,15 @@ const isContractNotificationDone = (notification, contract) => {
   }
 
   const status = contract.status;
+
+  // A cancellation alert is raised BY the cancellation, so the cancellation
+  // cannot also be what resolves it. These carry instructions that still need
+  // acting on afterwards - contact the customer, release the stock and staff the
+  // date was holding - and marking them done on arrival hid them completely.
+  if (notification.type === 'contract_auto_cancelled') {
+    return false;
+  }
+
   if (status === 'completed' || status === 'cancelled') {
     return true;
   }
