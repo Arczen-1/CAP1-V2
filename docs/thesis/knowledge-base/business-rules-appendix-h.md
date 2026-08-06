@@ -3,9 +3,9 @@
 **Source:** Thesis Appendix H "Current Business Rule" — PDF pp.137–138 (printed A-36/A-37); corroborated by Appendix I "Juan Carlo Third Interview" (PDF pp.138–140). See [thesis-index.md](thesis-index.md).
 **Revised:** 6 August 2026, against the client's restatement of the rules.
 
-> These are **Juan Carlo's actual, client-provided business rules**. They are the authoritative basis for the payment, logistics, freeze, and post-event behaviour in the system.
+> These are **Juan Carlo's actual, client-provided business rules**, and they supersede the earlier version of this appendix. They are the authoritative basis for the payment, logistics, freeze, and post-event behaviour of the system.
 >
-> ⚠️ **The client's restatement differs from the previous version of this appendix in five places, and the system implements the previous version.** The rules are written below as the client states them. Every difference is listed in [Where the system differs](#where-the-system-differs) — do not treat the two as reconciled.
+> ⚠️ **The system has not yet been updated to five of them.** The rules below are correct as written; the code is what lags. [What the system must change](#what-the-system-must-change) lists each gap as work to be done, not as an open question — with one exception, noted there, that cannot be implemented as stated.
 
 ---
 
@@ -54,29 +54,36 @@ Payment structure depends on the client type.
 
 ---
 
-## Where the system differs
+## What the system must change
 
-Five rules in the restatement do not match what the system enforces. Each needs a decision: **change the code**, or **go back to the client** because the restatement was loose. Leaving them is the one option that does not work, because the thesis and the system would then contradict each other in front of the panel.
+The rules above are the standard. The list below is the work needed to bring the code to them, in the order it should be done.
 
-| # | Rule | Client now says | System does | Weight |
-|---|---|---|---|---|
-| 1 | 60% due date | One month before the event | **Two months** before | **High** — drives the auto-hold, the sweep, and Table A.1 |
-| 2 | Price visibility | Accounting **only** | Accounting, **Sales, Admin** | **High** — Sales cannot quote without the package price |
-| 3 | Kitchen SLA | **One month** ingredient preparation | Sourcing at **2 weeks**, prep at **7 days** | **High** — changes when the kitchen is told to act |
-| 4 | Waitstaff | **50 per 1,000 pax** (1 : 20) | **40 per 1,000** (1 : 25) | **High** — ten more staff on a 1,000-pax event |
-| 5 | Staging | Staging area **2 days** before | No staging step; loading begins the day before | **Medium** — a step not modelled at all |
+| # | Rule to implement | Code affected | Effort |
+|---|---|---|---|
+| 1 | Waitstaff **50 per 1,000 pax** | `routes/contracts.js` staffing suggestion, `routes/reports.js` forecast | Small — one constant, two call sites |
+| 2 | Price visible to **Accounting only** | `canViewContractFinancials`, PDF redaction, hold banner | Small — one allow-list |
+| 3 | Kitchen sourcing alert at **one month** | `kitchenPrepNotifications.js` | Small — one window |
+| 4 | **Staging** step two days before the event | Contract stage model, logistics workflow, load readiness | Medium — a new state, not just a date |
+| 5 | 60% due **one month** before the event | `paymentCompliance.js`, `getPaymentMilestones`, Table A.1 | **Blocked — see below** |
 
 ### Notes on each
 
-**1 · The 60% due date.** The largest single change. The collection timeline, the automatic hold, the final settlement deadline, and Appendix A Table A.1 are all built on *event minus two months*. Moving it to one month compresses the recovery window, and it would then fall on the **same day** as the existing rule that an unsettled balance cancels the booking one month out — leaving no gap between "overdue" and "cancelled". **Confirm before changing anything.**
+**1 · Waitstaff.** Change the divisor from 25 to 20 so a 1,000-pax event derives 50. One caution: the client describes **assigned brackets**, not a ratio. A flat 1 : 20 reproduces the 1,000-pax example but may not match the smaller brackets. Implement 1 : 20 now; ask for the full bracket table and replace the ratio with a lookup if one exists.
 
-**2 · Price visibility.** The previous appendix said "Accounting and Sales"; the system also allows Admin. Restricting to Accounting alone would leave Sales unable to see the value of the contract it is selling, which is unlikely to be intended. **Most probably the client means "not the operating departments"** rather than literally excluding Sales.
+**2 · Price visibility.** Remove Sales and Admin from the allow-list. Worth confirming in passing that Sales is genuinely meant to be excluded — it would leave them unable to see the value of the contract they are selling — but the rule as written says Accounting only, so that is what goes in.
 
-**3 · Kitchen SLA.** "One-month ingredient preparation" conflicts with the client's own earlier statement that the kitchen may only begin preparing within seven days of the event. The two reconcile if one month is to **source** and seven days is to **prepare** — in which case the current two-week sourcing alert should move to one month.
+**3 · Kitchen sourcing.** Move the sourcing alert from two weeks to one month. The seven-day preparation alert stays: the client's one month is the *ingredient* SLA, and the seven-day window is when cooking may begin. Both survive.
 
-**4 · Waitstaff.** The previous appendix gave 1 : 25 with the example "40 waiters for 1,000 pax". The client now says **50 for 1,000**, which is 1 : 20. Both cannot be right, and the system was changed to 1 : 25 on the strength of the earlier figure. Note the client says **brackets**, not a ratio — the real rule may be a table (500 → 25, 1,000 → 50) that does not divide evenly, in which case a flat ratio is wrong regardless of the number.
+**4 · Staging.** The system currently goes from prepared straight to loaded. This adds a real state between them, with its own two-day deadline, and touches the logistics workflow and the load-readiness board. The largest of the four buildable items.
 
-**5 · Staging.** The system goes from prepared straight to loaded. Adding a staging state is a modelling change rather than a rule change, and is the least urgent of the five.
+**5 · The 60% due date — cannot be implemented as stated.** Moving the 60% to one month before the event puts it on the **same day** as the existing rule that an unsettled balance cancels the booking one month out. The balance would become overdue and the booking would be cancelled on the same date, leaving no window in which to collect — the hold, the reminders, and the recovery period would all have nothing to act in.
+
+This is a collision between two rules, not a coding problem, so it needs the client rather than a decision here. Two ways it resolves:
+
+- The 60% is due one month before, and **cancellation moves later** (say, two weeks before, or the event date itself); or
+- The 60% stays at two months before, and **one month is the cancellation deadline** — which is what the system does today.
+
+**Leave the code at two months until this is answered.** Changing it first would produce contracts that are cancelled the moment they fall overdue.
 
 ---
 
@@ -86,28 +93,28 @@ Five rules in the restatement do not match what the system enforces. Each needs 
 |---|---|---|
 | ₱30,000 non-refundable reservation fee | Recorded separately, counted in the first collection | Implemented |
 | 40% due two months after booking, 30-day aging | Payment compliance sweep, escalating alerts | Implemented |
-| 60% unpaid → automatic hold, auto-release on settlement | Hold logic, weekly reminders while held | Implemented — **at 2 months, see difference 1** |
-| Corporate extended payment cycle | — | **Not implemented** — new rule |
+| 60% unpaid → automatic hold, auto-release on settlement | Hold logic, weekly reminders while held | Implemented — **at 2 months; change 5 is blocked** |
+| Corporate extended payment cycle | — | **Not implemented** — new rule, no due-date logic for it yet |
 | Booking confirmed on tasting, before payment | Tasting → contract → payment order enforced | Implemented |
 | Departmental data restriction | Role-based access control | Implemented |
-| Price and contract value restricted | Hidden on screen, in exported PDFs, and in the hold banner | Implemented — **Sales/Accounting/Admin, see difference 2** |
+| Price and contract value restricted | Hidden on screen, in exported PDFs, and in the hold banner | **Change 2** — currently Sales/Accounting/Admin |
 | Final details one month before the event | SLA deadline recorded | Implemented |
-| Kitchen ingredient preparation window | Sourcing and preparation alerts | Implemented — **2 weeks / 7 days, see difference 3** |
+| Kitchen ingredient preparation window | Sourcing and preparation alerts | **Change 3** — sourcing moves from 2 weeks to 1 month |
 | Material freeze seven days before | Enforced server-side; like-for-like replacement permitted, with an incident | Implemented |
-| Staging two days before the event | — | **Not implemented** — see difference 5 |
+| Staging two days before the event | — | **Change 4** — not modelled |
 | Loading the day before, dispatch on the day | Load manifest, driver pickup checklist, dispatch | Implemented |
 | Transport request three days prior | Lead-time warning and reminder notification | Implemented — **advisory, not blocking** |
-| Waitstaff by guest count | Suggested plan derived from pax | Implemented — **at 1 : 25, see difference 4** |
+| Waitstaff by guest count | Suggested plan derived from pax | **Change 1** — currently 1 : 25, must be 50 per 1,000 |
 | Truck assignment by cubic metres; rent if over capacity | Load volume estimate, rental requisition path | Implemented |
 | No leaving until returned equipment matches the checklist | Return checklist and return reconciliation | Implemented |
 | Incidents logged by the next office day | Incident register linked to contract and item | Implemented |
 
-## Open questions for the client
+## Still to confirm with the client
 
-1. Is the final 60% due **one month** or **two months** before the event?
-2. Does "Accounting only" for package price mean **Sales is also excluded**, or only the operating departments?
-3. Is the kitchen's **one month** for *sourcing*, with preparation still starting seven days out?
-4. Is the waitstaff rule **50 per 1,000** (1 : 20), and is it a **bracket table** rather than a flat ratio? What are the other brackets?
-5. Should the **three-day transport request** block the booking, or stay a warning?
-6. Should the **two-day staging step** be tracked in the system, or is it handled outside it?
-7. For **corporate clients**, what starts the one-to-three-month clock — the event date, or the invoice date?
+These do not hold up the four buildable changes. The first is the only one blocking work.
+
+1. **Blocking.** If the 60% is due one month before the event, when is a booking cancelled for non-payment? As stated, the balance falls overdue and the booking is cancelled on the same day, leaving no window to collect.
+2. What are the **other waitstaff brackets**? The rule is described as brackets, and 50 per 1,000 is one point on the scale — a flat ratio may not fit the smaller events.
+3. For **corporate clients**, what starts the one-to-three-month clock — the event date, or the invoice date? And is a corporate booking held without a down payment?
+4. Should the **three-day transport request** block the booking, or stay a warning as it is now?
+5. Does the **two-day staging** step need to be tracked in the system, or is it managed on paper in the warehouse?
