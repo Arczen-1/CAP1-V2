@@ -34,12 +34,14 @@ const Notification = require('./models/Notification');
 const Supplier = require('./models/Supplier');
 const User = require('./models/User');
 const StockroomInventory = require('./models/StockroomInventory');
-require('./models/LinenInventory');
-require('./models/CreativeInventory');
+const LinenInventory = require('./models/LinenInventory');
+const CreativeInventory = require('./models/CreativeInventory');
+const { Driver, Truck } = require('./models/Logistics');
 
 const { runPaymentComplianceSweep } = require('./paymentCompliance');
 const { runLoadingReadinessSweep } = require('./loadingReadinessNotifications');
 const { notifyRentVsBuy } = require('./procurementOverlap');
+const { getEventCodingSummary } = require('./utils/numberCoding');
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/juancarlos';
@@ -52,9 +54,32 @@ const peso = (value) => Math.round(value * 100) / 100;
 
 // ---------------------------------------------------------------- item builders
 const dish = (name, category, pax) => ({ category, item: name, quantity: pax, confirmed: true });
-const equip = (name, code, qty, status) => ({ item: name, itemCode: code, category: 'Equipment', quantity: qty, status });
-const linen = (type, code, qty, status) => ({ type, itemCode: code, category: 'Table Linen', quantity: qty, status });
-const decor = (name, code, qty, status) => ({ item: name, itemCode: code, category: 'Props', quantity: qty, status });
+// Real stock records, resolved once at the start of the run and keyed by the
+// placeholder codes used below. A contract line without an itemId is not linked
+// to inventory: the contract then reports "Item is not linked to X inventory",
+// shows no availability, and reads as a stock shortage - which paints every
+// department red on a demo that is meant to show them ready.
+const STOCK = {};
+
+const linked = (key, fallbackCategory) => {
+  const rec = STOCK[key];
+  return rec
+    ? { itemId: String(rec._id), itemCode: rec.itemCode, category: rec.category, name: rec.name }
+    : { itemCode: key, category: fallbackCategory, name: null };
+};
+
+const equip = (name, code, qty, status) => {
+  const r = linked(code, 'Equipment');
+  return { itemId: r.itemId, item: r.name || name, itemCode: r.itemCode, category: r.category, quantity: qty, status };
+};
+const linen = (type, code, qty, status) => {
+  const r = linked(code, 'Table Linen');
+  return { itemId: r.itemId, type: r.name || type, itemCode: r.itemCode, category: r.category, quantity: qty, status };
+};
+const decor = (name, code, qty, status) => {
+  const r = linked(code, 'Props');
+  return { itemId: r.itemId, item: r.name || name, itemCode: r.itemCode, category: r.category, quantity: qty, status };
+};
 
 const MENU = (pax) => [
   dish('Beef Salpicao', 'Beef', pax),
@@ -85,6 +110,15 @@ const contractBase = ({ number, client, type, eventDate, pax, price, status, ext
   clientSignedAt: month(-4),
   menuDetails: MENU(pax),
   ...extra,
+  // Derived from the payments actually attached, so a contract the script
+  // describes as "paid in full" does not open reading Unpaid.
+  paymentStatus: (() => {
+    const paid = (extra.payments || [])
+      .filter((p) => p.status === 'completed')
+      .reduce((sum, p) => sum + (p.amount || 0), 0);
+    if (paid <= 0) return 'unpaid';
+    return paid + 0.005 >= peso(price) ? 'paid' : 'partially_paid';
+  })(),
 });
 
 const payment = (amount, date, ref) => ({
@@ -116,9 +150,44 @@ const run = async () => {
   ]);
   summary.push(`Cleared previous re-defense set: ${wiped[0].deletedCount} contracts, ${wiped[1].deletedCount} requests, ${wipedNotifs.deletedCount} notifications.`);
 
+  // Stock owned by this dataset, carrying the names the script narrates.
+  //
+  // Borrowing existing inventory does not work here: two of the loading
+  // contracts fall on the same date, and the other demo datasets reserve the
+  // same lines on that date, so the shared items came back short and painted
+  // the readiness board red. Dedicated records keep availability guaranteed and
+  // leave real stock untouched.
+  const stockDefs = [
+    [StockroomInventory, 'RD-EQ-01', { name: 'Chafing Dish Set', category: 'Equipment', quantity: 400, unitPrice: 1850 }],
+    [StockroomInventory, 'RD-EQ-02', { name: 'Cocktail Table', category: 'Table', quantity: 400, unitPrice: 900 }],
+    [LinenInventory, 'RD-LN-01', { name: 'Round Table Cloth', category: 'Tablecloth', quantity: 500, unitPrice: 180, color: 'White', material: 'Satin', size: 'medium' }],
+    [LinenInventory, 'RD-LN-02', { name: 'Napkin Set', category: 'Napkin', quantity: 900, unitPrice: 45, color: 'White', material: 'Cotton', size: 'medium' }],
+    [LinenInventory, 'RD-LN-03', { name: 'Chair Sash', category: 'Sash', quantity: 600, unitPrice: 60, color: 'Champagne', material: 'Organza', size: 'medium' }],
+    [CreativeInventory, 'RD-CR-01', { name: 'Floral Arch', category: 'Floral', quantity: 20, pricePerItem: 6500 }],
+    [CreativeInventory, 'RD-CR-02', { name: 'Stage Backdrop', category: 'Backdrop', quantity: 20, pricePerItem: 7800 }],
+    [CreativeInventory, 'RD-CR-03', { name: 'Balloon Arch', category: 'Props', quantity: 20, pricePerItem: 3200 }],
+  ];
+
+  await Promise.all(stockDefs.map(([Model, code]) => Model.deleteMany({ itemCode: code })));
+  for (const [Model, code, fields] of stockDefs) {
+    STOCK[code] = (await Model.create({
+      ...fields, itemCode: code, status: 'available', availableQuantity: fields.quantity,
+    })).toObject();
+  }
+
   const accounting = await User.findOne({ role: 'accounting' });
   const stockroomUser = await User.findOne({ role: 'stockroom' }) || accounting;
   const supplier = await Supplier.findOne({ departments: 'stockroom' }) || await Supplier.findOne();
+
+  // A truck and driver per loading contract. Without them the contract raises
+  // the 3-day transport warning, which is correct behaviour but not what these
+  // three are here to show - the readiness board would open with a red banner
+  // about a missing booking rather than about the department that is behind.
+  const trucks = await Truck.find({ status: { $in: ['available', 'in_use'] } }).limit(3).lean();
+  const drivers = await Driver.find({ status: 'active' }).limit(3).lean();
+  const booked = (i) => (trucks[i] && drivers[i]
+    ? { truck: trucks[i]._id, driver: drivers[i]._id, assignmentStatus: 'scheduled' }
+    : { assignmentStatus: 'scheduled' });
 
   // =========================================================== LOADING READINESS
   // Readiness is per department: Kitchen is all-or-nothing on ingredientStatus,
@@ -133,7 +202,7 @@ const run = async () => {
       equipmentChecklist: [equip('Chafing Dish Set', 'RD-EQ-01', 12, 'prepared'), equip('Cocktail Table', 'RD-EQ-02', 8, 'prepared')],
       linenRequirements: [linen('Round Table Cloth', 'RD-LN-01', 20, 'prepared'), linen('Napkin Set', 'RD-LN-02', 180, 'prepared')],
       creativeAssets: [decor('Floral Arch', 'RD-CR-01', 1, 'prepared')],
-      logisticsAssignment: { assignmentStatus: 'scheduled' },
+      logisticsAssignment: booked(0),
       payments: [payment(396000, month(-3), 'RD-GO-FULL')],
     },
   }));
@@ -147,7 +216,7 @@ const run = async () => {
       equipmentChecklist: [equip('Chafing Dish Set', 'RD-EQ-01', 10, 'prepared')],
       linenRequirements: [linen('Round Table Cloth', 'RD-LN-01', 18, 'prepared'), linen('Chair Sash', 'RD-LN-03', 150, 'pending')],
       creativeAssets: [decor('Stage Backdrop', 'RD-CR-02', 1, 'prepared')],
-      logisticsAssignment: { assignmentStatus: 'scheduled' },
+      logisticsAssignment: booked(1),
       payments: [payment(330000, month(-3), 'RD-LINEN-FULL')],
     },
   }));
@@ -161,11 +230,43 @@ const run = async () => {
       equipmentChecklist: [equip('Cocktail Table', 'RD-EQ-02', 10, 'prepared')],
       linenRequirements: [linen('Round Table Cloth', 'RD-LN-01', 22, 'prepared')],
       creativeAssets: [decor('Balloon Arch', 'RD-CR-03', 2, 'prepared')],
-      logisticsAssignment: { assignmentStatus: 'scheduled' },
+      logisticsAssignment: booked(2),
       payments: [payment(440000, month(-3), 'RD-RISK-FULL')],
     },
   }));
   summary.push('Loading readiness · RD-LOAD-GO (cleared), RD-LOAD-LINEN (Linen outstanding, T-2), RD-LOAD-RISK (Kitchen outstanding, T-1).');
+
+  // ============================================================ NUMBER CODING
+  // Metro Manila bars plates by last digit on a weekday, so this event needs a
+  // venue inside the coding zone and a weekday date. No truck is assigned: the
+  // point is to open the picker and see the coded plates excluded, with the
+  // reason named. Not in the printed script - kept for a follow-up question.
+  const nextWeekday = (from) => {
+    const d = new Date(from);
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+    return d;
+  };
+  const codingEvent = nextWeekday(day(9));
+  const codingSummary = getEventCodingSummary({
+    eventDate: codingEvent,
+    venue: { name: 'Manila Grand Ballroom', address: 'Roxas Boulevard, Pasay, Metro Manila' },
+  });
+
+  await Contract.create(contractBase({
+    number: `${TAG}CODING-MNL`, client: 'RD Ocampo Manila Reception', type: 'wedding',
+    eventDate: codingEvent, pax: 200, price: 460000, status: 'approved',
+    extra: {
+      venue: { name: 'Manila Grand Ballroom', address: 'Roxas Boulevard, Pasay, Metro Manila', capacity: 400 },
+      ingredientStatus: 'prepared',
+      equipmentChecklist: [equip('Chafing Dish Set', 'RD-EQ-01', 14, 'prepared'), equip('Cocktail Table', 'RD-EQ-02', 10, 'prepared')],
+      linenRequirements: [linen('Round Table Cloth', 'RD-LN-01', 20, 'prepared'), linen('Napkin Set', 'RD-LN-02', 200, 'prepared')],
+      creativeAssets: [decor('Stage Backdrop', 'RD-CR-02', 1, 'prepared')],
+      // Deliberately unbooked so the coded plates can be seen being excluded.
+      logisticsAssignment: { assignmentStatus: 'pending' },
+      payments: [payment(460000, month(-3), 'RD-CODING-FULL')],
+    },
+  }));
+  summary.push(`Number coding · ${TAG}CODING-MNL at Pasay on ${codingSummary.weekday} — plates ending ${codingSummary.codedDigits.join(' or ')} are excluded (not in the printed script).`);
 
   // ========================================================= SETTLEMENT DEADLINE
   // Deadline is one month before the event. A contract on hold stays recoverable
