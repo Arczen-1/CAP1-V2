@@ -3788,7 +3788,20 @@ export default function ContractDetail() {
                         </div>
                       </div>
 
-                      <div className="grid gap-2 sm:grid-cols-3">
+                      <div className="grid gap-2 sm:grid-cols-4">
+                        {/* The quantity the event actually requires. It was only
+                            a small chip beside the name, so the prominent figures
+                            were the stock levels rather than the requirement they
+                            have to cover. */}
+                        <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+                          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-primary/80">Needed</p>
+                          <p className="mt-1 text-lg font-semibold text-slate-900">{item.requestedQuantity}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.shortageQuantity > 0
+                              ? `Short ${item.shortageQuantity} for this event`
+                              : 'Covered for this event'}
+                          </p>
+                        </div>
                         <div className="rounded-lg border bg-slate-50 px-3 py-2">
                           <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">Available</p>
                           <p className="mt-1 text-lg font-semibold text-slate-900">{item.availableQuantity ?? '-'}</p>
@@ -8100,7 +8113,11 @@ export default function ContractDetail() {
               <div className="rounded-lg border bg-muted/20 px-4 py-3 text-sm">
                 <p className="font-medium">{replaceTarget?.item.itemName}</p>
                 <p className="text-muted-foreground">
-                  {replaceTarget?.item.requestedQuantity} reserved for this event
+                  {replaceTarget?.item.requestedQuantity} needed for this event
+                  {replaceTarget?.item.itemCode ? ` · ${replaceTarget.item.itemCode}` : ''}
+                  {replaceTarget?.item.availableQuantity != null
+                    ? ` · ${replaceTarget.item.availableQuantity} of this item available on the date`
+                    : ''}
                 </p>
                 <p className="mt-2 text-xs text-muted-foreground">
                   The quantity stays the same, so this event still receives what it was
