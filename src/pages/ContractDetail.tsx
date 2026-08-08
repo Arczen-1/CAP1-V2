@@ -3743,6 +3743,56 @@ export default function ContractDetail() {
                 : `${title} still needs department confirmation before sales can send this contract for signature.`}
             </div>
           ) : null}
+          {/* What the event needs from this department, totalled. Reading it off
+              the individual cards means adding up quantities by eye, which is
+              exactly the check a person is trying to make before loading. */}
+          {items.length > 0 ? (() => {
+            const totalNeeded = items.reduce((sum, i) => sum + (i.requestedQuantity || 0), 0);
+            const preparedLines = items.filter((i) => i.itemStatus === 'prepared').length;
+            const preparedUnits = items
+              .filter((i) => i.itemStatus === 'prepared')
+              .reduce((sum, i) => sum + (i.requestedQuantity || 0), 0);
+            const shortLines = items.filter((i) => i.shortageQuantity > 0);
+            const shortUnits = shortLines.reduce((sum, i) => sum + (i.shortageQuantity || 0), 0);
+            const complete = preparedLines === items.length;
+
+            return (
+              <div className={`mb-4 rounded-xl border p-4 ${complete && !shortUnits ? 'border-emerald-200 bg-emerald-50/60' : 'bg-muted/20'}`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                      {title} needed for this event
+                    </p>
+                    <p className="mt-1 text-2xl font-semibold">
+                      {totalNeeded} <span className="text-base font-normal text-muted-foreground">
+                        unit{totalNeeded === 1 ? '' : 's'} across {items.length} item{items.length === 1 ? '' : 's'}
+                      </span>
+                    </p>
+                  </div>
+                  <Badge className={complete && !shortUnits ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
+                    {complete ? 'All items prepared' : `${preparedLines} of ${items.length} prepared`}
+                  </Badge>
+                </div>
+
+                {/* The per-item breakdown, so "60 runners, 12 chairs" reads in
+                    one line rather than being counted off the cards. */}
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {items.map((i) => `${i.requestedQuantity} ${i.itemName}`).join(' · ')}
+                </p>
+
+                <p className="mt-2 text-sm">
+                  <span className="font-medium">{preparedUnits}</span>
+                  <span className="text-muted-foreground"> of {totalNeeded} units prepared</span>
+                  {shortUnits > 0 ? (
+                    <span className="text-destructive">
+                      {' '}· short {shortUnits} unit{shortUnits === 1 ? '' : 's'} on {shortLines.length} item{shortLines.length === 1 ? '' : 's'}
+                    </span>
+                  ) : null}
+                </p>
+              </div>
+            );
+          })() : null}
+
           <div className="grid gap-4 md:grid-cols-2">
             {items.map((item, index) => {
               const preEventBadgeClassName = item.readyForDispatch
